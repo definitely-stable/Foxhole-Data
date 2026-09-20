@@ -474,6 +474,175 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
             "Authorization did not reach the expected blocked job-lock state.");
     }
 
+    [Fact]
+    public async Task PreExchangeFailureCanBeDeferredImmediatelyAndIdempotently()
+    {
+        await using var fixture = await CreateKernelFixtureAsync("defer-before-exchange");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        await fixture.Kernel.EnqueueAsync(
+            fixture.EndpointId,
+            "job-defer-before",
+            now,
+            now,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var worker = WorkerInstanceId.New();
+        var claim = await fixture.Kernel.ClaimNextAsync(
+            worker,
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+        Assert.True(claim.Claimed);
+
+        var attemptId = IngestionAttemptId.New();
+        var started = await fixture.Kernel.BeginAttemptAsync(
+            attemptId,
+            claim.Job!.Id,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(BeginAttemptStatus.Started, started.Status);
+
+        var fenced = await fixture.Kernel.AcquireEndpointFenceAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(FenceAcquireStatus.AcquiredNow, fenced.Status);
+
+        var retryAt = DateTimeOffset.UtcNow.AddMinutes(10);
+        var deferred = await fixture.Kernel.DeferBeforeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            retryAt,
+            "request_build",
+            "invalid_configuration",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AttemptDeferralStatus.DeferredNow, deferred.Status);
+        Assert.Equal(IngestionAttemptState.Failed, deferred.Attempt!.State);
+        Assert.Equal("abandoned_before_exchange", deferred.Attempt.OutcomeCode);
+        Assert.Equal("request_build", deferred.Attempt.ErrorClass);
+        Assert.Equal("invalid_configuration", deferred.Attempt.ErrorCode);
+        Assert.Equal(CollectionJobState.Pending, deferred.Job!.State);
+        Assert.Null(deferred.Job.LeaseOwnerId);
+        Assert.Null(deferred.Job.LeaseExpiresAt);
+        Assert.Equal(
+            NormalizeTimestamp(retryAt),
+            deferred.Job.AvailableAt);
+        Assert.Null(await fixture.ReadActiveAttemptAsync());
+
+        var repeated = await fixture.Kernel.DeferBeforeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            retryAt,
+            "request_build",
+            "invalid_configuration",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AttemptDeferralStatus.AlreadyDeferred, repeated.Status);
+
+        var earlyClaim = await fixture.Kernel.ClaimNextAsync(
+            WorkerInstanceId.New(),
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(earlyClaim.Claimed);
+    }
+
+    [Fact]
+    public async Task AuthorizedFailureCanBeMarkedUncertainAndDeferredWithoutReplayPermission()
+    {
+        await using var fixture = await CreateKernelFixtureAsync("defer-uncertain");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        await fixture.Kernel.EnqueueAsync(
+            fixture.EndpointId,
+            "job-defer-uncertain",
+            now,
+            now,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var worker = WorkerInstanceId.New();
+        var claim = await fixture.Kernel.ClaimNextAsync(
+            worker,
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+        Assert.True(claim.Claimed);
+
+        var attemptId = IngestionAttemptId.New();
+        _ = await fixture.Kernel.BeginAttemptAsync(
+            attemptId,
+            claim.Job!.Id,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        _ = await fixture.Kernel.AcquireEndpointFenceAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+
+        var authorized = await fixture.Kernel.AuthorizeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(ExchangeAuthorizationStatus.AuthorizedNow, authorized.Status);
+
+        var retryAt = DateTimeOffset.UtcNow.AddSeconds(30);
+        var deferred = await fixture.Kernel.DeferUncertainExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            retryAt,
+            "transport",
+            "connection_reset",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AttemptDeferralStatus.DeferredNow, deferred.Status);
+        Assert.Equal(IngestionAttemptState.Uncertain, deferred.Attempt!.State);
+        Assert.Equal("uncertain_exchange", deferred.Attempt.OutcomeCode);
+        Assert.Equal(CollectionJobState.Pending, deferred.Job!.State);
+        Assert.Equal(
+            NormalizeTimestamp(retryAt),
+            deferred.Job.AvailableAt);
+        Assert.Null(await fixture.ReadActiveAttemptAsync());
+
+        var authorizationRetry = await fixture.Kernel.AuthorizeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ExchangeAuthorizationStatus.AlreadyAuthorized,
+            authorizationRetry.Status);
+        Assert.False(authorizationRetry.MayPerformExchange);
+
+        var repeated = await fixture.Kernel.DeferUncertainExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            retryAt,
+            "transport",
+            "connection_reset",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AttemptDeferralStatus.AlreadyDeferred, repeated.Status);
+    }
+
+    private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
+    {
+        const long ticksPerMicrosecond = 10;
+        var utc = value.ToUniversalTime();
+        return new DateTimeOffset(
+            utc.Ticks - (utc.Ticks % ticksPerMicrosecond),
+            TimeSpan.Zero);
+    }
+
     private async Task<KernelFixture> CreateKernelFixtureAsync(string scenario)
     {
         await MigrateAsync();
@@ -546,6 +715,23 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
         public IngestionKernel Kernel { get; } = kernel;
 
         public FoxData.Core.Sources.EndpointId EndpointId { get; } = endpointId;
+
+        public async Task<IngestionAttemptId?> ReadActiveAttemptAsync()
+        {
+            await using var command = DataSource.CreateCommand(
+                """
+                SELECT active_attempt_id
+                FROM ingest.endpoint_state
+                WHERE endpoint_id = @endpoint_id;
+                """);
+            command.Parameters.AddWithValue("endpoint_id", EndpointId.Value);
+
+            var value = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+
+            return value is Guid attemptId
+                ? new IngestionAttemptId(attemptId)
+                : null;
+        }
 
         public ValueTask DisposeAsync() => DataSource.DisposeAsync();
     }
