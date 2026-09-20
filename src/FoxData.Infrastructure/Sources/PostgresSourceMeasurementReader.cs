@@ -242,7 +242,8 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 parse_run.started_at,
                 parse_run.completed_at,
                 parse_run.source_version,
-                parse_run.source_last_updated
+                parse_run.source_last_updated,
+                parse_run.decoded_byte_length
             FROM evidence.source_parse_runs AS parse_run
             INNER JOIN evidence.fetches AS representation_fetch
                 ON representation_fetch.id = parse_run.representation_fetch_id
@@ -293,7 +294,8 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 reader.GetFieldValue<DateTimeOffset>(17),
                 reader.GetFieldValue<DateTimeOffset>(18),
                 reader.IsDBNull(19) ? null : reader.GetInt64(19),
-                reader.IsDBNull(20) ? null : reader.GetInt64(20));
+                reader.IsDBNull(20) ? null : reader.GetInt64(20),
+                reader.IsDBNull(21) ? null : reader.GetInt64(21));
         }
     }
 
