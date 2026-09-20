@@ -23,16 +23,20 @@ public sealed record WarApiShardCapabilityMeasurementSummary(
     int FetchCount,
     int OkCount,
     int NotModifiedCount,
+    int ValidationHitCount,
+    int OrphanNotModifiedCount,
     int OtherCount,
     int DuplicateOkCount,
     int RepresentationChangeCount,
     int ParseRunCount,
     int ParseFailureCount,
     int StructuralFingerprintChangeCount,
+    int SourceVersionAdvanceCount,
     long SourceVersionGapCount,
     int SourceVersionRegressionCount,
     int SourceLastUpdatedRegressionCount,
-    double? ValidationRatio);
+    double? NotModifiedRatio,
+    double? ValidationHitRatio);
 
 public sealed record WarApiMeasurementReport(
     IReadOnlyList<WarApiMeasuredEndpoint> Endpoints,
@@ -137,7 +141,9 @@ public static class WarApiMeasurementReportBuilder
                 var ok = group.Sum(endpoint => endpoint.Fetches.OkCount);
                 var notModified =
                     group.Sum(endpoint => endpoint.Fetches.NotModifiedCount);
-                var validationDenominator = ok + notModified;
+                var responseDenominator = ok + notModified;
+                var validationHits = group.Sum(
+                    endpoint => endpoint.Fetches.ValidationHitCount);
 
                 return new WarApiShardCapabilityMeasurementSummary(
                     group.Key.ShardKey,
@@ -146,6 +152,10 @@ public static class WarApiMeasurementReportBuilder
                     group.Sum(endpoint => endpoint.Fetches.SampleCount),
                     ok,
                     notModified,
+                    validationHits,
+                    group.Sum(
+                        endpoint =>
+                            endpoint.Fetches.OrphanNotModifiedCount),
                     group.Sum(endpoint => endpoint.Fetches.OtherCount),
                     group.Sum(endpoint => endpoint.Fetches.DuplicateOkCount),
                     group.Sum(
@@ -161,6 +171,10 @@ public static class WarApiMeasurementReportBuilder
                         endpoint =>
                             endpoint.Parsing?
                                 .StructuralFingerprintChangeCount ?? 0),
+                    group.Sum(
+                        endpoint =>
+                            endpoint.Parsing?
+                                .SourceVersionAdvanceCount ?? 0),
                     SaturatingSum(
                         group.Select(
                             endpoint =>
@@ -174,9 +188,12 @@ public static class WarApiMeasurementReportBuilder
                         endpoint =>
                             endpoint.Parsing?
                                 .SourceLastUpdatedRegressionCount ?? 0),
-                    validationDenominator == 0
+                    responseDenominator == 0
                         ? null
-                        : (double)notModified / validationDenominator);
+                        : (double)notModified / responseDenominator,
+                    notModified == 0
+                        ? null
+                        : (double)validationHits / notModified);
             })
             .OrderBy(group => group.ShardKey, StringComparer.Ordinal)
             .ThenBy(group => group.CapabilityKey, StringComparer.Ordinal)
