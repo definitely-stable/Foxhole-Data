@@ -100,6 +100,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         var measuredAttempt = Assert.Single(attempts);
         Assert.Equal(officialCapture.Fetch.AttemptId, measuredAttempt.AttemptId);
         Assert.Equal(officialEndpoint, measuredAttempt.EndpointId);
+        Assert.Equal(1, measuredAttempt.AttemptNumber);
+        Assert.Equal("m4:official", measuredAttempt.JobIdempotencyKey);
         Assert.Equal("official-war-api", measuredAttempt.SourceKey);
         Assert.Equal("runtime-war-state", measuredAttempt.CapabilityKey);
         Assert.NotNull(measuredAttempt.ExchangeAuthorizedAt);
