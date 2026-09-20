@@ -41,6 +41,15 @@ public sealed class WarApiCollectionProfileTests
     }
 
     [Fact]
+    public void SchedulingPolicyIdentityIncludesCollectionProfile()
+    {
+        Assert.Equal(
+            "warapi-poll@1/warapi-bootstrap-profile@1",
+            WarApiVersions.SchedulingPolicy(
+                WarApiCollectionProfile.Bootstrap));
+    }
+
+    [Fact]
     public void ProfileRequiresEveryWarApiCapability()
     {
         var profiles = FullProfile();
