@@ -3,6 +3,13 @@ using FoxData.Sources.WarApi;
 
 namespace FoxData.SourceMeasurement;
 
+internal sealed record MeasurementProbeManifest(
+    string Version,
+    string RunId,
+    IReadOnlyList<string> ShardKeys,
+    int MaxMapsPerShard,
+    int TargetCadenceSeconds);
+
 internal sealed record MeasurementManifest(
     string MeasurementVersion,
     string RunId,
@@ -19,6 +26,8 @@ internal sealed record MeasurementManifest(
     string PollPolicyVersion,
     string CollectionProfileVersion,
     IReadOnlyList<string> Shards,
+    MeasurementProbeManifest? Probe,
+    IReadOnlyDictionary<string, int> SchedulingPolicyCounts,
     IReadOnlyList<string> Limitations);
 
 internal sealed record MeasurementPercentiles(
@@ -120,7 +129,10 @@ internal sealed record AnalyzeOptions(
     string OutputDirectory,
     string RepositorySha,
     string ObserverRegion,
-    string CollectionProfileVersion);
+    string CollectionProfileVersion,
+    IReadOnlyList<string> ProbeShardKeys,
+    int? ProbeMaxMapsPerShard,
+    int? ProbeTargetCadenceSeconds);
 
 internal sealed record StorageOptions(
     string Label,
