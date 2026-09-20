@@ -78,10 +78,7 @@ public static class WarApiMeasurementProbePolicy
         }
 
         return activeMapNames
-            .Where(
-                mapName =>
-                    !string.IsNullOrWhiteSpace(mapName) &&
-                    mapName is not ("HomeRegionC" or "HomeRegionW"))
+            .Where(IsProbeCandidate)
             .Distinct(StringComparer.Ordinal)
             .Select(
                 mapName =>
@@ -169,6 +166,25 @@ public static class WarApiMeasurementProbePolicy
         var seconds = checked((int)profile.TargetCadence.TotalSeconds);
 
         return $"{basePolicy}/{WarApiMeasurementProbeProfile.Version}-{runToken}-n{profile.MaxMapsPerShard}-t{seconds}s";
+    }
+
+    private static bool IsProbeCandidate(string mapName)
+    {
+        if (string.IsNullOrWhiteSpace(mapName) ||
+            mapName is "HomeRegionC" or "HomeRegionW")
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = WarApiCatalog.ValidateMapName(mapName);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static string StableRank(
