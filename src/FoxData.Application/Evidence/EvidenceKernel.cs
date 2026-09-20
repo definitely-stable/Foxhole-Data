@@ -211,6 +211,15 @@ public sealed class EvidenceKernel
         ValidateOptionalLength(value.ContentEncoding, 128, nameof(value.ContentEncoding));
         ValidateOptionalLength(value.SourceEtag, 1024, nameof(value.SourceEtag));
         ValidateOptionalLength(value.CacheControl, 2048, nameof(value.CacheControl));
+        ValidateOptionalLength(value.RetryAfter, 1024, nameof(value.RetryAfter));
+
+        if (value.SourceAgeSeconds is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                value.SourceAgeSeconds,
+                "SourceAgeSeconds must not be negative.");
+        }
 
         var requestStartedAt = NormalizeTimestamp(value.RequestStartedAt);
         DateTimeOffset? responseStartedAt = value.ResponseStartedAt is null
@@ -220,6 +229,9 @@ public sealed class EvidenceKernel
         DateTimeOffset? expiresAt = value.ExpiresAt is null
             ? null
             : NormalizeTimestamp(value.ExpiresAt.Value);
+        DateTimeOffset? sourceDate = value.SourceDate is null
+            ? null
+            : NormalizeTimestamp(value.SourceDate.Value);
 
         if (responseStartedAt < requestStartedAt)
         {
@@ -242,6 +254,7 @@ public sealed class EvidenceKernel
             ResponseStartedAt = responseStartedAt,
             RetrievedAt = retrievedAt,
             ExpiresAt = expiresAt,
+            SourceDate = sourceDate,
         };
     }
 
