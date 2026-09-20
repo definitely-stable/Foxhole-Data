@@ -17,7 +17,7 @@ Capture:
 - exact representation-change frequency;
 - source latency/error rates;
 - DB write/index growth;
-- source parsing/fingerprint wall-clock duration; CPU cost only if separately instrumented and attributable;
+- source decode + parsing/fingerprint wall-clock duration; CPU cost only if separately instrumented and attributable;
 - normalization CPU;
 - quality anomaly rate.
 
