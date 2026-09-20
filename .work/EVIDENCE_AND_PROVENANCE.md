@@ -14,17 +14,20 @@ ETag is stored as transport/source metadata but is not content identity.
 
 ## Storage
 
-Small payloads MAY be stored inline in PostgreSQL.
+M2 stores raw payload bytes inline as PostgreSQL bytea and relies on PostgreSQL TOAST for physical large-value handling.
 
-Large payloads MAY use external content-addressed storage.
+External content-addressed storage remains an allowed future architecture but is not implemented before M4 source-size/growth measurements justify a second durability boundary.
 
-A database row MUST NOT reference an external object until that object is durably available.
+When an external CAS is introduced later:
 
-Suggested CAS shape:
+- a database row MUST NOT reference an external object until that object is durably available;
+- object identity remains SHA-256 over exact source bytes;
+- storage compression remains metadata, not payload identity;
+- existing PayloadId/hash/length/provenance semantics must not change.
+
+Suggested future CAS shape:
 
 sha256/aa/bb/fullhash
-
-Compression is storage metadata, not identity.
 
 ## 304 behavior
 
