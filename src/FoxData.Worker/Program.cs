@@ -1,5 +1,6 @@
 using FoxData.Hosting;
 using FoxData.Infrastructure;
+using FoxData.Sources.WarApi;
 using FoxData.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
