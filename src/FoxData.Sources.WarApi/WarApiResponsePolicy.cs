@@ -108,12 +108,6 @@ public static class WarApiResponsePolicy
         return TimeSpan.FromSeconds(Math.Min(300, baseSeconds * jitter));
     }
 
-    public static TimeSpan Cadence(SourceCapability capability) =>
-        WarApiCollectionProfile.Bootstrap.TargetCadence(capability);
-
-    public static TimeSpan DiscoveryWindow(SourceCapability capability) =>
-        WarApiCollectionProfile.Bootstrap.DiscoveryWindow(capability);
-
     public static TimeSpan Spread(
         string shardKey,
         string semanticKey,
