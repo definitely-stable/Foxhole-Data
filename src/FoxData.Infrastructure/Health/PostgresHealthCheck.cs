@@ -34,7 +34,7 @@ public sealed class PostgresHealthCheck(IServiceScopeFactory scopeFactory) : IHe
 
             return HealthCheckResult.Healthy("PostgreSQL schema is current for this service build.");
         }
-        catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
+        catch (Exception exception) when (exception is NpgsqlException or TimeoutException or InvalidOperationException)
         {
             return HealthCheckResult.Unhealthy(
                 "PostgreSQL connectivity/schema readiness probe failed.",
