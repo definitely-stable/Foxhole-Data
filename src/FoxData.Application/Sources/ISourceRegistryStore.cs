@@ -29,6 +29,10 @@ public interface ISourceRegistryStore
         string key,
         CancellationToken cancellationToken);
 
+    Task<SourceDescriptor?> GetSourceAsync(
+        SourceId sourceId,
+        CancellationToken cancellationToken);
+
     Task<ShardDescriptor?> GetShardByKeyAsync(
         SourceId sourceId,
         string key,
