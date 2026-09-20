@@ -17,6 +17,7 @@ public sealed class WarApiReconciler(
     SourceRegistry registry,
     IngestionKernel ingestion,
     WarApiWorkerOptions options,
+    WarApiCollectionProfile collectionProfile,
     TimeProvider timeProvider,
     ILogger<WarApiReconciler> logger)
 {
@@ -217,7 +218,7 @@ public sealed class WarApiReconciler(
                 }
 
                 var discoveryWindow =
-                    WarApiResponsePolicy.DiscoveryWindow(
+                    collectionProfile.DiscoveryWindow(
                         sourceEndpoint.Capability);
                 var target =
                     registration.Resource.CreatedAt +
@@ -305,7 +306,7 @@ public sealed class WarApiReconciler(
         bool active)
     {
         var fetch = snapshot.CurrentFetch;
-        var cadence = WarApiResponsePolicy.Cadence(
+        var cadence = collectionProfile.TargetCadence(
             context.SourceEndpoint.Capability);
 
         var previousValidator =
