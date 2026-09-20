@@ -562,6 +562,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             ingestion,
             options,
             WarApiCollectionProfile.Bootstrap,
+            WarApiMeasurementProbeProfile.Disabled,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
