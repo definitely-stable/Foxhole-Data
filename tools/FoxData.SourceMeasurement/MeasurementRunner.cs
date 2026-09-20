@@ -765,6 +765,99 @@ internal static class MeasurementRunner
             .ToArray();
     }
 
+    private static MeasurementProbeManifest? BuildProbeManifest(
+        AnalyzeOptions options,
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+    {
+        var probeDecisions = decisions
+            .Where(decision => decision.ProbeSelected)
+            .ToArray();
+
+        var hasConfiguredProbe =
+            options.ProbeShardKeys.Count > 0 ||
+            options.ProbeMaxMapsPerShard is not null ||
+            options.ProbeTargetCadenceSeconds is not null;
+
+        if (!hasConfiguredProbe)
+        {
+            if (probeDecisions.Length != 0)
+            {
+                throw new InvalidOperationException(
+                    "Probe-selected scheduling decisions exist in the measurement window. Supply --probe-shards, --probe-max-maps and --probe-target-seconds so the manifest records the bounded probe configuration.");
+            }
+
+            return null;
+        }
+
+        if (options.ProbeShardKeys.Count == 0 ||
+            options.ProbeMaxMapsPerShard is null ||
+            options.ProbeTargetCadenceSeconds is null)
+        {
+            throw new ArgumentException(
+                "--probe-shards, --probe-max-maps and --probe-target-seconds must be supplied together.");
+        }
+
+        var profile = new WarApiMeasurementProbeProfile(
+            Enabled: true,
+            RunId: options.RunId,
+            ShardKeys: options.ProbeShardKeys,
+            MaxMapsPerShard: options.ProbeMaxMapsPerShard.Value,
+            TargetCadence: TimeSpan.FromSeconds(
+                options.ProbeTargetCadenceSeconds.Value));
+        profile.Validate();
+
+        var configuredShardSet = new HashSet<string>(
+            profile.ShardKeys,
+            StringComparer.Ordinal);
+
+        var unexpectedShards = probeDecisions
+            .Select(decision => decision.ShardKey)
+            .Distinct(StringComparer.Ordinal)
+            .Where(shard => !configuredShardSet.Contains(shard))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        if (unexpectedShards.Length != 0)
+        {
+            throw new InvalidOperationException(
+                $"Observed probe decisions exist outside the configured probe shard set: {string.Join(", ", unexpectedShards)}.");
+        }
+
+        var expectedCadenceMs = checked(
+            options.ProbeTargetCadenceSeconds.Value * 1000L);
+        if (probeDecisions.Any(
+                decision =>
+                    decision.EffectiveCadenceMs != expectedCadenceMs))
+        {
+            throw new InvalidOperationException(
+                "Observed probe-selected decisions do not match --probe-target-seconds.");
+        }
+
+        var policySuffix =
+            $"-n{options.ProbeMaxMapsPerShard.Value}-t{options.ProbeTargetCadenceSeconds.Value}s";
+        if (probeDecisions.Any(
+                decision =>
+                    !decision.PolicyVersion.Contains(
+                        WarApiMeasurementProbeProfile.Version,
+                        StringComparison.Ordinal) ||
+                    !decision.PolicyVersion.EndsWith(
+                        policySuffix,
+                        StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "Observed probe policy identities do not match the supplied bounded probe configuration.");
+        }
+
+        return new MeasurementProbeManifest(
+            WarApiMeasurementProbeProfile.Version,
+            options.RunId,
+            profile.ShardKeys
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+            profile.MaxMapsPerShard,
+            checked((int)profile.TargetCadence.TotalSeconds));
+    }
+
     private static double? PayloadDeduplicationRatio(
         IReadOnlyCollection<SourceMeasurementFetch> fetches)
     {
@@ -1116,7 +1209,10 @@ internal static class MeasurementRunner
             "output",
             "repository-sha",
             "observer-region",
-            "profile-version");
+            "profile-version",
+            "probe-shards",
+            "probe-max-maps",
+            "probe-target-seconds");
 
         var runId = Required(values, "run-id");
         ValidateIdentifier(runId, "run-id");
@@ -1158,6 +1254,34 @@ internal static class MeasurementRunner
             : WarApiCollectionProfile.Bootstrap.Version;
         ValidateIdentifier(profileVersion, "profile-version");
 
+        var probeShardKeys = values.TryGetValue(
+            "probe-shards",
+            out var probeShardsValue)
+            ? probeShardsValue
+                .Split(
+                    ',',
+                    StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray()
+            : Array.Empty<string>();
+
+        var probeMaxMaps = values.TryGetValue(
+            "probe-max-maps",
+            out var probeMaxMapsValue)
+            ? ParseInt32Option(
+                probeMaxMapsValue,
+                "probe-max-maps")
+            : null;
+
+        var probeTargetSeconds = values.TryGetValue(
+            "probe-target-seconds",
+            out var probeTargetSecondsValue)
+            ? ParseInt32Option(
+                probeTargetSecondsValue,
+                "probe-target-seconds")
+            : null;
+
         return new AnalyzeOptions(
             runId,
             start,
@@ -1165,7 +1289,10 @@ internal static class MeasurementRunner
             Path.GetFullPath(Required(values, "output")),
             repositorySha,
             observerRegion,
-            profileVersion);
+            profileVersion,
+            probeShardKeys,
+            probeMaxMaps,
+            probeTargetSeconds);
     }
 
     private static StorageOptions ParseStorageOptions(string[] args)
@@ -1250,6 +1377,23 @@ internal static class MeasurementRunner
         }
 
         return value;
+    }
+
+    private static int ParseInt32Option(
+        string value,
+        string option)
+    {
+        if (!int.TryParse(
+                value,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsed))
+        {
+            throw new ArgumentException(
+                $"--{option} must be an integer.");
+        }
+
+        return parsed;
     }
 
     private static DateTimeOffset ParseTimestamp(
@@ -1349,6 +1493,9 @@ internal static class MeasurementRunner
                 --observer-region <coarse-region>
                 [--repository-sha <sha>]
                 [--profile-version <version>]
+                [--probe-shards <live-1,live-2>]
+                [--probe-max-maps <1..3>]
+                [--probe-target-seconds <15..60>]
 
               storage
                 --label <before|after>
