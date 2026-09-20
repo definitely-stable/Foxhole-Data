@@ -112,7 +112,7 @@ public static class WarApiMeasurementAnalyzer
         var versionRegressionCount = 0;
 
         string? previousPayloadHash = null;
-        string? previousEtag = null;
+        string? effectiveValidatorEtag = null;
         long? previousVersion = null;
 
         var payloadSizes = new List<long>();
@@ -152,10 +152,10 @@ public static class WarApiMeasurementAnalyzer
                         {
                             duplicateOkCount++;
 
-                            if (previousEtag is not null &&
+                            if (effectiveValidatorEtag is not null &&
                                 sample.SourceEtag is not null &&
                                 !string.Equals(
-                                    previousEtag,
+                                    effectiveValidatorEtag,
                                     sample.SourceEtag,
                                     StringComparison.Ordinal))
                             {
@@ -166,10 +166,10 @@ public static class WarApiMeasurementAnalyzer
                         {
                             representationChangeCount++;
 
-                            if (previousEtag is not null &&
+                            if (effectiveValidatorEtag is not null &&
                                 sample.SourceEtag is not null &&
                                 string.Equals(
-                                    previousEtag,
+                                    effectiveValidatorEtag,
                                     sample.SourceEtag,
                                     StringComparison.Ordinal))
                             {
@@ -192,13 +192,18 @@ public static class WarApiMeasurementAnalyzer
                     }
 
                     previousPayloadHash = sample.PayloadHash;
-                    previousEtag = sample.SourceEtag;
+                    effectiveValidatorEtag = sample.SourceEtag;
                     previousVersion = sample.SourceVersion;
                 }
             }
             else if (sample.StatusCode == 304)
             {
                 notModifiedCount++;
+
+                if (sample.SourceEtag is not null)
+                {
+                    effectiveValidatorEtag = sample.SourceEtag;
+                }
             }
             else
             {
