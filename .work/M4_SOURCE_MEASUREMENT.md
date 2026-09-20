@@ -308,13 +308,13 @@ For capabilities observed through a high-resolution cohort, the analyzer MUST be
 
 For each candidate estimate from the observed probe series:
 
-- distinct body-bearing representations retained;
+- representation episodes retained;
 - observed representation capture ratio;
-- request count;
-- 304 ratio;
-- duplicate-200 ratio;
-- version-gap behaviour;
+- simulated request count;
+- version-gap behaviour where source version is available;
 - approximate observation delay.
+
+Downsampling is a counterfactual state-observation simulation, not a counterfactual HTTP cache simulation. A client polling at a different cadence would carry a different validator history, so M4 MUST NOT infer a synthetic 200/304 or duplicate-200 ratio from selected high-resolution responses. HTTP 200/304 and validator efficiency are reported from traffic that was actually observed under the profile that generated it.
 
 The profile should prefer the slowest cadence that still preserves the required source-observation fidelity and freshness while avoiding unnecessary source load.
 
