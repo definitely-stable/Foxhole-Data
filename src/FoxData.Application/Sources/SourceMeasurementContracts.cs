@@ -49,6 +49,27 @@ public sealed record SourceMeasurementAttempt(
     string? ErrorClass,
     string? ErrorCode);
 
+public sealed record SourceMeasurementParseRun(
+    SourceParseRunId ParseRunId,
+    FetchId RepresentationFetchId,
+    EndpointId EndpointId,
+    string SourceKey,
+    string ShardKey,
+    string Environment,
+    string CapabilityKey,
+    string SemanticKey,
+    string AdapterVersion,
+    string ParserVersion,
+    string FingerprintAlgorithm,
+    string? StructuralFingerprint,
+    string Outcome,
+    int UnknownPropertyCount,
+    int UnknownCodeCount,
+    string? ErrorCode,
+    DateTimeOffset RepresentationObservedAt,
+    DateTimeOffset StartedAt,
+    DateTimeOffset CompletedAt);
+
 public interface ISourceMeasurementReader
 {
     IAsyncEnumerable<SourceMeasurementFetch> ReadFetchesAsync(
@@ -58,6 +79,12 @@ public interface ISourceMeasurementReader
         CancellationToken cancellationToken);
 
     IAsyncEnumerable<SourceMeasurementAttempt> ReadAttemptsAsync(
+        string sourceKey,
+        DateTimeOffset startInclusive,
+        DateTimeOffset endExclusive,
+        CancellationToken cancellationToken);
+
+    IAsyncEnumerable<SourceMeasurementParseRun> ReadParseRunsAsync(
         string sourceKey,
         DateTimeOffset startInclusive,
         DateTimeOffset endExclusive,
