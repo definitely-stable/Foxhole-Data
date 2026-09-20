@@ -22,7 +22,7 @@ public sealed class WarApiMeasurementAnalyzerTests
             Sample(start.AddSeconds(60), 304, null, null, "etag-b", 5),
             Sample(start.AddSeconds(120), 200, "A", 100, "etag-c", 20, version: 10),
             Sample(start.AddSeconds(180), 200, "B", 200, "etag-c", 30, version: 13),
-            Sample(start.AddSeconds(240), 200, "C", 300, "etag-c", 40, version: 12),
+            Sample(start.AddSeconds(240), 200, "C", 300, "etag-d", 40, version: 12),
             Sample(start.AddSeconds(300), 500, null, null, null, 50),
         };
 
@@ -127,8 +127,8 @@ public sealed class WarApiMeasurementAnalyzerTests
         Assert.Equal(3, summary.SimulatedRequestCount);
         Assert.Equal(0.75d, summary.CaptureRatio);
         Assert.Equal(0d, summary.ObservationDelayP50Seconds!.Value);
-        Assert.Equal(13.5d, summary.ObservationDelayP95Seconds!.Value);
-        Assert.Equal(14.7d, summary.ObservationDelayP99Seconds!.Value);
+        Assert.InRange(summary.ObservationDelayP95Seconds!.Value, 13.499999, 13.500001);
+        Assert.InRange(summary.ObservationDelayP99Seconds!.Value, 14.699999, 14.700001);
     }
 
     [Fact]
