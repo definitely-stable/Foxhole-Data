@@ -76,3 +76,35 @@ For representative queries, verify HTTP and stdio adapters return semantically e
 Mandatory CI MUST NOT depend on the live War API.
 
 A scheduled non-blocking canary MAY detect upstream contract drift, cache behavior changes and new unknown codes.
+
+
+## CI discovery floors
+
+CI executes every test project independently so discovery failure in one assembly cannot be hidden by successful tests from another.
+
+Current minimum floors are conservative guards, not exact test-count assertions:
+
+~~~text
+FoxData.UnitTests         >= 10
+FoxData.IntegrationTests  >= 20
+FoxData.RecoveryTests     >= 5
+FoxData.SourceTests       >= 1
+FoxData.ContractTests     >= 2
+~~~
+
+Raise a floor when a suite grows materially; do not lower it merely to make an unexpected discovery regression green.
+
+The aggregate number of tests is informative but is not sufficient as the only discovery gate.
+
+## Schema readiness tests
+
+Integration tests MUST verify both:
+
+- a database migrated to the current model is readiness-healthy;
+- a reachable PostgreSQL database with pending FoxData migrations is readiness-unhealthy.
+
+## Persistence-boundary integrity
+
+Tests MUST bypass the Application convenience layer at least once and prove that Infrastructure rejects a supplied payload hash that does not equal SHA-256 of the exact bytes.
+
+This prevents the evidence invariant from depending only on one caller behaving correctly.

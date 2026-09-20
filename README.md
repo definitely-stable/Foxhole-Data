@@ -2,7 +2,7 @@
 
 Independent, language-neutral developer data platform for public Foxhole data.
 
-Status: **M2 Evidence Kernel completed**. Next milestone: M3 Official War API Adapter. The current runtime intentionally performs no upstream Foxhole requests; real source ingestion begins in M3.
+Status: **M2 Evidence Kernel + post-M2 hardening completed**. Next milestone: M3 Official War API Adapter. The current runtime intentionally performs no upstream Foxhole requests; real source ingestion begins in M3.
 
 ## Prerequisites
 
@@ -17,7 +17,11 @@ dotnet tool restore
 dotnet restore FoxData.slnx --locked-mode
 dotnet build FoxData.slnx -c Release --no-restore
 dotnet format FoxData.slnx --verify-no-changes --no-restore
-dotnet test --solution FoxData.slnx -c Release --no-build --minimum-expected-tests 10
+dotnet test --project tests/FoxData.UnitTests/FoxData.UnitTests.csproj -c Release --no-build --minimum-expected-tests 10
+dotnet test --project tests/FoxData.IntegrationTests/FoxData.IntegrationTests.csproj -c Release --no-build --minimum-expected-tests 20
+dotnet test --project tests/FoxData.RecoveryTests/FoxData.RecoveryTests.csproj -c Release --no-build --minimum-expected-tests 5
+dotnet test --project tests/FoxData.SourceTests/FoxData.SourceTests.csproj -c Release --no-build --minimum-expected-tests 1
+dotnet test --project tests/FoxData.ContractTests/FoxData.ContractTests.csproj -c Release --no-build --minimum-expected-tests 2
 ~~~
 
 ## Local stack
@@ -25,6 +29,8 @@ dotnet test --solution FoxData.slnx -c Release --no-build --minimum-expected-tes
 ~~~bash
 docker compose up --build
 ~~~
+
+Compose first runs a one-shot EF migration bundle and starts API/Worker only after the migration job succeeds.
 
 The development API listens on http://localhost:8080.
 

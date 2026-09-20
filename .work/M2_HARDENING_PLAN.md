@@ -1,6 +1,6 @@
 # M2 hardening plan
 
-Status: in progress.
+Status: completed 2026-09-20. Implemented by PRs #9, #10 and the H3 ops/integrity PR.
 Baseline: main @ 26b8932325f64942a91bab295627cd19ff80ce60.
 Purpose: close only the concrete failure modes confirmed by the post-M2 critical audit before activating real source ingestion.
 
@@ -33,7 +33,7 @@ Acceptance:
 
 ### H2 — lifecycle semantics and retry handoff
 
-Status: implemented on `m2-hardening/lifecycle`; verification/merge pending.
+Status: completed in PR #10.
 
 Resolve the mismatch between raw evidence durability and later semantic/canonical acceptance.
 
@@ -57,6 +57,8 @@ Acceptance:
 - a forward EF migration upgrades existing databases.
 
 ### H3 — deployment, CI and evidence integrity
+
+Status: implemented on `m2-hardening/ops-integrity`; verification/merge pending.
 
 Close operational blind spots before M3.
 
