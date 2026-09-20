@@ -331,6 +331,7 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     private async Task<KernelFixture> CreateKernelFixtureAsync(string scenario)
     {
         await MigrateAsync();
+        await ResetKernelDataAsync();
 
         var dataSource = NpgsqlDataSource.Create(postgres.ConnectionString);
         var registry = new SourceRegistry(new PostgresSourceRegistryStore(dataSource));
@@ -357,6 +358,26 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
             dataSource,
             new IngestionKernel(new PostgresIngestionKernelStore(dataSource)),
             endpoint.Resource.Id);
+    }
+
+    private async Task ResetKernelDataAsync()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(postgres.ConnectionString);
+        await using var command = dataSource.CreateCommand(
+            """
+            TRUNCATE TABLE
+                evidence.fetches,
+                evidence.payloads,
+                ingest.endpoint_state,
+                ingest.attempts,
+                ingest.collection_jobs,
+                sources.endpoints,
+                sources.shards,
+                sources.sources
+            RESTART IDENTITY CASCADE;
+            """);
+
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task MigrateAsync()
