@@ -57,3 +57,14 @@ Exports have concurrent-operation and storage quotas.
 Maintain a machine-readable inventory of every public API version and route.
 
 Debug/experimental/admin endpoints MUST NOT be exposed accidentally in public builds.
+
+
+## Database privilege separation
+
+Production database credentials separate deployment from runtime responsibilities.
+
+The migration/deployment identity may apply reviewed schema migrations.
+
+API/Worker runtime identities SHOULD have only the table/sequence/schema privileges needed for normal DML and reads. They SHOULD NOT own application tables and SHOULD NOT have general schema-changing privileges such as `CREATE`, `ALTER` or `DROP`.
+
+This limits the impact of an application compromise and protects immutable evidence from casual operational mutation. Local development may use a single development credential, but that shortcut is not a production security model.

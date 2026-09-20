@@ -55,13 +55,45 @@ jobs:
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --help >/dev/null
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --version >/dev/null
 
-      - name: Test
+      - name: Test unit assembly
         run: >-
           dotnet test
-          --solution FoxData.slnx
+          tests/FoxData.UnitTests/FoxData.UnitTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 5
+
+      - name: Test contract assembly
+        run: >-
+          dotnet test
+          tests/FoxData.ContractTests/FoxData.ContractTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 1
+
+      - name: Test source assembly
+        run: >-
+          dotnet test
+          tests/FoxData.SourceTests/FoxData.SourceTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 1
+
+      - name: Test integration assembly
+        run: >-
+          dotnet test
+          tests/FoxData.IntegrationTests/FoxData.IntegrationTests.csproj
           -c Release
           --no-build
           --minimum-expected-tests 10
+
+      - name: Test recovery assembly
+        run: >-
+          dotnet test
+          tests/FoxData.RecoveryTests/FoxData.RecoveryTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 5
 
   compose-smoke:
     name: Docker Compose smoke
@@ -77,6 +109,14 @@ jobs:
 
       - name: Start stack
         run: docker compose up --detach --build
+
+      - name: Verify migration job completed
+        shell: bash
+        run: |
+          migration_id="$(docker compose ps --all --quiet migrate)"
+          test -n "${migration_id}"
+          test "$(docker inspect --format '{{.State.Status}}' "${migration_id}")" = "exited"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "${migration_id}")" = "0"
 
       - name: Wait for API readiness
         run: >-

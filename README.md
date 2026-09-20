@@ -26,6 +26,8 @@ dotnet test --solution FoxData.slnx -c Release --no-build --minimum-expected-tes
 docker compose up --build
 ~~~
 
+Compose first runs the one-shot EF Core migration bundle, then starts API and Worker only after migrations complete successfully.
+
 The development API listens on http://localhost:8080.
 
 Health endpoints:

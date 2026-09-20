@@ -33,7 +33,7 @@ Acceptance:
 
 ### H2 — lifecycle semantics and retry handoff
 
-Status: implemented on `m2-hardening/lifecycle`; verification/merge pending.
+Status: completed in PR #10.
 
 Resolve the mismatch between raw evidence durability and later semantic/canonical acceptance.
 
@@ -57,6 +57,8 @@ Acceptance:
 - a forward EF migration upgrades existing databases.
 
 ### H3 — deployment, CI and evidence integrity
+
+Status: implemented on `m2-hardening/operations-integrity`; verification/merge pending.
 
 Close operational blind spots before M3.
 
