@@ -485,8 +485,12 @@ One row per endpoint.
 endpoint_id            uuid primary key
 fence_token            bigint not null default 0
 active_attempt_id      uuid null
-last_attempt_id        uuid null
+last_authoritative_attempt_id    uuid null
 updated_at             timestamptz not null
+
+foreign key endpoint_id -> sources.endpoints(id)
+foreign key active_attempt_id -> ingest.attempts(id)
+foreign key last_authoritative_attempt_id -> ingest.attempts(id)
 ~~~
 
 M3 adds ETag/cache eligibility fields; M2 does not create speculative cache columns.
