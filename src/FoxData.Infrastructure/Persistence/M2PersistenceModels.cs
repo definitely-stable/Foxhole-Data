@@ -109,6 +109,7 @@ internal sealed class FetchRow
     public DateTimeOffset? SourceDate { get; set; }
     public long? SourceAgeSeconds { get; set; }
     public string? RetryAfter { get; set; }
+    public string? BodyErrorCode { get; set; }
     public Guid? PayloadId { get; set; }
     public Guid? PriorFetchId { get; set; }
     public long DurationMs { get; set; }
