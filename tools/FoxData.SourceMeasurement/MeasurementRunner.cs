@@ -1824,7 +1824,7 @@ internal static class MeasurementRunner
                 .ToArray()
             : Array.Empty<string>();
 
-        var probeMaxMaps = values.TryGetValue(
+        int? probeMaxMaps = values.TryGetValue(
             "probe-max-maps",
             out var probeMaxMapsValue)
             ? ParseInt32Option(
@@ -1832,7 +1832,7 @@ internal static class MeasurementRunner
                 "probe-max-maps")
             : null;
 
-        var probeTargetSeconds = values.TryGetValue(
+        int? probeTargetSeconds = values.TryGetValue(
             "probe-target-seconds",
             out var probeTargetSecondsValue)
             ? ParseInt32Option(
