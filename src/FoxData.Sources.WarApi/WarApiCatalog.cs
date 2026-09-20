@@ -23,6 +23,26 @@ public static class WarApiCatalog
 {
     public const int MaximumMapNameLength = 128;
 
+    public static string GetShardKey(WarApiShard shard) =>
+        shard switch
+        {
+            WarApiShard.Live1 => "live-1",
+            WarApiShard.Live2 => "live-2",
+            WarApiShard.Live3 => "live-3",
+            WarApiShard.Dev => "dev",
+            _ => throw new ArgumentOutOfRangeException(nameof(shard), shard, "Unknown War API shard."),
+        };
+
+    public static WarApiShard ParseShardKey(string key) =>
+        key switch
+        {
+            "live-1" => WarApiShard.Live1,
+            "live-2" => WarApiShard.Live2,
+            "live-3" => WarApiShard.Live3,
+            "dev" => WarApiShard.Dev,
+            _ => throw new ArgumentException($"Unsupported War API shard key '{key}'.", nameof(key)),
+        };
+
     public static Uri GetRoot(WarApiShard shard) =>
         shard switch
         {
@@ -64,6 +84,34 @@ public static class WarApiCatalog
             WarApiCapabilities.DynamicMapState,
             $"map-dynamic/{validated}",
             validated);
+    }
+
+    public static SourceEndpoint FromRegistry(
+        string capabilityKey,
+        string semanticKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(capabilityKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(semanticKey);
+
+        return capabilityKey switch
+        {
+            "runtime-war-state" when semanticKey == "war" => War(),
+            "active-map-list" when semanticKey == "maps" => Maps(),
+            "region-war-report" => FromMapSemanticKey(
+                semanticKey,
+                "war-report/",
+                WarReport),
+            "static-map-state" => FromMapSemanticKey(
+                semanticKey,
+                "map-static/",
+                StaticMap),
+            "dynamic-map-state" => FromMapSemanticKey(
+                semanticKey,
+                "map-dynamic/",
+                DynamicMap),
+            _ => throw new ArgumentException(
+                $"Registry endpoint '{capabilityKey}' / '{semanticKey}' is not a valid War API endpoint."),
+        };
     }
 
     public static string ValidateMapName(string value)
@@ -112,6 +160,22 @@ public static class WarApiCatalog
         };
 
         return new Uri(GetRoot(shard), relativePath);
+    }
+
+    private static SourceEndpoint FromMapSemanticKey(
+        string semanticKey,
+        string prefix,
+        Func<string, SourceEndpoint> factory)
+    {
+        if (!semanticKey.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Semantic key '{semanticKey}' does not match prefix '{prefix}'.",
+                nameof(semanticKey));
+        }
+
+        var mapName = semanticKey[prefix.Length..];
+        return factory(ValidateMapName(mapName));
     }
 
     private static string EscapeIdentifier(SourceEndpoint endpoint)
