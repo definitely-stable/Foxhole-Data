@@ -118,6 +118,8 @@ The observed interval between application-issued source requests for the same en
 
 A longer interval than the local target is not automatically scheduler lag: source cache eligibility and retry eligibility are legitimate lower bounds.
 
+M2 collection_jobs.available_at is mutable when an attempt is deferred and requeued. M4 therefore MUST NOT present the current job available_at as an immutable per-attempt historical timestamp. Exact scheduler-lag analysis uses immutable scheduled_for where appropriate, AttemptNumber/idempotency context, Fetch/poll-state evidence and clearly reports cases where retry eligibility can only be reconstructed or bounded.
+
 ## 6. Metrics that MUST be measured
 
 The final report MUST provide, where applicable, values by shard and capability.
