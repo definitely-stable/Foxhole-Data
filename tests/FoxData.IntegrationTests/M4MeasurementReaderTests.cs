@@ -144,9 +144,15 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal("warapi-parser@1", measuredParse.ParserVersion);
         Assert.Equal("shape-a", measuredParse.StructuralFingerprint);
         Assert.Equal("parsed", measuredParse.Outcome);
-        Assert.Equal(observedAt.AddMilliseconds(-12), measuredParse.RepresentationObservedAt);
-        Assert.Equal(parseStartedAt, measuredParse.StartedAt);
-        Assert.Equal(parseCompletedAt, measuredParse.CompletedAt);
+        AssertWithinPostgresTimestampPrecision(
+            observedAt.AddMilliseconds(-12),
+            measuredParse.RepresentationObservedAt);
+        AssertWithinPostgresTimestampPrecision(
+            parseStartedAt,
+            measuredParse.StartedAt);
+        AssertWithinPostgresTimestampPrecision(
+            parseCompletedAt,
+            measuredParse.CompletedAt);
     }
 
     [Fact]
@@ -310,6 +316,16 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
 
         Assert.Equal(CaptureStatus.CapturedCurrent, capture.Status);
         return capture;
+    }
+
+    private static void AssertWithinPostgresTimestampPrecision(
+        DateTimeOffset expected,
+        DateTimeOffset actual)
+    {
+        var difference = (expected - actual).Duration();
+        Assert.True(
+            difference <= TimeSpan.FromMicroseconds(1),
+            $"Expected timestamp within 1 microsecond. Expected: {expected:O}; actual: {actual:O}; difference: {difference}.");
     }
 
     private async Task MigrateAsync()
