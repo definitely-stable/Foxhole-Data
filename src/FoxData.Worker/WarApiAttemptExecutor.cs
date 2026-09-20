@@ -163,7 +163,9 @@ public sealed class WarApiAttemptExecutor(
                 return;
             }
 
-            var responseOutcome = ResponseOutcome(response.StatusCode);
+            var responseOutcome = response.BodyErrorCode is null
+                ? ResponseOutcome(response.StatusCode)
+                : "body_error";
             WarApiTelemetry.Responses.Add(
                 1,
                 SourceTags(context, responseOutcome));
@@ -198,7 +200,8 @@ public sealed class WarApiAttemptExecutor(
                 response.Age is { } age
                     ? checked((long)age.TotalSeconds)
                     : null,
-                response.RetryAfter);
+                response.RetryAfter,
+                response.BodyErrorCode);
 
             var priorFetchId =
                 response.StatusCode == System.Net.HttpStatusCode.NotModified
