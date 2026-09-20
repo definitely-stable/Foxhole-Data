@@ -43,6 +43,52 @@ public sealed class M2MigrationTests(PostgresFixture postgres) : IClassFixture<P
             tables);
     }
 
+    [Fact]
+    public async Task PayloadShaLengthConstraintRejectsMalformedHash()
+    {
+        await MigrateAsync();
+
+        await using var dataSource = NpgsqlDataSource.Create(postgres.ConnectionString);
+        await using var command = dataSource.CreateCommand(
+            """
+            INSERT INTO evidence.payloads (id, sha256, byte_length, body)
+            VALUES (@id, @sha256, @byte_length, @body);
+            """);
+        command.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        command.Parameters.AddWithValue("sha256", new byte[31]);
+        command.Parameters.AddWithValue("byte_length", 1L);
+        command.Parameters.AddWithValue("body", new byte[] { 1 });
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, exception.SqlState);
+        Assert.Equal("ck_payloads_sha256_length", exception.ConstraintName);
+    }
+
+    [Fact]
+    public async Task PayloadBodyLengthConstraintRejectsMismatch()
+    {
+        await MigrateAsync();
+
+        await using var dataSource = NpgsqlDataSource.Create(postgres.ConnectionString);
+        await using var command = dataSource.CreateCommand(
+            """
+            INSERT INTO evidence.payloads (id, sha256, byte_length, body)
+            VALUES (@id, @sha256, @byte_length, @body);
+            """);
+        command.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        command.Parameters.AddWithValue("sha256", Enumerable.Repeat((byte)42, 32).ToArray());
+        command.Parameters.AddWithValue("byte_length", 2L);
+        command.Parameters.AddWithValue("body", new byte[] { 1 });
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, exception.SqlState);
+        Assert.Equal("ck_payloads_body_length", exception.ConstraintName);
+    }
+
     private async Task MigrateAsync()
     {
         var options = new DbContextOptionsBuilder<FoxDataDbContext>()

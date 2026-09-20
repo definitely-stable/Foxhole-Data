@@ -52,6 +52,33 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     }
 
     [Fact]
+    public async Task ConcurrentDuplicateEnqueueConvergesOnOneJob()
+    {
+        await using var fixture = await CreateKernelFixtureAsync("enqueue-concurrent");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        var tasks = Enumerable.Range(0, 8)
+            .Select(_ => fixture.Kernel.EnqueueAsync(
+                fixture.EndpointId,
+                "job-concurrent",
+                now,
+                now,
+                priority: 3,
+                TestContext.Current.CancellationToken))
+            .ToArray();
+
+        var results = await Task.WhenAll(tasks);
+
+        Assert.Single(
+            results,
+            result => result.Status is JobEnqueueStatus.Created);
+        Assert.Equal(
+            7,
+            results.Count(result => result.Status is JobEnqueueStatus.Existing));
+        Assert.Single(results.Select(result => result.Job.Id).Distinct());
+    }
+
+    [Fact]
     public async Task ConcurrentClaimersClaimEachAvailableJobOnce()
     {
         await using var fixture = await CreateKernelFixtureAsync("claim");
