@@ -18,7 +18,7 @@ public sealed class SourceRegistryTests(PostgresFixture postgres) : IClassFixtur
 
         var tasks = Enumerable.Range(0, 8)
             .Select(_ => registry.RegisterSourceAsync(
-                "fixture",
+                "fixture-concurrent",
                 "Fixture Source",
                 TestContext.Current.CancellationToken))
             .ToArray();
