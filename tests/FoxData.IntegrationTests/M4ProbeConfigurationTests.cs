@@ -34,6 +34,7 @@ public sealed class M4ProbeConfigurationTests
             Pair("WarApi:Enabled", "true"),
             Pair("WarApi:MeasurementProbe:Enabled", "true"),
             Pair("WarApi:MeasurementProbe:RunId", "m4-live1-001"),
+            Pair("WarApi:MeasurementProbe:EnabledShards:0", "live-1"),
             Pair("WarApi:MeasurementProbe:MaxMapsPerShard", "2"),
             Pair("WarApi:MeasurementProbe:TargetCadenceSeconds", "20"),
         ]);
@@ -47,6 +48,7 @@ public sealed class M4ProbeConfigurationTests
 
         Assert.True(probe.Enabled);
         Assert.Equal("m4-live1-001", probe.RunId);
+        Assert.Equal(["live-1"], probe.ShardKeys);
         Assert.Equal(2, probe.MaxMapsPerShard);
         Assert.Equal(
             TimeSpan.FromSeconds(20),
@@ -62,6 +64,7 @@ public sealed class M4ProbeConfigurationTests
             Pair("WarApi:EnabledShards:0", "dev"),
             Pair("WarApi:MeasurementProbe:Enabled", "true"),
             Pair("WarApi:MeasurementProbe:RunId", "m4-dev"),
+            Pair("WarApi:MeasurementProbe:EnabledShards:0", "dev"),
         ]);
         var workerOptions =
             WarApiWorkerOptions.FromConfiguration(configuration);
@@ -84,6 +87,7 @@ public sealed class M4ProbeConfigurationTests
         var configuration = BuildConfiguration(
         [
             Pair("WarApi:MeasurementProbe:Enabled", "true"),
+            Pair("WarApi:MeasurementProbe:EnabledShards:0", "live-1"),
         ]);
         var workerOptions =
             WarApiWorkerOptions.FromConfiguration(configuration);
@@ -93,6 +97,31 @@ public sealed class M4ProbeConfigurationTests
                 WarApiMeasurementProbeConfiguration.FromConfiguration(
                     configuration,
                     workerOptions));
+    }
+
+    [Fact]
+    public void ProbeShardMustAlsoBeEnabledForWorker()
+    {
+        var configuration = BuildConfiguration(
+        [
+            Pair("WarApi:EnabledShards:0", "live-1"),
+            Pair("WarApi:MeasurementProbe:Enabled", "true"),
+            Pair("WarApi:MeasurementProbe:RunId", "m4-live2"),
+            Pair("WarApi:MeasurementProbe:EnabledShards:0", "live-2"),
+        ]);
+        var workerOptions =
+            WarApiWorkerOptions.FromConfiguration(configuration);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () =>
+                WarApiMeasurementProbeConfiguration.FromConfiguration(
+                    configuration,
+                    workerOptions));
+
+        Assert.Contains(
+            "must also be enabled",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     private static IConfiguration BuildConfiguration(
