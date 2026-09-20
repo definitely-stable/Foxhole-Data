@@ -52,10 +52,20 @@ public sealed class RepositoryArchitectureTests
 
         Assert.True(File.Exists(Path.Combine(root, "AGENTS.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M2_EVIDENCE_KERNEL.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M4_SOURCE_MEASUREMENT.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "public-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "compat-warapi-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "asyncapi", "events-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "jsonrpc", "stdio-v1.md")));
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    root,
+                    ".work",
+                    "contracts",
+                    "internal",
+                    "source",
+                    "collection-profile.schema.json")));
     }
 
     private static string FindRepositoryRoot()
