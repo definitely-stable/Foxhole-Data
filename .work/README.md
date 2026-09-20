@@ -48,6 +48,7 @@ Primary documents:
 - M2_EVIDENCE_KERNEL.md
 - M2_COMPLETION.md
 - M2_HARDENING_PLAN.md
+- M3_OFFICIAL_WAR_API_ADAPTER.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
@@ -57,7 +58,8 @@ Contract sources:
 - contracts/asyncapi/events-v1.yaml
 - contracts/jsonrpc/stdio-v1.md
 
-Research snapshot:
+Research snapshots:
 
 - research/ECOSYSTEM_2026-09.md
 - research/M2_STORAGE_CONCURRENCY_2026-09.md
+- research/M3_WAR_API_HTTP_2026-09.md
