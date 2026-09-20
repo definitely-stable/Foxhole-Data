@@ -13,6 +13,8 @@ var warApiOptions = WarApiWorkerOptions.FromConfiguration(
 builder.Services.AddSingleton(warApiOptions);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WarApiTransport>();
+builder.Services.AddSingleton<IWarApiTransport>(
+    serviceProvider => serviceProvider.GetRequiredService<WarApiTransport>());
 builder.Services.AddScoped<WarApiRegistryResolver>();
 
 builder.Services.AddHostedService<BootstrapWorker>();
