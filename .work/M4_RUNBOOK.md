@@ -222,7 +222,7 @@ dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   
 Then generate the reproducible report:
 
 ~~~text
-dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   analyze   --run-id "$RUN_ID"   --start "$START"   --end "$END"   --output artifacts/m4/m4-2026-09-live   --observer-region "$REGION"   --repository-sha "$SHA"   --profile-version warapi-bootstrap-profile@1
+dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   analyze   --run-id "$RUN_ID"   --start "$START"   --end "$END"   --output artifacts/m4/m4-2026-09-live   --observer-region "$REGION"   --repository-sha "$SHA"   --profile-version warapi-bootstrap-profile@1   --probe-shards live-1   --probe-max-maps 3   --probe-target-seconds 15
 ~~~
 
 Expected outputs:
