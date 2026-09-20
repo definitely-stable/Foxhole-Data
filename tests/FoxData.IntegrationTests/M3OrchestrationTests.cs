@@ -44,14 +44,14 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 body,
-                ""war - v1"",
+                "\"war-v1\"",
                 "max-age=60"));
         fixture.Transport.Enqueue(
             CreateResponse(
                 fixture.Now.AddMinutes(1),
                 HttpStatusCode.NotModified,
                 body: null,
-                ""war - v1"",
+                "\"war-v1\"",
                 "max-age=60"));
 
         var firstJob = await fixture.EnqueueAndClaimAsync(
@@ -83,7 +83,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
         Assert.NotNull(firstPoll);
         Assert.Equal(firstFetchId, firstPoll.RepresentationFetchId);
-        Assert.Equal(""war - v1"", firstPoll.ValidatorEtag);
+        Assert.Equal("\"war-v1\"", firstPoll.ValidatorEtag);
         Assert.Equal(firstFetchId, firstPoll.LastProcessedFetchId);
 
         var parseRun = await fixture.ParseRuns.GetAsync(
@@ -113,7 +113,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
         Assert.Equal(2, fixture.Transport.SendCount);
         Assert.Null(fixture.Transport.Requests[0].IfNoneMatch);
-        Assert.Equal(""war - v1"", fixture.Transport.Requests[1].IfNoneMatch);
+        Assert.Equal("\"war-v1\"", fixture.Transport.Requests[1].IfNoneMatch);
 
         var secondSnapshot = await fixture.EvidenceReader.GetCurrentAsync(
             fixture.WarEndpoint.Id,
@@ -136,11 +136,61 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
         Assert.Equal(secondSnapshot.CurrentFetch.Id, secondPoll!.LastProcessedFetchId);
         Assert.Equal(firstFetchId, secondPoll.RepresentationFetchId);
-        Assert.Equal(""war - v1"", secondPoll.ValidatorEtag);
+        Assert.Equal("\"war-v1\"", secondPoll.ValidatorEtag);
 
         Assert.Equal(
             1L,
             await fixture.CountPayloadsAsync());
+    }
+
+    [Fact]
+    public async Task BodyErrorIsDurableButNeverBecomesReusableRepresentation()
+    {
+        await using var fixture = await CreateFixtureAsync("body-error");
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                body: null,
+                "\"oversized\"",
+                "max-age=60",
+                bodyErrorCode: "body_limit_exceeded"));
+
+        var job = await fixture.EnqueueAndClaimAsync(
+            fixture.WarEndpoint.Id,
+            "test:body-error");
+
+        await fixture.Executor.ExecuteAsync(
+            job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+
+        var snapshot = await fixture.EvidenceReader.GetCurrentAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("body_limit_exceeded", snapshot.CurrentFetch.BodyErrorCode);
+        Assert.Null(snapshot.CurrentFetch.PayloadId);
+        Assert.Null(snapshot.RepresentationFetch);
+        Assert.Null(snapshot.RepresentationPayload);
+
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var poll = await fixture.PollState.GetAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(poll);
+        Assert.Equal(snapshot.CurrentFetch.Id, poll.LastProcessedFetchId);
+        Assert.Null(poll.RepresentationFetchId);
+        Assert.Null(poll.ValidatorEtag);
+        Assert.Equal(1, poll.ConsecutiveFailures);
+        Assert.NotNull(poll.RetryEligibleAt);
+        Assert.Equal(0L, await fixture.CountPayloadsAsync());
     }
 
     [Fact]
@@ -156,7 +206,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 body,
-                ""maps - v1"",
+                "\"maps-v1\"",
                 "max-age=300"));
 
         var job = await fixture.EnqueueAndClaimAsync(
@@ -341,7 +391,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         HttpStatusCode status,
         byte[]? body,
         string? etag,
-        string? cacheControl) =>
+        string? cacheControl,
+        string? bodyErrorCode = null) =>
         new(
             status,
             body,
@@ -357,7 +408,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             null,
             timestamp,
             TimeSpan.Zero,
-            null);
+            null,
+            bodyErrorCode);
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
