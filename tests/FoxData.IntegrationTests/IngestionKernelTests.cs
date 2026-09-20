@@ -355,6 +355,125 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
         Assert.True(currentAuthorization.MayPerformExchange);
     }
 
+    [Fact]
+    public async Task AuthorizationUsesActualDatabaseTimeAfterWaitingForJobLock()
+    {
+        await using var fixture = await CreateKernelFixtureAsync("lease-clock");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        await fixture.Kernel.EnqueueAsync(
+            fixture.EndpointId,
+            "job-lease-clock",
+            now,
+            now,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var worker = WorkerInstanceId.New();
+        var claim = await fixture.Kernel.ClaimNextAsync(
+            worker,
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+
+        var attemptId = IngestionAttemptId.New();
+
+        var started = await fixture.Kernel.BeginAttemptAsync(
+            attemptId,
+            claim.Job!.Id,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(BeginAttemptStatus.Started, started.Status);
+
+        var fenced = await fixture.Kernel.AcquireEndpointFenceAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(FenceAcquireStatus.AcquiredNow, fenced.Status);
+
+        await using (var shorten = fixture.DataSource.CreateCommand(
+            """
+            UPDATE ingest.collection_jobs
+            SET lease_expires_at = clock_timestamp() + interval '2 seconds'
+            WHERE id = @job_id;
+            """))
+        {
+            shorten.Parameters.AddWithValue("job_id", claim.Job.Id.Value);
+            Assert.Equal(
+                1,
+                await shorten.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        }
+
+        await using var blockerConnection =
+            await fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var blockerTransaction =
+            await blockerConnection.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        await using (var block = blockerConnection.CreateCommand())
+        {
+            block.Transaction = blockerTransaction;
+            block.CommandText =
+                """
+                SELECT id
+                FROM ingest.collection_jobs
+                WHERE id = @job_id
+                FOR UPDATE;
+                """;
+            block.Parameters.AddWithValue("job_id", claim.Job.Id.Value);
+            _ = await block.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        }
+
+        var authorizationTask = fixture.Kernel.AuthorizeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+
+        await WaitUntilAuthorizationIsBlockedAsync(
+            fixture.DataSource,
+            TestContext.Current.CancellationToken);
+
+        await Task.Delay(TimeSpan.FromSeconds(2.2), TestContext.Current.CancellationToken);
+        await blockerTransaction.CommitAsync(TestContext.Current.CancellationToken);
+
+        var authorization = await authorizationTask;
+
+        Assert.Equal(ExchangeAuthorizationStatus.LeaseLost, authorization.Status);
+        Assert.False(authorization.MayPerformExchange);
+    }
+
+    private static async Task WaitUntilAuthorizationIsBlockedAsync(
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await using var command = dataSource.CreateCommand(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                      AND wait_event_type = 'Lock'
+                      AND state = 'active'
+                      AND query LIKE '%FROM ingest.collection_jobs%'
+                      AND query LIKE '%FOR UPDATE%'
+                );
+                """);
+
+            if (await command.ExecuteScalarAsync(cancellationToken) is true)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
+        }
+
+        throw new TimeoutException(
+            "Authorization did not reach the expected blocked job-lock state.");
+    }
+
     private async Task<KernelFixture> CreateKernelFixtureAsync(string scenario)
     {
         await MigrateAsync();
@@ -422,6 +541,8 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
         IngestionKernel kernel,
         FoxData.Core.Sources.EndpointId endpointId) : IAsyncDisposable
     {
+        public NpgsqlDataSource DataSource { get; } = dataSource;
+
         public IngestionKernel Kernel { get; } = kernel;
 
         public FoxData.Core.Sources.EndpointId EndpointId { get; } = endpointId;
