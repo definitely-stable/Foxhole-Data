@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace FoxData.ContractTests;
@@ -66,6 +67,32 @@ public sealed class RepositoryArchitectureTests
                     "internal",
                     "source",
                     "collection-profile.schema.json")));
+    }
+
+    [Fact]
+    public void MeasuredCollectionProfileContractRequiresProvenance()
+    {
+        var root = FindRepositoryRoot();
+        var schemaPath = Path.Combine(
+            root,
+            ".work",
+            "contracts",
+            "internal",
+            "source",
+            "collection-profile.schema.json");
+
+        using var document = JsonDocument.Parse(
+            File.ReadAllText(schemaPath));
+
+        var required = document.RootElement
+            .GetProperty("required")
+            .EnumerateArray()
+            .Select(element => element.GetString())
+            .Where(value => value is not null)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains("measurementReference", required);
+        Assert.Contains("limitations", required);
     }
 
     private static string FindRepositoryRoot()
