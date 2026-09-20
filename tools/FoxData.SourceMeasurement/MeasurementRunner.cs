@@ -722,6 +722,29 @@ internal static class MeasurementRunner
 
         if (manifest.Probe is not null)
         {
+            var observedProbeShards = manifest.ObservedPhases
+                .Where(
+                    phase =>
+                        string.Equals(
+                            phase.Kind,
+                            "probe-policy",
+                            StringComparison.Ordinal))
+                .Select(phase => phase.Scope)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var missingProbePhases = manifest.Probe.ShardKeys
+                .Where(
+                    shard =>
+                        !observedProbeShards.Contains(shard))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+
+            if (missingProbePhases.Length != 0)
+            {
+                errors.Add(
+                    $"No probe-policy evidence phase was observed for configured shard(s): {string.Join(", ", missingProbePhases)}.");
+            }
+
             if (summary.Scheduling.ProbeSelectedDecisionCount == 0)
             {
                 errors.Add(
