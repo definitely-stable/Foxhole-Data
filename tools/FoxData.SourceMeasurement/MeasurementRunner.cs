@@ -265,6 +265,12 @@ internal static class MeasurementRunner
                     string.IsNullOrWhiteSpace(fetch.ContentEncoding)
                         ? "identity"
                         : fetch.ContentEncoding!),
+            CountBy(
+                fetches.Where(
+                    fetch =>
+                        !string.IsNullOrWhiteSpace(
+                            fetch.BodyErrorCode)),
+                fetch => fetch.BodyErrorCode!),
             AnalyzeEtags(
                 fetches,
                 warApiReport),
@@ -1535,6 +1541,20 @@ internal static class MeasurementRunner
         }
 
         builder.AppendLine();
+        if (summary.BodyErrorCounts.Count > 0)
+        {
+            builder.AppendLine("## Body errors");
+            builder.AppendLine();
+
+            foreach (var bodyError in summary.BodyErrorCounts)
+            {
+                builder.AppendLine(
+                    $"- {bodyError.Key}: {bodyError.Value}");
+            }
+
+            builder.AppendLine();
+        }
+
         builder.AppendLine("## ETag");
         builder.AppendLine();
         builder.AppendLine(
