@@ -65,6 +65,10 @@ public static class DependencyInjection
 
         services.AddScoped<IEvidenceKernelStore, PostgresEvidenceKernelStore>();
         services.AddScoped<EvidenceKernel>();
+        services.AddScoped<IEndpointEvidenceReader, PostgresEndpointEvidenceReader>();
+
+        services.AddScoped<IEndpointPollStateStore, PostgresEndpointPollStateStore>();
+        services.AddScoped<ISourceParseRunStore, PostgresSourceParseRunStore>();
 
         services.AddSingleton<PostgresHealthCheck>();
 
