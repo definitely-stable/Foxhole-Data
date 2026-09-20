@@ -49,6 +49,35 @@ internal sealed record MeasurementCacheSummary(
     MeasurementPercentiles SourceCacheDelaySeconds,
     MeasurementPercentiles SourceAgeSeconds);
 
+internal sealed record MeasurementEtagSummary(
+    int PresentCount,
+    int StrongCount,
+    int WeakCount,
+    int UnusableCount,
+    int SameEtagDifferentPayloadCount,
+    int DifferentEtagSamePayloadCount);
+
+internal sealed record MeasurementVolumeSummary(
+    double WindowDays,
+    double FetchRowsPerDay,
+    double UniquePayloadRowsPerDay,
+    double ParseRunsPerDay,
+    double ScheduleDecisionsPerDay);
+
+internal sealed record MeasurementExecutorCapabilityLoad(
+    string ShardKey,
+    string CapabilityKey,
+    int EndpointCount,
+    double RequiredSerialServiceLoad);
+
+internal sealed record MeasurementExecutorCapacitySummary(
+    int ExecutorConcurrency,
+    int ModeledEndpointCount,
+    double RequiredSerialServiceLoad,
+    double RemainingSerialHeadroom,
+    int MinimumModeledConcurrency,
+    IReadOnlyList<MeasurementExecutorCapabilityLoad> Groups);
+
 internal sealed record MeasurementAttemptSummary(
     int AttemptCount,
     int ExchangeAuthorizedCount,
@@ -115,6 +144,10 @@ internal sealed record MeasurementSummary(
     int EtagPresentCount,
     IReadOnlyDictionary<string, int> StatusCounts,
     IReadOnlyDictionary<string, int> ContentEncodingCounts,
+    MeasurementEtagSummary Etag,
+    IReadOnlyDictionary<string, MeasurementPercentiles> LatencyByResponseClassMs,
+    MeasurementVolumeSummary Volume,
+    MeasurementExecutorCapacitySummary ExecutorCapacity,
     MeasurementCacheSummary Cache,
     MeasurementAttemptSummary Attempts,
     MeasurementSchedulingSummary Scheduling,
