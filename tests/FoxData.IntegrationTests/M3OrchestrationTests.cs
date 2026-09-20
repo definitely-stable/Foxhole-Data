@@ -95,6 +95,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         Assert.NotNull(parseRun);
         Assert.Equal("parsed", parseRun.Outcome);
         Assert.Equal(JsonStructuralFingerprinter.Algorithm, parseRun.FingerprintAlgorithm);
+        Assert.Equal(body.LongLength, parseRun.DecodedByteLength);
 
         await fixture.MakeSuccessorAvailableAsync(firstFetchId);
 
