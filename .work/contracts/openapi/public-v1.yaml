@@ -1,0 +1,154 @@
+openapi: 3.1.0
+info:
+  title: Foxhole-Data Public API
+  version: 1.0.0-alpha.1
+  description: Canonical developer API for public Foxhole runtime and historical data.
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+paths:
+  /api/v1:
+    get:
+      operationId: getApiMetadata
+      tags: [Meta]
+      responses:
+        "200":
+          description: API metadata and capability versions.
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiMetadata"
+        "304":
+          description: Not modified.
+  /api/v1/shards:
+    get:
+      operationId: listShards
+      tags: [Meta]
+      responses:
+        "200":
+          description: Known source shard contexts.
+  /api/v1/shards/{shard}/wars/current:
+    get:
+      operationId: getCurrentWar
+      tags: [Wars]
+      parameters:
+        - name: shard
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current canonical war for the shard.
+        "404":
+          description: No current war.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/wars/{warId}:
+    get:
+      operationId: getWar
+      tags: [Wars]
+      parameters:
+        - name: warId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Canonical war resource.
+  /api/v1/wars/{warId}/regions/{regionId}/snapshot:
+    get:
+      operationId: getRegionSnapshot
+      tags: [Regions]
+      parameters:
+        - name: warId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: regionId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: at
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Coverage-aware canonical region snapshot.
+  /api/v1/changes:
+    get:
+      operationId: listChanges
+      tags: [Changes]
+      parameters:
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: [string, "null"]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        "200":
+          description: Durable cursor-ordered canonical observed changes.
+  /api/v1/changes/stream:
+    get:
+      operationId: streamChanges
+      tags: [Changes]
+      responses:
+        "200":
+          description: Server-Sent Events stream of canonical changes.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /api/v1/exports:
+    post:
+      operationId: createExport
+      tags: [Exports]
+      responses:
+        "202":
+          description: Export accepted for asynchronous processing.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri-reference
+components:
+  schemas:
+    ApiMetadata:
+      type: object
+      required: [apiVersion]
+      properties:
+        apiVersion:
+          type: string
+        stdioProtocolVersion:
+          type: string
+        eventContractVersion:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        code: { type: string }
+        traceId: { type: string }
