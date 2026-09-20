@@ -2,7 +2,14 @@ using FoxData.Sources.WarApi;
 
 namespace FoxData.Worker;
 
-public sealed class WarApiTransport : IDisposable
+public interface IWarApiTransport
+{
+    Task<WarApiHttpExchangeResult> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken);
+}
+
+public sealed class WarApiTransport : IWarApiTransport, IDisposable
 {
     public WarApiTransport(
         WarApiWorkerOptions options,
@@ -30,6 +37,11 @@ public sealed class WarApiTransport : IDisposable
     public HttpClient Client { get; }
 
     public WarApiHttpExchange Exchange { get; }
+
+    public Task<WarApiHttpExchangeResult> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken) =>
+        Exchange.SendAsync(Client, request, cancellationToken);
 
     public void Dispose() => Client.Dispose();
 }
