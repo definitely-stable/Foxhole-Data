@@ -54,6 +54,7 @@ jobs:
         run: |
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --help >/dev/null
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --version >/dev/null
+          dotnet run --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj -c Release --no-build -- --help >/dev/null
 
       - name: Unit tests
         run: >-
