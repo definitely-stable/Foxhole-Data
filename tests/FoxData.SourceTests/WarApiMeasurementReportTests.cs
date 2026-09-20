@@ -23,7 +23,8 @@ public sealed class WarApiMeasurementReportTests
                     "map-dynamic/DeadLandsHex",
                     start.AddSeconds(60),
                     304,
-                    null),
+                    null,
+                    validationHit: true),
                 Fetch(
                     "map-dynamic/DeadLandsHex",
                     start.AddSeconds(120),
@@ -90,16 +91,20 @@ public sealed class WarApiMeasurementReportTests
         Assert.Equal(5, group.FetchCount);
         Assert.Equal(4, group.OkCount);
         Assert.Equal(1, group.NotModifiedCount);
+        Assert.Equal(1, group.ValidationHitCount);
+        Assert.Equal(0, group.OrphanNotModifiedCount);
         Assert.Equal(1, group.DuplicateOkCount);
         Assert.Equal(1, group.RepresentationChangeCount);
         Assert.Equal(3, group.ParseRunCount);
         Assert.Equal(0, group.ParseFailureCount);
         Assert.Equal(1, group.StructuralFingerprintChangeCount);
+        Assert.Equal(1, group.SourceVersionAdvanceCount);
         Assert.Equal(1, group.SourceVersionGapCount);
         Assert.Equal(0, group.SourceVersionRegressionCount);
         Assert.Equal(0, group.SourceLastUpdatedRegressionCount);
-        Assert.NotNull(group.ValidationRatio);
-        Assert.InRange(group.ValidationRatio.Value, 0.199999, 0.200001);
+        Assert.NotNull(group.NotModifiedRatio);
+        Assert.InRange(group.NotModifiedRatio.Value, 0.199999, 0.200001);
+        Assert.Equal(1d, group.ValidationHitRatio!.Value);
 
         Assert.Equal(
             new[] { 1d, 5d, 10d, 60d },
@@ -136,7 +141,8 @@ public sealed class WarApiMeasurementReportTests
         string endpointKey,
         DateTimeOffset observedAt,
         int statusCode,
-        string? payloadHash) =>
+        string? payloadHash,
+        bool validationHit = false) =>
         new(
             endpointKey,
             WarApiCapabilities.DynamicMapState,
@@ -145,7 +151,9 @@ public sealed class WarApiMeasurementReportTests
             payloadHash,
             payloadHash is null ? null : 100,
             "etag",
-            10);
+            10,
+            SourceVersion: null,
+            ValidationHit: validationHit);
 
     private static WarApiParseMeasurementSample Parse(
         string endpointKey,
