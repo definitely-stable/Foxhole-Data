@@ -32,6 +32,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
             new EvidenceKernel(new PostgresEvidenceKernelStore(dataSource));
         var measurement =
             new PostgresSourceMeasurementReader(dataSource);
+        var parseRuns =
+            new PostgresSourceParseRunStore(dataSource);
 
         var officialEndpoint = await RegisterEndpointAsync(
             registry,
@@ -60,6 +62,24 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
             "m4:other",
             observedAt,
             otherBody);
+
+        var parseStartedAt = observedAt.AddSeconds(5);
+        var parseCompletedAt = parseStartedAt.AddMilliseconds(4);
+        var recordedParse = await parseRuns.RecordAsync(
+            new SourceParseRunWrite(
+                officialCapture.Fetch!.Id,
+                "runtime-war-state",
+                "warapi-adapter@1",
+                "warapi-parser@1",
+                "json-shape@1",
+                "shape-a",
+                "parsed",
+                0,
+                0,
+                null,
+                parseStartedAt,
+                parseCompletedAt),
+            TestContext.Current.CancellationToken);
 
         var fetches = new List<SourceMeasurementFetch>();
         await foreach (var fetch in measurement.ReadFetchesAsync(
@@ -106,6 +126,27 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal("runtime-war-state", measuredAttempt.CapabilityKey);
         Assert.NotNull(measuredAttempt.ExchangeAuthorizedAt);
         Assert.NotNull(measuredAttempt.RawDurableAt);
+
+        var measuredParseRuns = new List<SourceMeasurementParseRun>();
+        await foreach (var parseRun in measurement.ReadParseRunsAsync(
+            "official-war-api",
+            observedAt.AddSeconds(-1),
+            observedAt.AddSeconds(1),
+            TestContext.Current.CancellationToken))
+        {
+            measuredParseRuns.Add(parseRun);
+        }
+
+        var measuredParse = Assert.Single(measuredParseRuns);
+        Assert.Equal(recordedParse.Id, measuredParse.ParseRunId);
+        Assert.Equal(officialCapture.Fetch.Id, measuredParse.RepresentationFetchId);
+        Assert.Equal(officialEndpoint, measuredParse.EndpointId);
+        Assert.Equal("warapi-parser@1", measuredParse.ParserVersion);
+        Assert.Equal("shape-a", measuredParse.StructuralFingerprint);
+        Assert.Equal("parsed", measuredParse.Outcome);
+        Assert.Equal(observedAt.AddMilliseconds(-12), measuredParse.RepresentationObservedAt);
+        Assert.Equal(parseStartedAt, measuredParse.StartedAt);
+        Assert.Equal(parseCompletedAt, measuredParse.CompletedAt);
     }
 
     [Fact]
