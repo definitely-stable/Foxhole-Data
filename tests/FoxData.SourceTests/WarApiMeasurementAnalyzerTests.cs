@@ -45,16 +45,22 @@ public sealed class WarApiMeasurementAnalyzerTests
         Assert.InRange(summary.ValidationRatio.Value, 0.199999, 0.200001);
 
         Assert.Equal(150d, summary.PayloadP50Bytes!.Value);
+        Assert.Equal(270d, summary.PayloadP90Bytes!.Value);
         Assert.Equal(285d, summary.PayloadP95Bytes!.Value);
         Assert.Equal(297d, summary.PayloadP99Bytes!.Value);
+        Assert.Equal(300d, summary.PayloadMaxBytes!.Value);
 
         Assert.Equal(25d, summary.DurationP50Ms!.Value);
+        Assert.Equal(45d, summary.DurationP90Ms!.Value);
         Assert.Equal(47.5d, summary.DurationP95Ms!.Value);
         Assert.Equal(49.5d, summary.DurationP99Ms!.Value);
+        Assert.Equal(50d, summary.DurationMaxMs!.Value);
 
         Assert.Equal(60d, summary.PollIntervalP50Seconds!.Value);
+        Assert.Equal(60d, summary.PollIntervalP90Seconds!.Value);
         Assert.Equal(60d, summary.PollIntervalP95Seconds!.Value);
         Assert.Equal(60d, summary.PollIntervalP99Seconds!.Value);
+        Assert.Equal(60d, summary.PollIntervalMaxSeconds!.Value);
     }
 
     [Fact]
