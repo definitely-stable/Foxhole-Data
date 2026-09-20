@@ -94,6 +94,9 @@ internal static class M3ModelConfiguration
                 table.HasCheckConstraint(
                     "ck_source_parse_runs_completed_after_started",
                     "completed_at >= started_at");
+                table.HasCheckConstraint(
+                    "ck_source_parse_runs_decoded_byte_length",
+                    "decoded_byte_length IS NULL OR decoded_byte_length >= 0");
             });
 
         builder.HasKey(x => x.Id);
