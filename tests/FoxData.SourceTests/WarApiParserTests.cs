@@ -40,6 +40,8 @@ public sealed class WarApiParserTests
         Assert.Equal(0, item.ViewDirection);
         Assert.Equal("COLONIALS", item.TeamId);
         Assert.Equal(1, result.UnknownCodeCount);
+        Assert.Equal(2, result.SourceVersion);
+        Assert.Equal(1, result.SourceLastUpdated);
     }
 
     [Fact]
@@ -86,6 +88,8 @@ public sealed class WarApiParserTests
         Assert.Equal(WarApiParseOutcome.Parsed, result.Outcome);
         var war = Assert.IsType<WarApiWarStateDto>(result.Value);
         Assert.Null(war.ConquestStartTime);
+        Assert.Null(result.SourceVersion);
+        Assert.Null(result.SourceLastUpdated);
     }
 
     [Fact]
