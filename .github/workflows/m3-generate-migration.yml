@@ -27,6 +27,9 @@ jobs:
       - name: Restore
         run: dotnet restore FoxData.slnx --locked-mode
 
+      - name: Build design-time startup
+        run: dotnet build src/FoxData.Api/FoxData.Api.csproj -c Debug --no-restore
+
       - name: Generate migration
         run: >-
           dotnet ef migrations add M3OfficialWarApiState
