@@ -8,63 +8,95 @@ namespace FoxData.Worker;
 public sealed class WarApiExecutorWorker(
     IServiceScopeFactory scopeFactory,
     WarApiWorkerOptions options,
+    WarApiCollectionProfile collectionProfile,
     ILogger<WarApiExecutorWorker> logger) : BackgroundService
 {
-    private readonly WorkerInstanceId _workerId = WorkerInstanceId.New();
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
     {
         if (!options.Enabled)
         {
             return;
         }
 
+        var loops = Enumerable
+            .Range(0, collectionProfile.ExecutorConcurrency)
+            .Select(
+                _ => RunExecutorLoopAsync(
+                    WorkerInstanceId.New(),
+                    stoppingToken))
+            .ToArray();
+
+        await Task.WhenAll(loops);
+    }
+
+    private async Task RunExecutorLoopAsync(
+        WorkerInstanceId workerId,
+        CancellationToken stoppingToken)
+    {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var ingestion = scope.ServiceProvider.GetRequiredService<IngestionKernel>();
+                await using var scope =
+                    scopeFactory.CreateAsyncScope();
+                var ingestion =
+                    scope.ServiceProvider
+                        .GetRequiredService<IngestionKernel>();
 
-                var claim = await ingestion.ClaimNextForSourceAsync(
-                    _workerId,
-                    WarApiCatalog.SourceKey,
-                    options.LeaseDuration,
-                    stoppingToken);
+                var claim =
+                    await ingestion.ClaimNextForSourceAsync(
+                        workerId,
+                        WarApiCatalog.SourceKey,
+                        options.LeaseDuration,
+                        stoppingToken);
 
                 if (!claim.Claimed)
                 {
-                    await Task.Delay(options.IdleDelay, stoppingToken);
+                    await Task.Delay(
+                        options.IdleDelay,
+                        stoppingToken);
                     continue;
                 }
 
                 var executor =
-                    scope.ServiceProvider.GetRequiredService<WarApiAttemptExecutor>();
+                    scope.ServiceProvider
+                        .GetRequiredService<
+                            WarApiAttemptExecutor>();
 
                 await executor.ExecuteAsync(
                     claim.Job!,
-                    _workerId,
+                    workerId,
                     stoppingToken);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            catch (OperationCanceledException)
+                when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "War API executor iteration failed.");
-                await DelayAfterFailureAsync(stoppingToken);
+                logger.LogError(
+                    exception,
+                    "War API executor iteration failed for worker {WorkerId}.",
+                    workerId);
+                await DelayAfterFailureAsync(
+                    stoppingToken);
             }
         }
     }
 
-    private async Task DelayAfterFailureAsync(CancellationToken stoppingToken)
+    private async Task DelayAfterFailureAsync(
+        CancellationToken stoppingToken)
     {
         try
         {
-            await Task.Delay(options.IdleDelay, stoppingToken);
+            await Task.Delay(
+                options.IdleDelay,
+                stoppingToken);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
         {
         }
     }
