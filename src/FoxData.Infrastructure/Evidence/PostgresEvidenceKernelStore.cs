@@ -15,7 +15,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         id, attempt_id, endpoint_id, request_started_at, response_started_at, retrieved_at,
         transport_kind, status_code, media_type, content_encoding, declared_length, source_etag,
         cache_control, expires_at, payload_id, prior_fetch_id, duration_ms, created_at,
-        source_date, source_age_seconds, retry_after
+        source_date, source_age_seconds, retry_after, body_error_code
         """;
 
     private const string PayloadColumns =
@@ -423,12 +423,12 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
                 (id, attempt_id, endpoint_id, request_started_at, response_started_at, retrieved_at,
                  transport_kind, status_code, media_type, content_encoding, declared_length, source_etag,
                  cache_control, expires_at, payload_id, prior_fetch_id, duration_ms,
-                 source_date, source_age_seconds, retry_after)
+                 source_date, source_age_seconds, retry_after, body_error_code)
             VALUES
                 (@id, @attempt_id, @endpoint_id, @request_started_at, @response_started_at, @retrieved_at,
                  @transport_kind, @status_code, @media_type, @content_encoding, @declared_length, @source_etag,
                  @cache_control, @expires_at, @payload_id, @prior_fetch_id, @duration_ms,
-                 @source_date, @source_age_seconds, @retry_after)
+                 @source_date, @source_age_seconds, @retry_after, @body_error_code)
             RETURNING {FetchColumns};
             """;
 
@@ -452,6 +452,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         AddNullableTimestamp(insert, "source_date", observation.SourceDate);
         AddNullableBigint(insert, "source_age_seconds", observation.SourceAgeSeconds);
         AddNullableText(insert, "retry_after", observation.RetryAfter);
+        AddNullableText(insert, "body_error_code", observation.BodyErrorCode);
 
         return await ReadFetchAsync(insert, cancellationToken)
             ?? throw new EvidenceIntegrityException("Fetch insert returned no row.");
@@ -832,7 +833,8 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             reader.GetFieldValue<DateTimeOffset>(17),
             reader.IsDBNull(18) ? null : reader.GetFieldValue<DateTimeOffset>(18),
             reader.IsDBNull(19) ? null : reader.GetInt64(19),
-            reader.IsDBNull(20) ? null : reader.GetString(20));
+            reader.IsDBNull(20) ? null : reader.GetString(20),
+            reader.IsDBNull(21) ? null : reader.GetString(21));
     }
 
     private static async Task<PayloadDescriptor?> ReadPayloadAsync(
