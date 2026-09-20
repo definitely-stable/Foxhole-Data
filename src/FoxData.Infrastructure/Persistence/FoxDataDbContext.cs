@@ -10,6 +10,7 @@ public sealed class FoxDataDbContext(DbContextOptions<FoxDataDbContext> options)
 
         M2ModelConfiguration.Configure(modelBuilder);
         M3ModelConfiguration.Configure(modelBuilder);
+        M4ModelConfiguration.Configure(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
     }
