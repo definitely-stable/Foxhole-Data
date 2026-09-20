@@ -18,7 +18,8 @@ public sealed record SourceParseRunDescriptor(
     DateTimeOffset CompletedAt,
     DateTimeOffset CreatedAt,
     long? SourceVersion,
-    long? SourceLastUpdated);
+    long? SourceLastUpdated,
+    long? DecodedByteLength);
 
 public sealed record SourceParseRunWrite(
     FetchId RepresentationFetchId,
@@ -34,7 +35,8 @@ public sealed record SourceParseRunWrite(
     DateTimeOffset StartedAt,
     DateTimeOffset CompletedAt,
     long? SourceVersion = null,
-    long? SourceLastUpdated = null);
+    long? SourceLastUpdated = null,
+    long? DecodedByteLength = null);
 
 public interface ISourceParseRunStore
 {
