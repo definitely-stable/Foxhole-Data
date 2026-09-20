@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -104,7 +105,7 @@ public static class WarApiResponsePolicy
             $"{BackoffPolicyVersion}\n{stableEndpointKey}\n{consecutiveFailures}");
         var jitter = 0.80 + ((jitterBasis % 4001) / 10000.0);
 
-        return TimeSpan.FromSeconds(baseSeconds * jitter);
+        return TimeSpan.FromSeconds(Math.Min(300, baseSeconds * jitter));
     }
 
     public static TimeSpan Cadence(SourceCapability capability)
@@ -157,12 +158,12 @@ public static class WarApiResponsePolicy
     private static uint StableUInt32(string value)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return BitConverter.ToUInt32(hash, 0);
+        return BinaryPrimitives.ReadUInt32LittleEndian(hash);
     }
 
     private static ulong StableUInt64(string value)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return BitConverter.ToUInt64(hash, 0);
+        return BinaryPrimitives.ReadUInt64LittleEndian(hash);
     }
 }
