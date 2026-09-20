@@ -14,7 +14,8 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         """
         id, attempt_id, endpoint_id, request_started_at, response_started_at, retrieved_at,
         transport_kind, status_code, media_type, content_encoding, declared_length, source_etag,
-        cache_control, expires_at, payload_id, prior_fetch_id, duration_ms, created_at
+        cache_control, expires_at, payload_id, prior_fetch_id, duration_ms, created_at,
+        source_date, source_age_seconds, retry_after
         """;
 
     private const string PayloadColumns =
@@ -421,11 +422,13 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             INSERT INTO evidence.fetches
                 (id, attempt_id, endpoint_id, request_started_at, response_started_at, retrieved_at,
                  transport_kind, status_code, media_type, content_encoding, declared_length, source_etag,
-                 cache_control, expires_at, payload_id, prior_fetch_id, duration_ms)
+                 cache_control, expires_at, payload_id, prior_fetch_id, duration_ms,
+                 source_date, source_age_seconds, retry_after)
             VALUES
                 (@id, @attempt_id, @endpoint_id, @request_started_at, @response_started_at, @retrieved_at,
                  @transport_kind, @status_code, @media_type, @content_encoding, @declared_length, @source_etag,
-                 @cache_control, @expires_at, @payload_id, @prior_fetch_id, @duration_ms)
+                 @cache_control, @expires_at, @payload_id, @prior_fetch_id, @duration_ms,
+                 @source_date, @source_age_seconds, @retry_after)
             RETURNING {FetchColumns};
             """;
 
@@ -446,6 +449,9 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         AddNullableUuid(insert, "payload_id", payloadId?.Value);
         AddNullableUuid(insert, "prior_fetch_id", priorFetchId?.Value);
         AddBigint(insert, "duration_ms", observation.DurationMs);
+        AddNullableTimestamp(insert, "source_date", observation.SourceDate);
+        AddNullableBigint(insert, "source_age_seconds", observation.SourceAgeSeconds);
+        AddNullableText(insert, "retry_after", observation.RetryAfter);
 
         return await ReadFetchAsync(insert, cancellationToken)
             ?? throw new EvidenceIntegrityException("Fetch insert returned no row.");
@@ -823,7 +829,10 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             reader.IsDBNull(14) ? null : new PayloadId(reader.GetGuid(14)),
             reader.IsDBNull(15) ? null : new FetchId(reader.GetGuid(15)),
             reader.GetInt64(16),
-            reader.GetFieldValue<DateTimeOffset>(17));
+            reader.GetFieldValue<DateTimeOffset>(17),
+            reader.IsDBNull(18) ? null : reader.GetFieldValue<DateTimeOffset>(18),
+            reader.IsDBNull(19) ? null : reader.GetInt64(19),
+            reader.IsDBNull(20) ? null : reader.GetString(20));
     }
 
     private static async Task<PayloadDescriptor?> ReadPayloadAsync(
