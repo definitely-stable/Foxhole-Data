@@ -531,7 +531,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 HttpStatusCode.OK,
                 Encoding.UTF8.GetBytes(
                     """["DeadLandsHex","MarbanHollow"]"""),
-                ""maps-probe"",
+                "etag-maps-probe",
                 "max-age=300"));
 
         var mapsJob = await fixture.EnqueueAndClaimAsync(
@@ -574,7 +574,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 selectedBody,
-                ""selected-v10"",
+                "etag-selected-v10",
                 "max-age=60"));
 
         var selectedJob = await fixture.EnqueueAndClaimAsync(
@@ -622,7 +622,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 selectedBody,
-                ""other-v10"",
+                "etag-other-v10",
                 "max-age=0"));
 
         var otherJob = await fixture.EnqueueAndClaimAsync(
