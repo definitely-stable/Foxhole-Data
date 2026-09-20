@@ -263,7 +263,7 @@ public sealed class WarApiAttemptExecutor(
         FenceToken fenceToken,
         int attemptNumber,
         SourceResponseObservation observation,
-        byte[]? body,
+        ReadOnlyMemory<byte>? body,
         FoxData.Core.Evidence.FetchId? priorFetchId)
     {
         using var captureDeadline = new CancellationTokenSource(
