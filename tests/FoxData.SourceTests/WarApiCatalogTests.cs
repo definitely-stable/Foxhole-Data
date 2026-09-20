@@ -36,6 +36,8 @@ public sealed class WarApiCatalogTests
     }
 
     [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
     [InlineData("../escape")]
     [InlineData("a/b")]
     [InlineData("a\\b")]
