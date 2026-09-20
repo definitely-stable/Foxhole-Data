@@ -179,7 +179,7 @@ Those values have durable domain meaning and must be explicit monotonic bigint c
 
 ### 4.7 Database time is authoritative for leases
 
-Lease expiry uses PostgreSQL transaction/statement time, not worker wall-clock time.
+Lease expiry uses PostgreSQL database time, not worker wall-clock time. Eligibility/expiry checks that run after row-lock waits use `clock_timestamp()` so transaction start time cannot keep an already-expired lease alive.
 
 Worker clocks can differ.
 
@@ -485,12 +485,12 @@ One row per endpoint.
 endpoint_id            uuid primary key
 fence_token            bigint not null default 0
 active_attempt_id      uuid null
-last_authoritative_attempt_id    uuid null
+last_current_capture_attempt_id    uuid null
 updated_at             timestamptz not null
 
 foreign key endpoint_id -> sources.endpoints(id)
 foreign key active_attempt_id -> ingest.attempts(id)
-foreign key last_authoritative_attempt_id -> ingest.attempts(id)
+foreign key last_current_capture_attempt_id -> ingest.attempts(id)
 ~~~
 
 M3 adds ETag/cache eligibility fields; M2 does not create speculative cache columns.
@@ -515,11 +515,11 @@ RETURNING fence_token;
 
 Fence tokens monotonically increase per endpoint.
 
-A newer fence does not delete old evidence. It only prevents old work from advancing endpoint/current canonical authority.
+A newer fence does not delete old evidence. It only prevents old work from advancing the endpoint current-capture marker. Current raw capture is not canonical acceptance.
 
 ~~~text
 stale response may still be evidence
-stale response must not become current authority
+stale response must not become current raw capture
 ~~~
 
 ## 14. Exchange authorization
@@ -657,8 +657,11 @@ Steps:
 5. set raw_durable_at;
 6. determine whether fence remains current;
 7. classify current vs captured_late/superseded;
-8. set endpoint_state.last_authoritative_attempt_id only when the expected fence is still current;
-9. COMMIT.
+8. set `endpoint_state.last_current_capture_attempt_id` only when the expected lease/fence are still current;
+9. complete/release the source collection job at the raw-durability boundary;
+10. COMMIT.
+
+`last_current_capture_attempt_id` records transport/currentness only. Parsing, quality, identity and canonical acceptance occur later over immutable evidence and do not reuse this source collection lease.
 
 No canonical Foxhole interpretation occurs.
 
@@ -864,6 +867,8 @@ RenewCollectionJobLease
 BeginIngestionAttempt
 AcquireEndpointFence
 AuthorizeSourceExchange
+DeferBeforeExchange
+DeferUncertainExchange
 
 CaptureSourceResponse
 CompleteIngestionAttempt
@@ -888,6 +893,7 @@ Claim: NoneAvailable | Claimed
 Lease: Renewed | Lost
 Fence: Acquired | LeaseLost
 Authorization: Authorized | AlreadyAuthorized | StaleFence | LeaseLost
+Deferral: DeferredNow | AlreadyDeferred | LeaseLost | InvalidState
 Capture: CapturedCurrent | CapturedLate | AlreadyCaptured | InvalidAttempt
 ~~~
 
@@ -1185,7 +1191,7 @@ M2 is DONE only when:
 - IDs are application UUIDv7;
 - attempt numbers unique per job;
 - fence tokens monotonically increase;
-- stale fences cannot advance authority;
+- stale fences cannot advance the current raw-capture marker;
 - exchange authorization is durable and one-way.
 
 ### Evidence
@@ -1204,7 +1210,7 @@ M2 is DONE only when:
 - authorized-without-fetch becomes uncertain;
 - same authorized attempt is never replayed;
 - unknown COMMIT is resolved through durable observation;
-- late stale evidence cannot become current authority;
+- late stale evidence cannot become the current raw capture;
 - recovery is idempotent.
 
 ### Testing/observability

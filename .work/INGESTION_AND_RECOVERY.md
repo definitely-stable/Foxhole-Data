@@ -1,32 +1,155 @@
 # Ingestion and recovery
 
-## Durable five-phase protocol
+## Durable collection and interpretation protocol
 
-A. Claim logical job in a short transaction and advance job lease generation.
+Foxhole-Data separates source collection correctness from later semantic interpretation.
 
-B. Acquire semantic endpoint ownership in a separate short transaction and advance endpoint fence token.
+### A. Claim collection job
 
-C. Outside PostgreSQL, perform exactly one conditional HTTP exchange, enforce response limits, hash exact bytes and durably publish external CAS when selected.
+Claim the logical collection job in a short PostgreSQL transaction and advance its lease generation.
 
-D. Raw-capture transaction persists fetch metadata and payload/reference and marks the attempt raw-durable.
+The collection lease protects only the current source-collection attempt.
 
-E. Canonical reconciliation transaction verifies current lease generation and endpoint fence, runs normalization/quality/identity, mutates accepted canonical state, records coverage/changes and writes transactional outbox work.
+### B. Acquire endpoint fence
+
+Begin an ingestion attempt and acquire endpoint ownership in a separate short transaction.
+
+All M2 state-changing transactions use the lock order:
+
+~~~text
+collection_job -> ingestion_attempt -> endpoint_state
+~~~
+
+Endpoint fence tokens are monotonic and are never reused or decremented.
+
+### C. Authorize and perform exactly one source exchange
+
+Persist exchange authorization before any external request.
+
+Outside PostgreSQL, perform at most one source exchange for that AttemptId.
+
+Only a fresh `AuthorizedNow` result grants permission to issue the exchange. An `AlreadyAuthorized` result is observation-only and MUST NOT cause another request.
+
+No database transaction spans network I/O.
+
+### D. Raw-capture transaction
+
+Persist fetch metadata and exact payload/reference as immutable evidence.
+
+If the collection lease generation and endpoint fence are still current at capture time:
+
+- classify the observation as `CapturedCurrent`;
+- complete the collection job;
+- clear its source-collection lease;
+- clear the endpoint's active attempt;
+- set `endpoint_state.last_current_capture_attempt_id`.
+
+If the response is stale, preserve it as `CapturedLate` without advancing the current-capture marker.
+
+`last_current_capture_attempt_id` means only:
+
+> the most recent raw source observation that was current under the M2 collection lease/fence rules when it became durable.
+
+It does NOT mean that the payload parsed successfully, passed quality checks, matched an identity, or became accepted canonical state.
+
+The source-collection lease/fence lifecycle ends at this raw-durability boundary.
+
+### E. Semantic/canonical reconciliation
+
+Normalization, quality, identity, accepted canonical state, coverage, changes and outbox work are later durable processing stages over immutable Fetch/evidence records.
+
+They MUST NOT attempt to reuse the already-released source collection lease or endpoint fence from phases A-D.
+
+Later stages use their own processing identity/version/revision and provenance back to the Fetch/Attempt that supplied the evidence.
+
+A quality rejection therefore cannot retroactively change the historical fact that a raw representation was the current source capture at collection time.
+
+## Controlled failure transitions
+
+### Before exchange authorization
+
+If request construction, configuration, policy or another deterministic pre-exchange step fails:
+
+~~~text
+DeferBeforeExchange(
+  attemptId,
+  leaseGeneration,
+  retryAvailableAt,
+  errorClass,
+  errorCode)
+~~~
+
+The transition:
+
+- is safe because no source request was authorized;
+- marks the attempt `failed / abandoned_before_exchange`;
+- releases the job lease;
+- clears that attempt from `active_attempt_id` when present;
+- requeues the job as `pending`;
+- persists the caller-selected `available_at = retryAvailableAt`.
+
+It avoids waiting for lease expiry for an error whose exchange outcome is known.
+
+### After exchange authorization when outcome is uncertain
+
+If an authorized source exchange fails in a way that cannot prove whether the upstream observed/completed it:
+
+~~~text
+DeferUncertainExchange(
+  attemptId,
+  leaseGeneration,
+  retryAvailableAt,
+  errorClass,
+  errorCode)
+~~~
+
+The transition:
+
+- marks the attempt `uncertain / uncertain_exchange`;
+- releases/requeues the same logical collection job when the same lease generation still owns it;
+- persists `retryAvailableAt`;
+- clears only that attempt's active endpoint ownership;
+- never grants permission to replay the same AttemptId.
+
+It MAY record uncertainty after the lease timestamp has elapsed if recovery has not yet transferred the job to another lease generation. This allows a worker to report the outcome of its already-authorized exchange without falsely claiming current ownership.
+
+If another generation already owns/recovered the job, the stale worker cannot requeue or mutate that newer ownership.
 
 ## Retry rule
 
 No hidden transport retry or hedging against the upstream War API.
 
-A retry is a new durable attempt and a new audited HTTP exchange.
+A retry that may perform another source exchange is always:
 
-This avoids provenance ambiguity and prevents accidental request multiplication.
+~~~text
+new AttemptId
+new exchange authorization
+new audited exchange
+~~~
+
+The old authorized AttemptId remains permanently non-replayable.
 
 ## Eligibility
 
 Next fetch eligibility is at least:
 
+~~~text
 max(sourceCacheEligibleAt, configuredTargetAt, retryEligibleAt)
+~~~
+
+M2 persists the job-level retry bound as `collection_jobs.available_at`.
+
+M3 owns source-specific backoff and cache policy and supplies the resulting retry/eligibility timestamp without bypassing the M2 state machine.
 
 Returned source cache headers win over an earlier local target.
+
+## Database time
+
+Worker wall clocks do not decide lease ownership.
+
+Where the system must answer "is this lease valid now after any lock wait?", PostgreSQL `clock_timestamp()` is used after the relevant row lock is held.
+
+Transaction-consistent timestamps may still be used for durable audit fields such as `updated_at`.
 
 ## Measurement before production cadence
 
@@ -58,14 +181,19 @@ A lost database connection during COMMIT is an unknown outcome, not proof of rol
 
 Durable operations use stable operation IDs or deterministic uniqueness keys so recovery checks observed state before retrying.
 
+For raw capture, AttemptId is the reconciliation key: an existing Fetch means the capture committed and the source exchange MUST NOT be repeated.
+
 ## Crash points
 
-Correctness tests MUST kill processes after:
+Correctness tests MUST cover failures after:
 
-- HTTP response received;
-- external CAS durable write;
-- raw-capture COMMIT;
-- canonical COMMIT with client-side ambiguity;
+- job claim COMMIT;
+- BeginAttempt COMMIT;
+- fence COMMIT;
+- exchange-authorization COMMIT before a request;
+- source response received before raw capture;
+- raw-capture COMMIT with client-side ambiguity;
+- semantic/canonical processing COMMIT with client-side ambiguity;
 - external outbox effect before completion record.
 
 Recovery cannot depend on graceful shutdown.
