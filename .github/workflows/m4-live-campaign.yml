@@ -2,6 +2,10 @@ name: M4 Live Campaign
 run-name: M4-E ${{ inputs.mode }} · ${{ github.sha }}
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/m4-live-campaign.yml
+      - .github/actions/m4-segment/action.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -31,9 +35,66 @@ env:
   DOTNET_NOLOGO: "1"
 
 jobs:
+  validate-definition:
+    name: Validate M4-E workflow definition
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate YAML and embedded shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ruby <<'RUBY'
+          require "yaml"
+
+          files = [
+            ".github/workflows/m4-live-campaign.yml",
+            ".github/actions/m4-segment/action.yml",
+          ]
+
+          files.each do |path|
+            document = YAML.load_file(path)
+            scripts = []
+            walk = nil
+            walk = lambda do |value|
+              case value
+              when Hash
+                value.each do |key, child|
+                  scripts << child if key.to_s == "run" && child.is_a?(String)
+                  walk.call(child)
+                end
+              when Array
+                value.each { |child| walk.call(child) }
+              end
+            end
+            walk.call(document)
+
+            scripts.each_with_index do |script, index|
+              sanitized = script.gsub(/\$\{\{.*?\}\}/, "GITHUB_EXPR")
+              target = "/tmp/m4-action-#{File.basename(path)}-#{index}.sh"
+              File.write(target, sanitized)
+              abort("bash syntax failed for #{path} run block #{index}") unless system("bash", "-n", target)
+            end
+          end
+
+          workflow = YAML.load_file(".github/workflows/m4-live-campaign.yml")
+          jobs = workflow.fetch("jobs")
+          expected = (1..18).map { |number| format("segment_%02d", number) }
+          missing = expected.reject { |job| jobs.key?(job) }
+          abort("Missing M4 segment jobs: #{missing.join(', ')}") unless missing.empty?
+
+          action = YAML.load_file(".github/actions/m4-segment/action.yml")
+          abort("M4 segment action is not composite") unless action.dig("runs", "using") == "composite"
+          RUBY
+
   smoke:
     name: M4-E workflow smoke
-    if: ${{ inputs.mode == 'smoke' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -67,7 +128,7 @@ jobs:
 
   segment_01:
     name: M4-E 01 · baseline-live1
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -91,7 +152,7 @@ jobs:
   segment_02:
     name: M4-E 02 · baseline-live1
     needs: segment_01
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -115,7 +176,7 @@ jobs:
   segment_03:
     name: M4-E 03 · probe-live1
     needs: segment_02
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -139,7 +200,7 @@ jobs:
   segment_04:
     name: M4-E 04 · probe-live1
     needs: segment_03
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -163,7 +224,7 @@ jobs:
   segment_05:
     name: M4-E 05 · live2
     needs: segment_04
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -187,7 +248,7 @@ jobs:
   segment_06:
     name: M4-E 06 · live2
     needs: segment_05
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -211,7 +272,7 @@ jobs:
   segment_07:
     name: M4-E 07 · live3
     needs: segment_06
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -235,7 +296,7 @@ jobs:
   segment_08:
     name: M4-E 08 · live3
     needs: segment_07
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -259,7 +320,7 @@ jobs:
   segment_09:
     name: M4-E 09 · live3
     needs: segment_08
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -283,7 +344,7 @@ jobs:
   segment_10:
     name: M4-E 10 · live3
     needs: segment_09
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -307,7 +368,7 @@ jobs:
   segment_11:
     name: M4-E 11 · live3
     needs: segment_10
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -331,7 +392,7 @@ jobs:
   segment_12:
     name: M4-E 12 · live3
     needs: segment_11
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -355,7 +416,7 @@ jobs:
   segment_13:
     name: M4-E 13 · live3
     needs: segment_12
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -379,7 +440,7 @@ jobs:
   segment_14:
     name: M4-E 14 · live3
     needs: segment_13
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -403,7 +464,7 @@ jobs:
   segment_15:
     name: M4-E 15 · live3
     needs: segment_14
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -427,7 +488,7 @@ jobs:
   segment_16:
     name: M4-E 16 · live3
     needs: segment_15
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -451,7 +512,7 @@ jobs:
   segment_17:
     name: M4-E 17 · live3
     needs: segment_16
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -475,7 +536,7 @@ jobs:
   segment_18:
     name: M4-E 18 · live3
     needs: segment_17
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -499,7 +560,7 @@ jobs:
   finalize:
     name: M4-E analyze and validate
     needs: segment_18
-    if: ${{ inputs.mode == 'full' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
