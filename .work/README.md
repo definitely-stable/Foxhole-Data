@@ -45,6 +45,7 @@ Primary documents:
 - OPERATIONS.md
 - PERFORMANCE_CAPACITY.md
 - M1_REPOSITORY_BOOTSTRAP.md
+- M2_EVIDENCE_KERNEL.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
@@ -57,3 +58,4 @@ Contract sources:
 Research snapshot:
 
 - research/ECOSYSTEM_2026-09.md
+- research/M2_STORAGE_CONCURRENCY_2026-09.md

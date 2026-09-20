@@ -26,16 +26,11 @@ M1 must not implement source polling, War API DTOs, evidence tables or canonical
 
 ## M2 — evidence kernel
 
-Implement:
+Detailed normative plan: [M2_EVIDENCE_KERNEL.md](M2_EVIDENCE_KERNEL.md).
 
-- source/shard/endpoint registry;
-- jobs/attempts;
-- lease generation;
-- endpoint fencing;
-- fetch evidence;
-- raw payload SHA-256;
-- inline/external blob abstraction;
-- raw durability boundary.
+Implement source/shard/endpoint registry, durable queue, database-time leases, attempt lifecycle, endpoint fencing, one-way exchange authorization, immutable fetch evidence, SHA-256 payload identity, PostgreSQL-inline bytea raw storage, raw-capture transactions and crash/unknown-outcome recovery.
+
+External object storage is deliberately deferred until M4 measurements justify it.
 
 ## M3 — official War API adapter
 
