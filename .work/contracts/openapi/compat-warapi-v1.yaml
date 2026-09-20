@@ -3,9 +3,15 @@ info:
   title: Foxhole-Data War API Compatibility Facade
   version: 1.0.0-alpha.1
   description: Shard-explicit source-shaped compatibility API for documented official War API resources.
+  license:
+    name: MIT
+servers:
+  - url: /
+security: []
 paths:
   /compat/warapi/v1/{shard}/worldconquest/war:
     get:
+      summary: Get the source-shaped current war
       operationId: compatGetWar
       parameters:
         - name: shard
@@ -32,8 +38,11 @@ paths:
               schema: { type: string }
         "304":
           description: Not modified.
+        "400":
+          description: Invalid shard or request.
   /compat/warapi/v1/{shard}/worldconquest/maps:
     get:
+      summary: List source-shaped active maps
       operationId: compatListMaps
       parameters:
         - name: shard
@@ -43,8 +52,11 @@ paths:
       responses:
         "200":
           description: Source-shaped active map list.
+        "400":
+          description: Invalid shard or request.
   /compat/warapi/v1/{shard}/worldconquest/warReport/{mapName}:
     get:
+      summary: Get a source-shaped map war report
       operationId: compatGetWarReport
       parameters:
         - { name: shard, in: path, required: true, schema: { type: string } }
@@ -52,8 +64,11 @@ paths:
       responses:
         "200":
           description: Source-shaped map war report.
+        "400":
+          description: Invalid shard, map name or request.
   /compat/warapi/v1/{shard}/worldconquest/maps/{mapName}/static:
     get:
+      summary: Get source-shaped static map data
       operationId: compatGetStaticMap
       parameters:
         - { name: shard, in: path, required: true, schema: { type: string } }
@@ -61,8 +76,11 @@ paths:
       responses:
         "200":
           description: Source-shaped static map representation.
+        "400":
+          description: Invalid shard, map name or request.
   /compat/warapi/v1/{shard}/worldconquest/maps/{mapName}/dynamic/public:
     get:
+      summary: Get source-shaped public dynamic map data
       operationId: compatGetDynamicMap
       parameters:
         - { name: shard, in: path, required: true, schema: { type: string } }
@@ -70,3 +88,5 @@ paths:
       responses:
         "200":
           description: Source-shaped public dynamic map representation.
+        "400":
+          description: Invalid shard, map name or request.

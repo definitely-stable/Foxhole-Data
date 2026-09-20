@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../FoxData.Sources.Abstractions/FoxData.Sources.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+.vscode/
+TestResults/
+artifacts/
+.nuget/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+.env
+.env.*
+!.env.example

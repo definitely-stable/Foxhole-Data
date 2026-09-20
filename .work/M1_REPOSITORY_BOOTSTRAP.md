@@ -1,6 +1,6 @@
 # M1 — Repository Bootstrap
 
-Status: planned.
+Status: implemented in PR #2; awaiting merge.
 Prerequisite: M0 architecture foundation.
 Successor: M2 evidence kernel.
 
@@ -231,7 +231,7 @@ Initial package baseline:
 Microsoft.EntityFrameworkCore                         10.0.12
 Microsoft.EntityFrameworkCore.Design                  10.0.12
 Microsoft.AspNetCore.OpenApi                          10.0.12
-Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore 10.0.12
+Microsoft.Extensions.Diagnostics.HealthChecks             10.0.12
 
 Npgsql                                                10.0.3
 Npgsql.EntityFrameworkCore.PostgreSQL                 10.0.3
@@ -538,9 +538,9 @@ Build separate API and Worker images using multi-stage builds.
 Initial base lines:
 
 ~~~text
-mcr.microsoft.com/dotnet/sdk:10.0.401-bookworm-slim
-mcr.microsoft.com/dotnet/aspnet:10.0.12-bookworm-slim
-mcr.microsoft.com/dotnet/runtime:10.0.12-bookworm-slim
+mcr.microsoft.com/dotnet/sdk:10.0.401-noble
+mcr.microsoft.com/dotnet/aspnet:10.0.12-noble
+mcr.microsoft.com/dotnet/runtime:10.0.12-noble
 ~~~
 
 Run service containers as non-root.
@@ -560,9 +560,11 @@ worker
 PostgreSQL:
 
 - postgres:18.6-bookworm;
-- named volume;
+- named volume mounted at /var/lib/postgresql;
 - pg_isready health check;
 - clearly development-only credentials.
+
+PostgreSQL 18 changed the official image PGDATA to /var/lib/postgresql/18/docker and the declared VOLUME to /var/lib/postgresql. Do not use the pre-18 /var/lib/postgresql/data mount target for the v18 image.
 
 No MinIO/S3, reverse proxy or broker in M1.
 
@@ -653,16 +655,18 @@ Configure Dependabot for:
 - npm under tools/contracts;
 - Docker.
 
+Dependency Review requires GitHub Dependency Graph to be enabled at repository level. The workflow probes this capability: when the graph is enabled, moderate-or-higher newly introduced vulnerabilities fail the PR; when disabled, the workflow emits an explicit warning and skips the unavailable GitHub service. NuGet Audit remains mandatory regardless of this repository setting.
+
 Do not add a broad license deny-list in M1.
 
 Initial GitHub Actions major versions:
 
 ~~~text
-actions/checkout@v6
-actions/setup-dotnet@v4
-actions/setup-node@v4
-actions/upload-artifact@v4
-actions/dependency-review-action@v4
+actions/checkout@v7
+actions/setup-dotnet@v6
+actions/setup-node@v7
+actions/upload-artifact@v7
+actions/dependency-review-action@v5
 ~~~
 
 Use Node 24-compatible actions. Immutable action-SHA pinning may be added during later supply-chain hardening.
@@ -945,3 +949,51 @@ M2 should be able to add source/evidence registry schema and crash-safe persiste
 - contract-validation foundation.
 
 If M2 immediately requires restructuring these foundations, M1 is not complete.
+
+
+---
+
+## M1 completion record
+
+Implementation validation baseline:
+
+~~~text
+.NET SDK                         10.0.401
+.NET runtime                     10.0.12
+C#                               14
+PostgreSQL                       18.6
+Npgsql                           10.0.3
+Npgsql EF Core provider          10.0.3
+EF Core                          10.0.12
+OpenTelemetry                    1.19.0
+xUnit v3 / MTP v2                4.0.1
+Testcontainers.PostgreSql        4.15.0
+Node.js contract tool line       24 LTS
+Redocly CLI                      2.53.3
+AsyncAPI CLI                     6.1.0
+~~~
+
+Validated on GitHub-hosted Ubuntu runners:
+
+- locked NuGet restore succeeds;
+- dotnet-ef 10.0.12 restores and executes;
+- dotnet format reports no changes;
+- Release build succeeds with warnings treated as errors;
+- CLI --help and --version execute without PostgreSQL;
+- all five test assemblies execute under Microsoft Testing Platform;
+- 11 tests succeed, 0 fail;
+- PostgreSQL 18.6 Testcontainers integration succeeds;
+- both canonical OpenAPI documents pass Redocly validation;
+- AsyncAPI document validates;
+- Docker Compose configuration validates;
+- PostgreSQL, API and Worker start together;
+- API /health/ready becomes healthy against PostgreSQL;
+- Development runtime OpenAPI is reachable;
+- Worker remains running under the generic .NET runtime image;
+- Compose teardown removes the bootstrap volume.
+
+Repository security note:
+
+GitHub Dependency Review is wired and capability-gated. The repository-level Dependency Graph is currently disabled, so the GitHub Dependency Review service is skipped with an explicit warning. NuGet transitive vulnerability audit remains enforced independently. Once Dependency Graph is enabled in repository Security settings, the existing workflow automatically enforces moderate-or-higher newly introduced dependency vulnerabilities.
+
+No official Foxhole source request is made by the M1 runtime or mandatory CI.

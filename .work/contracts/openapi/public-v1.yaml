@@ -3,10 +3,22 @@ info:
   title: Foxhole-Data Public API
   version: 1.0.0-alpha.1
   description: Canonical developer API for public Foxhole runtime and historical data.
+  license:
+    name: MIT
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+  - url: /
+security: []
+tags:
+  - name: Meta
+  - name: Wars
+  - name: Regions
+  - name: Changes
+  - name: Exports
 paths:
   /api/v1:
     get:
+      summary: Get API metadata
       operationId: getApiMetadata
       tags: [Meta]
       responses:
@@ -24,6 +36,7 @@ paths:
           description: Not modified.
   /api/v1/shards:
     get:
+      summary: List source shards
       operationId: listShards
       tags: [Meta]
       responses:
@@ -31,6 +44,7 @@ paths:
           description: Known source shard contexts.
   /api/v1/shards/{shard}/wars/current:
     get:
+      summary: Get the current war for a shard
       operationId: getCurrentWar
       tags: [Wars]
       parameters:
@@ -50,6 +64,7 @@ paths:
                 $ref: "#/components/schemas/Problem"
   /api/v1/wars/{warId}:
     get:
+      summary: Get a canonical war
       operationId: getWar
       tags: [Wars]
       parameters:
@@ -62,8 +77,15 @@ paths:
       responses:
         "200":
           description: Canonical war resource.
+        "404":
+          description: War not found.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/wars/{warId}/regions/{regionId}/snapshot:
     get:
+      summary: Get a coverage-aware region snapshot
       operationId: getRegionSnapshot
       tags: [Regions]
       parameters:
@@ -82,8 +104,15 @@ paths:
       responses:
         "200":
           description: Coverage-aware canonical region snapshot.
+        "404":
+          description: War or region not found.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/changes:
     get:
+      summary: List durable observed changes
       operationId: listChanges
       tags: [Changes]
       parameters:
@@ -103,8 +132,15 @@ paths:
       responses:
         "200":
           description: Durable cursor-ordered canonical observed changes.
+        "400":
+          description: Invalid cursor or query parameters.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/changes/stream:
     get:
+      summary: Stream canonical changes with Server-Sent Events
       operationId: streamChanges
       tags: [Changes]
       responses:
@@ -114,8 +150,15 @@ paths:
             text/event-stream:
               schema:
                 type: string
+        "400":
+          description: Invalid stream cursor or request.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/exports:
     post:
+      summary: Create an asynchronous bulk export
       operationId: createExport
       tags: [Exports]
       responses:
@@ -126,6 +169,12 @@ paths:
               schema:
                 type: string
                 format: uri-reference
+        "400":
+          description: Invalid export request.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     ApiMetadata:
