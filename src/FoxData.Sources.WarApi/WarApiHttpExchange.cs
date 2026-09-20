@@ -26,7 +26,8 @@ public sealed record WarApiHttpExchangeResult(
     DateTimeOffset? ExpiresAt,
     DateTimeOffset? SourceDate,
     TimeSpan? Age,
-    string? RetryAfter);
+    string? RetryAfter,
+    string? BodyErrorCode = null);
 
 public sealed class WarApiHttpExchange
 {
@@ -86,13 +87,31 @@ public sealed class WarApiHttpExchange
 
         var responseStartedAt = _timeProvider.GetUtcNow();
         byte[]? body = null;
+        string? bodyErrorCode = null;
 
         if (response.StatusCode is not HttpStatusCode.NotModified)
         {
-            body = await ReadBoundedBodyAsync(
-                response.Content,
-                _maximumBodyBytes,
-                linked.Token);
+            try
+            {
+                body = await ReadBoundedBodyAsync(
+                    response.Content,
+                    _maximumBodyBytes,
+                    linked.Token);
+            }
+            catch (WarApiResponseLimitException)
+            {
+                bodyErrorCode = "body_limit_exceeded";
+            }
+            catch (IOException)
+            {
+                bodyErrorCode = "body_read_failed";
+            }
+            catch (OperationCanceledException) when (
+                !cancellationToken.IsCancellationRequested &&
+                deadline.IsCancellationRequested)
+            {
+                bodyErrorCode = "body_timeout";
+            }
         }
 
         var retrievedAt = _timeProvider.GetUtcNow();
@@ -113,7 +132,8 @@ public sealed class WarApiHttpExchange
             response.Content.Headers.Expires,
             response.Headers.Date,
             response.Headers.Age,
-            response.Headers.RetryAfter?.ToString());
+            response.Headers.RetryAfter?.ToString(),
+            bodyErrorCode);
     }
 
     private static async Task<byte[]> ReadBoundedBodyAsync(
