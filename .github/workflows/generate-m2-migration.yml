@@ -30,6 +30,9 @@ jobs:
           dotnet tool restore
           dotnet restore FoxData.slnx --locked-mode
 
+      - name: Build
+        run: dotnet build FoxData.slnx -c Release --no-restore
+
       - name: Generate migration
         env:
           FOXDATA_DESIGN_CONNECTION: Host=localhost;Database=foxdata;Username=foxdata;Password=design
@@ -38,6 +41,7 @@ jobs:
           --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj
           --startup-project src/FoxData.Api/FoxData.Api.csproj
           --output-dir Persistence/Migrations
+          --configuration Release
           --no-build
 
       - name: Commit migration
