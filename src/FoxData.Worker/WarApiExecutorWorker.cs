@@ -10,7 +10,7 @@ namespace FoxData.Worker;
 public sealed class WarApiExecutorWorker(
     IServiceScopeFactory scopeFactory,
     WarApiWorkerOptions options,
-    WarApiTransport transport,
+    IWarApiTransport transport,
     TimeProvider timeProvider,
     ILogger<WarApiExecutorWorker> logger) : BackgroundService
 {
@@ -160,8 +160,7 @@ public sealed class WarApiExecutorWorker(
             WarApiHttpExchangeResult response;
             try
             {
-                response = await transport.Exchange.SendAsync(
-                    transport.Client,
+                response = await transport.SendAsync(
                     request,
                     stoppingToken);
             }
