@@ -16,7 +16,10 @@ public sealed record SourceResponseObservation(
     string? SourceEtag,
     string? CacheControl,
     DateTimeOffset? ExpiresAt,
-    long DurationMs);
+    long DurationMs,
+    DateTimeOffset? SourceDate = null,
+    long? SourceAgeSeconds = null,
+    string? RetryAfter = null);
 
 public sealed record PayloadDescriptor(
     PayloadId Id,
@@ -43,7 +46,10 @@ public sealed record FetchDescriptor(
     PayloadId? PayloadId,
     FetchId? PriorFetchId,
     long DurationMs,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? SourceDate = null,
+    long? SourceAgeSeconds = null,
+    string? RetryAfter = null);
 
 public enum CaptureStatus
 {
