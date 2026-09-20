@@ -161,7 +161,9 @@ public sealed class WarApiReconciler(
                 unknownCodes,
                 errorCode,
                 startedAt,
-                completedAt),
+                completedAt,
+                parsed?.SourceVersion,
+                parsed?.SourceLastUpdated),
             cancellationToken);
 
         WarApiTelemetry.ParseRuns.Add(
