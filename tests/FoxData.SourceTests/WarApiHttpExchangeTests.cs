@@ -109,12 +109,14 @@ public sealed class WarApiHttpExchangeTests
             TimeSpan.FromSeconds(5),
             maximumBodyBytes: 4);
 
-        await Assert.ThrowsAsync<WarApiResponseLimitException>(
-            () => exchange.SendAsync(
-                client,
-                request,
-                TestContext.Current.CancellationToken));
+        var result = await exchange.SendAsync(
+            client,
+            request,
+            TestContext.Current.CancellationToken);
 
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+        Assert.Null(result.Body);
+        Assert.Equal("body_limit_exceeded", result.BodyErrorCode);
         Assert.Equal(1, handler.SendCount);
     }
 
