@@ -27,6 +27,7 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
             """
             SELECT
                 captured_fetch.id,
+                captured_fetch.attempt_id,
                 endpoint.id,
                 source.key,
                 shard.key,
@@ -79,31 +80,32 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
         {
             yield return new SourceMeasurementFetch(
                 new FetchId(reader.GetGuid(0)),
-                new EndpointId(reader.GetGuid(1)),
-                reader.GetString(2),
+                new IngestionAttemptId(reader.GetGuid(1)),
+                new EndpointId(reader.GetGuid(2)),
                 reader.GetString(3),
                 reader.GetString(4),
                 reader.GetString(5),
                 reader.GetString(6),
-                reader.GetFieldValue<DateTimeOffset>(7),
+                reader.GetString(7),
                 reader.GetFieldValue<DateTimeOffset>(8),
-                reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                reader.GetInt64(10),
-                reader.IsDBNull(11) ? null : reader.GetString(11),
-                reader.IsDBNull(12) ? null : reader.GetInt64(12),
-                reader.IsDBNull(13) ? null : reader.GetString(13),
+                reader.GetFieldValue<DateTimeOffset>(9),
+                reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                reader.GetInt64(11),
+                reader.IsDBNull(12) ? null : reader.GetString(12),
+                reader.IsDBNull(13) ? null : reader.GetInt64(13),
                 reader.IsDBNull(14) ? null : reader.GetString(14),
-                reader.IsDBNull(15)
-                    ? null
-                    : reader.GetFieldValue<DateTimeOffset>(15),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
                 reader.IsDBNull(16)
                     ? null
                     : reader.GetFieldValue<DateTimeOffset>(16),
-                reader.IsDBNull(17) ? null : reader.GetInt64(17),
-                reader.IsDBNull(18) ? null : reader.GetString(18),
+                reader.IsDBNull(17)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(17),
+                reader.IsDBNull(18) ? null : reader.GetInt64(18),
                 reader.IsDBNull(19) ? null : reader.GetString(19),
-                reader.IsDBNull(20) ? null : reader.GetInt64(20),
-                reader.IsDBNull(21) ? null : reader.GetString(21));
+                reader.IsDBNull(20) ? null : reader.GetString(20),
+                reader.IsDBNull(21) ? null : reader.GetInt64(21),
+                reader.IsDBNull(22) ? null : reader.GetString(22));
         }
     }
 
@@ -284,6 +286,97 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 reader.GetFieldValue<DateTimeOffset>(18),
                 reader.IsDBNull(19) ? null : reader.GetInt64(19),
                 reader.IsDBNull(20) ? null : reader.GetInt64(20));
+        }
+    }
+
+    public async IAsyncEnumerable<SourceMeasurementScheduleDecision> ReadScheduleDecisionsAsync(
+        string sourceKey,
+        DateTimeOffset startInclusive,
+        DateTimeOffset endExclusive,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ValidateWindow(sourceKey, startInclusive, endExclusive);
+
+        await using var connection =
+            await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                decision.fetch_id,
+                decision.endpoint_id,
+                source.key,
+                shard.key,
+                shard.environment,
+                endpoint.capability_key,
+                endpoint.semantic_key,
+                decision.policy_version,
+                decision.effective_cadence_ms,
+                decision.endpoint_active,
+                decision.probe_selected,
+                decision.source_cache_eligible_at,
+                decision.next_target_at,
+                decision.retry_eligible_at,
+                decision.successor_job_id,
+                decision.successor_available_at,
+                decision.created_at
+            FROM evidence.source_schedule_decisions AS decision
+            INNER JOIN evidence.fetches AS captured_fetch
+                ON captured_fetch.id = decision.fetch_id
+            INNER JOIN sources.endpoints AS endpoint
+                ON endpoint.id = decision.endpoint_id
+            INNER JOIN sources.shards AS shard
+                ON shard.id = endpoint.shard_id
+            INNER JOIN sources.sources AS source
+                ON source.id = shard.source_id
+            WHERE source.key = @source_key
+              AND captured_fetch.request_started_at >= @start_inclusive
+              AND captured_fetch.request_started_at < @end_exclusive
+            ORDER BY
+                endpoint.id,
+                captured_fetch.request_started_at,
+                decision.fetch_id;
+            """;
+        AddWindowParameters(
+            command,
+            sourceKey,
+            startInclusive,
+            endExclusive);
+
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SequentialAccess,
+            cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            yield return new SourceMeasurementScheduleDecision(
+                new FetchId(reader.GetGuid(0)),
+                new EndpointId(reader.GetGuid(1)),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetInt64(8),
+                reader.GetBoolean(9),
+                reader.GetBoolean(10),
+                reader.IsDBNull(11)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(11),
+                reader.IsDBNull(12)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(12),
+                reader.IsDBNull(13)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(13),
+                reader.IsDBNull(14)
+                    ? null
+                    : new CollectionJobId(reader.GetGuid(14)),
+                reader.IsDBNull(15)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(15),
+                reader.GetFieldValue<DateTimeOffset>(16));
         }
     }
 
