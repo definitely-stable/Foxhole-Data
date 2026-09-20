@@ -417,7 +417,7 @@ runs:
         {
           echo "### M4-E segment ${{ inputs.segment_id }}"
           echo
-          echo "- Phase: `${{ inputs.phase }}`"
+          echo "- Phase: ${{ inputs.phase }}"
           echo "- Fetches: $fetch_count"
           echo "- 401/403: $unauthorized"
           echo "- root 404: $root_404"
