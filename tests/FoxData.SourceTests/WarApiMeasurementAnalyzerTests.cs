@@ -19,7 +19,14 @@ public sealed class WarApiMeasurementAnalyzerTests
         var samples = new[]
         {
             Sample(start, 200, "A", 100, "etag-a", 10, version: 10),
-            Sample(start.AddSeconds(60), 304, null, null, "etag-b", 5),
+            Sample(
+                start.AddSeconds(60),
+                304,
+                null,
+                null,
+                "etag-b",
+                5,
+                validationHit: true),
             Sample(start.AddSeconds(120), 200, "A", 100, "etag-c", 20, version: 10),
             Sample(start.AddSeconds(180), 200, "B", 200, "etag-c", 30, version: 13),
             Sample(start.AddSeconds(240), 200, "C", 300, "etag-d", 40, version: 12),
@@ -33,16 +40,20 @@ public sealed class WarApiMeasurementAnalyzerTests
         Assert.Equal(6, summary.SampleCount);
         Assert.Equal(4, summary.OkCount);
         Assert.Equal(1, summary.NotModifiedCount);
+        Assert.Equal(1, summary.ValidationHitCount);
+        Assert.Equal(0, summary.OrphanNotModifiedCount);
         Assert.Equal(1, summary.OtherCount);
         Assert.Equal(1, summary.DuplicateOkCount);
         Assert.Equal(2, summary.RepresentationChangeCount);
         Assert.Equal(1, summary.SameEtagDifferentPayloadCount);
         Assert.Equal(1, summary.DifferentEtagSamePayloadCount);
+        Assert.Equal(1, summary.VersionAdvanceCount);
         Assert.Equal(2, summary.VersionGapCount);
         Assert.Equal(1, summary.VersionRegressionCount);
 
-        Assert.NotNull(summary.ValidationRatio);
-        Assert.InRange(summary.ValidationRatio.Value, 0.199999, 0.200001);
+        Assert.NotNull(summary.NotModifiedRatio);
+        Assert.InRange(summary.NotModifiedRatio.Value, 0.199999, 0.200001);
+        Assert.Equal(1d, summary.ValidationHitRatio!.Value);
 
         Assert.Equal(150d, summary.PayloadP50Bytes!.Value);
         Assert.Equal(270d, summary.PayloadP90Bytes!.Value);
@@ -61,6 +72,12 @@ public sealed class WarApiMeasurementAnalyzerTests
         Assert.Equal(60d, summary.PollIntervalP95Seconds!.Value);
         Assert.Equal(60d, summary.PollIntervalP99Seconds!.Value);
         Assert.Equal(60d, summary.PollIntervalMaxSeconds!.Value);
+
+        Assert.Equal(120d, summary.RepresentationChangeIntervalP50Seconds!.Value);
+        Assert.Equal(168d, summary.RepresentationChangeIntervalP90Seconds!.Value);
+        Assert.Equal(174d, summary.RepresentationChangeIntervalP95Seconds!.Value);
+        Assert.Equal(178.8d, summary.RepresentationChangeIntervalP99Seconds!.Value);
+        Assert.Equal(180d, summary.RepresentationChangeIntervalMaxSeconds!.Value);
     }
 
     [Fact]
@@ -70,9 +87,23 @@ public sealed class WarApiMeasurementAnalyzerTests
 
         var samples = new[]
         {
-            Sample(start.AddSeconds(120), 304, null, null, "etag-a", 10),
+            Sample(
+                start.AddSeconds(120),
+                304,
+                null,
+                null,
+                "etag-a",
+                10,
+                validationHit: true),
             Sample(start, 200, "A", 100, "etag-a", 10, version: 1),
-            Sample(start.AddSeconds(60), 304, null, null, "etag-a", 10),
+            Sample(
+                start.AddSeconds(60),
+                304,
+                null,
+                null,
+                "etag-a",
+                10,
+                validationHit: true),
         };
 
         var summary = WarApiMeasurementAnalyzer.AnalyzeEndpoint(samples);
@@ -187,6 +218,23 @@ public sealed class WarApiMeasurementAnalyzerTests
     }
 
     [Fact]
+    public void Orphan304IsNotCountedAsValidationHit()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var summary = WarApiMeasurementAnalyzer.AnalyzeEndpoint(
+        [
+            Sample(start, 304, null, null, "etag-a", 5),
+        ]);
+
+        Assert.Equal(1, summary.NotModifiedCount);
+        Assert.Equal(0, summary.ValidationHitCount);
+        Assert.Equal(1, summary.OrphanNotModifiedCount);
+        Assert.Equal(1d, summary.NotModifiedRatio!.Value);
+        Assert.Equal(0d, summary.ValidationHitRatio!.Value);
+    }
+
+    [Fact]
     public void EmptyAnalyzerInputIsRejected()
     {
         Assert.Throws<ArgumentException>(
@@ -201,7 +249,8 @@ public sealed class WarApiMeasurementAnalyzerTests
         long? payloadBytes,
         string? etag,
         long durationMs,
-        long? version = null) =>
+        long? version = null,
+        bool validationHit = false) =>
         new(
             "map-dynamic/DeadLandsHex",
             WarApiCapabilities.DynamicMapState,
@@ -211,5 +260,6 @@ public sealed class WarApiMeasurementAnalyzerTests
             payloadBytes,
             etag,
             durationMs,
-            version);
+            version,
+            validationHit);
 }
