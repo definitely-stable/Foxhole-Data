@@ -54,6 +54,22 @@ public sealed class RepositoryArchitectureTests
         Assert.True(File.Exists(Path.Combine(root, "AGENTS.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M2_EVIDENCE_KERNEL.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M4_SOURCE_MEASUREMENT.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M4_RUNBOOK.md")));
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    root,
+                    ".github",
+                    "workflows",
+                    "m4-live-campaign.yml")));
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    root,
+                    ".github",
+                    "actions",
+                    "m4-segment",
+                    "action.yml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "public-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "compat-warapi-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "asyncapi", "events-v1.yaml")));
