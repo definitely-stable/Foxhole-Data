@@ -6,6 +6,7 @@ namespace FoxData.Application.Sources;
 
 public sealed record SourceMeasurementFetch(
     FetchId FetchId,
+    IngestionAttemptId AttemptId,
     EndpointId EndpointId,
     string SourceKey,
     string ShardKey,
@@ -72,6 +73,25 @@ public sealed record SourceMeasurementParseRun(
     long? SourceVersion,
     long? SourceLastUpdated);
 
+public sealed record SourceMeasurementScheduleDecision(
+    FetchId FetchId,
+    EndpointId EndpointId,
+    string SourceKey,
+    string ShardKey,
+    string Environment,
+    string CapabilityKey,
+    string SemanticKey,
+    string PolicyVersion,
+    long EffectiveCadenceMs,
+    bool EndpointActive,
+    bool ProbeSelected,
+    DateTimeOffset? SourceCacheEligibleAt,
+    DateTimeOffset? NextTargetAt,
+    DateTimeOffset? RetryEligibleAt,
+    CollectionJobId? SuccessorJobId,
+    DateTimeOffset? SuccessorAvailableAt,
+    DateTimeOffset CreatedAt);
+
 public interface ISourceMeasurementReader
 {
     IAsyncEnumerable<SourceMeasurementFetch> ReadFetchesAsync(
@@ -87,6 +107,12 @@ public interface ISourceMeasurementReader
         CancellationToken cancellationToken);
 
     IAsyncEnumerable<SourceMeasurementParseRun> ReadParseRunsAsync(
+        string sourceKey,
+        DateTimeOffset startInclusive,
+        DateTimeOffset endExclusive,
+        CancellationToken cancellationToken);
+
+    IAsyncEnumerable<SourceMeasurementScheduleDecision> ReadScheduleDecisionsAsync(
         string sourceKey,
         DateTimeOffset startInclusive,
         DateTimeOffset endExclusive,
