@@ -41,12 +41,12 @@ public sealed class SourceRegistryTests(PostgresFixture postgres) : IClassFixtur
         var registry = new SourceRegistry(new PostgresSourceRegistryStore(dataSource));
 
         var created = await registry.RegisterSourceAsync(
-            "fixture",
+            "fixture-source-conflict",
             "Fixture Source",
             TestContext.Current.CancellationToken);
 
         var conflict = await registry.RegisterSourceAsync(
-            "fixture",
+            "fixture-source-conflict",
             "Different Source",
             TestContext.Current.CancellationToken);
 
@@ -65,7 +65,7 @@ public sealed class SourceRegistryTests(PostgresFixture postgres) : IClassFixtur
         var registry = new SourceRegistry(new PostgresSourceRegistryStore(dataSource));
 
         var source = await registry.RegisterSourceAsync(
-            "fixture",
+            "fixture-registry-graph",
             "Fixture Source",
             TestContext.Current.CancellationToken);
 
@@ -129,7 +129,7 @@ public sealed class SourceRegistryTests(PostgresFixture postgres) : IClassFixtur
         var registry = new SourceRegistry(new PostgresSourceRegistryStore(dataSource));
 
         var source = await registry.RegisterSourceAsync(
-            "fixture",
+            "fixture-shard-conflict",
             "Fixture Source",
             TestContext.Current.CancellationToken);
 
