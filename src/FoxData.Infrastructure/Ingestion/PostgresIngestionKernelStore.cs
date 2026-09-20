@@ -806,12 +806,17 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         command.Transaction = transaction;
         command.CommandText = "SELECT clock_timestamp();";
 
-        var value = await command.ExecuteScalarAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SingleRow,
+            cancellationToken);
 
-        return value is DateTimeOffset timestamp
-            ? timestamp
-            : throw new InvalidOperationException(
-                "PostgreSQL did not return clock_timestamp() as timestamptz.");
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException(
+                "PostgreSQL did not return clock_timestamp().");
+        }
+
+        return reader.GetFieldValue<DateTimeOffset>(0);
     }
 
     private static async Task<IngestionAttemptDescriptor?> GetAttemptAsync(
