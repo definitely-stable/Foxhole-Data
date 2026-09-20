@@ -429,7 +429,10 @@ dotnet run --project tools/FoxData.SourceMeasurement -- analyze \
   --output <measurement-directory> \
   --observer-region <coarse-non-secret-region> \
   --repository-sha <exact-commit-sha> \
-  --profile-version <collection-profile-version>
+  --profile-version <collection-profile-version> \
+  --probe-shards <comma-separated-live-shards> \
+  --probe-max-maps <1..3> \
+  --probe-target-seconds <15..60>
 ~~~
 
 When both storage snapshots exist, `analyze` also emits physical PostgreSQL growth/day and 30/365-day projections in the summary/report.
