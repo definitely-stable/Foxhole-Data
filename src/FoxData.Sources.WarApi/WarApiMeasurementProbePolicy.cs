@@ -7,6 +7,7 @@ namespace FoxData.Sources.WarApi;
 public sealed record WarApiMeasurementProbeProfile(
     bool Enabled,
     string? RunId,
+    IReadOnlyList<string> ShardKeys,
     int MaxMapsPerShard,
     TimeSpan TargetCadence)
 {
@@ -16,11 +17,14 @@ public sealed record WarApiMeasurementProbeProfile(
         new(
             Enabled: false,
             RunId: null,
+            ShardKeys: [],
             MaxMapsPerShard: 3,
             TargetCadence: TimeSpan.FromSeconds(15));
 
     public void Validate()
     {
+        ArgumentNullException.ThrowIfNull(ShardKeys);
+
         if (MaxMapsPerShard is < 1 or > 3)
         {
             throw new ArgumentOutOfRangeException(
@@ -43,6 +47,32 @@ public sealed record WarApiMeasurementProbeProfile(
         if (!Enabled)
         {
             return;
+        }
+
+        if (ShardKeys.Count == 0)
+        {
+            throw new ArgumentException(
+                "Enabled M4 probe requires at least one explicit live shard.",
+                nameof(ShardKeys));
+        }
+
+        foreach (var shardKey in ShardKeys)
+        {
+            var shard = WarApiCatalog.ParseShardKey(shardKey);
+            if (shard == WarApiShard.Dev)
+            {
+                throw new ArgumentException(
+                    "M4 probe cannot target the Dev shard.",
+                    nameof(ShardKeys));
+            }
+        }
+
+        if (ShardKeys.Distinct(StringComparer.Ordinal).Count() !=
+            ShardKeys.Count)
+        {
+            throw new ArgumentException(
+                "M4 probe shard keys must be unique.",
+                nameof(ShardKeys));
         }
 
         if (string.IsNullOrWhiteSpace(RunId) ||
@@ -72,7 +102,10 @@ public static class WarApiMeasurementProbePolicy
 
         profile.Validate();
 
-        if (!profile.Enabled)
+        if (!profile.Enabled ||
+            !profile.ShardKeys.Contains(
+                shardKey,
+                StringComparer.Ordinal))
         {
             return [];
         }
@@ -159,10 +192,13 @@ public static class WarApiMeasurementProbePolicy
             return basePolicy;
         }
 
+        var shardScope = string.Join(
+            ",",
+            profile.ShardKeys.Order(StringComparer.Ordinal));
         var runToken = StableRank(
             profile.RunId!,
-            "policy",
-            "identity")[..12];
+            shardScope,
+            "policy")[..12];
         var seconds = checked((int)profile.TargetCadence.TotalSeconds);
 
         return $"{basePolicy}/{WarApiMeasurementProbeProfile.Version}-{runToken}-n{profile.MaxMapsPerShard}-t{seconds}s";
