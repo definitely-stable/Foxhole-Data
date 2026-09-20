@@ -353,12 +353,6 @@ public static class WarApiMeasurementAnalyzer
                     nameof(samples));
             }
 
-            if (sample.SourceVersion < 0)
-            {
-                throw new ArgumentException(
-                    "Source version must not be negative.",
-                    nameof(samples));
-            }
         }
 
         return ordered;
