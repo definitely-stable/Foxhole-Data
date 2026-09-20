@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
 using FoxData.Application.Sources;
@@ -57,10 +58,11 @@ public sealed class WarApiAttemptExecutor(
 
         HttpRequestMessage request;
         EndpointPollStateDescriptor? currentPollState;
+        WarApiRegistryContext context;
 
         try
         {
-            var context = await resolver.ResolveAsync(
+            context = await resolver.ResolveAsync(
                 job.EndpointId,
                 cancellationToken);
             currentPollState = await pollState.GetAsync(
@@ -111,6 +113,20 @@ public sealed class WarApiAttemptExecutor(
                 return;
             }
 
+            using var activity = WarApiTelemetry.ActivitySource.StartActivity(
+                "warapi.exchange",
+                ActivityKind.Client);
+            activity?.SetTag("foxdata.source", WarApiCatalog.SourceKey);
+            activity?.SetTag("foxdata.environment", context.Shard.Environment);
+            activity?.SetTag("foxdata.shard", context.Shard.Key);
+            activity?.SetTag("foxdata.capability", context.Endpoint.CapabilityKey);
+            activity?.SetTag("foxdata.endpoint.semantic_key", context.Endpoint.SemanticKey);
+            activity?.SetTag("foxdata.attempt.id", attemptId.ToString());
+
+            WarApiTelemetry.Requests.Add(
+                1,
+                SourceTags(context));
+
             WarApiHttpExchangeResult response;
             try
             {
@@ -129,6 +145,12 @@ public sealed class WarApiAttemptExecutor(
                     "Authorized War API exchange ended without durable response evidence for attempt {AttemptId}.",
                     attemptId);
 
+                WarApiTelemetry.UncertainExchanges.Add(
+                    1,
+                    SourceTags(context, "transport_uncertain"));
+                activity?.SetStatus(ActivityStatusCode.Error);
+                activity?.SetTag("foxdata.exchange.outcome", "uncertain");
+
                 await DeferUncertainBestEffortAsync(
                     workerId,
                     attemptId,
@@ -140,6 +162,24 @@ public sealed class WarApiAttemptExecutor(
                         : "exchange_uncertain");
                 return;
             }
+
+            var responseOutcome = ResponseOutcome(response.StatusCode);
+            WarApiTelemetry.Responses.Add(
+                1,
+                SourceTags(context, responseOutcome));
+            WarApiTelemetry.RequestDuration.Record(
+                response.DurationMs,
+                SourceTags(context, responseOutcome));
+
+            if (response.Body is { } responseBody)
+            {
+                WarApiTelemetry.ResponseBytes.Add(
+                    responseBody.LongLength,
+                    SourceTags(context, responseOutcome));
+            }
+
+            activity?.SetTag("http.response.status_code", (int)response.StatusCode);
+            activity?.SetTag("foxdata.exchange.outcome", responseOutcome);
 
             var observation = new SourceResponseObservation(
                 response.RequestStartedAt,
@@ -175,6 +215,40 @@ public sealed class WarApiAttemptExecutor(
                 response.Body,
                 priorFetchId);
         }
+    }
+
+    private static KeyValuePair<string, object?>[] SourceTags(
+        WarApiRegistryContext context,
+        string? outcome = null)
+    {
+        var tags = new List<KeyValuePair<string, object?>>(5)
+        {
+            new("source", WarApiCatalog.SourceKey),
+            new("environment", context.Shard.Environment),
+            new("shard", context.Shard.Key),
+            new("capability", context.Endpoint.CapabilityKey),
+        };
+
+        if (outcome is not null)
+        {
+            tags.Add(new("outcome", outcome));
+        }
+
+        return tags.ToArray();
+    }
+
+    private static string ResponseOutcome(System.Net.HttpStatusCode statusCode)
+    {
+        var code = (int)statusCode;
+        return code switch
+        {
+            200 => "200",
+            304 => "304",
+            >= 300 and < 400 => "3xx",
+            >= 400 and < 500 => "4xx",
+            >= 500 and < 600 => "5xx",
+            _ => "other",
+        };
     }
 
     private async Task CaptureWithReconciliationAsync(
