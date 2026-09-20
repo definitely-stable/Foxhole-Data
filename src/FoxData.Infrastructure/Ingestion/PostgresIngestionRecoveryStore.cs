@@ -223,10 +223,16 @@ public sealed class PostgresIngestionRecoveryStore(NpgsqlDataSource dataSource) 
             """;
         AddUuid(command, "attempt_id", attemptId.Value);
 
-        var value = await command.ExecuteScalarAsync(cancellationToken);
-        return value is null || value is DBNull
-            ? null
-            : (DateTimeOffset)value;
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SingleRow,
+            cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return reader.GetFieldValue<DateTimeOffset>(0);
     }
 
     private static async Task RequeueJobAsync(
