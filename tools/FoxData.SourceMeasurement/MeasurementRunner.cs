@@ -263,6 +263,9 @@ internal static class MeasurementRunner
             AnalyzeEtags(
                 fetches,
                 warApiReport),
+            AnalyzePayloadDecode(
+                fetches,
+                parseRuns),
             AnalyzeLatencyByResponseClass(fetches),
             AnalyzeVolume(
                 options,
@@ -413,6 +416,48 @@ internal static class MeasurementRunner
                 endpoint =>
                     endpoint.Fetches
                         .DifferentEtagSamePayloadCount));
+    }
+
+    private static MeasurementPayloadDecodeSummary AnalyzePayloadDecode(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches,
+        IReadOnlyCollection<SourceMeasurementParseRun> parseRuns)
+    {
+        var fetchById = fetches.ToDictionary(
+            fetch => fetch.FetchId.Value);
+
+        var decodedSizes = new List<double>();
+        var expansionRatios = new List<double>();
+        var decodedCount = 0;
+        var missingDecodedLengthCount = 0;
+
+        foreach (var parseRun in parseRuns)
+        {
+            if (parseRun.DecodedByteLength is not { } decodedLength)
+            {
+                missingDecodedLengthCount++;
+                continue;
+            }
+
+            decodedCount++;
+            decodedSizes.Add(decodedLength);
+
+            if (fetchById.TryGetValue(
+                    parseRun.RepresentationFetchId.Value,
+                    out var fetch) &&
+                fetch.PayloadBytes is > 0)
+            {
+                expansionRatios.Add(
+                    (double)decodedLength /
+                    fetch.PayloadBytes.Value);
+            }
+        }
+
+        return new MeasurementPayloadDecodeSummary(
+            parseRuns.Count,
+            decodedCount,
+            missingDecodedLengthCount,
+            Percentiles(decodedSizes),
+            Percentiles(expansionRatios));
     }
 
     private static IReadOnlyDictionary<string, MeasurementPercentiles>
@@ -1246,6 +1291,24 @@ internal static class MeasurementRunner
             $"- Same ETag / different payload: {summary.Etag.SameEtagDifferentPayloadCount}");
         builder.AppendLine(
             $"- Different ETag / same payload: {summary.Etag.DifferentEtagSamePayloadCount}");
+        builder.AppendLine();
+
+        builder.AppendLine("## Payload decoding");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Parse runs: {summary.PayloadDecode.ParseRunCount}");
+        builder.AppendLine(
+            $"- Decoded lengths recorded: {summary.PayloadDecode.DecodedCount}");
+        builder.AppendLine(
+            $"- Missing decoded lengths: {summary.PayloadDecode.MissingDecodedLengthCount}");
+        builder.AppendLine(
+            $"- Decoded size p95: {FormatNumber(summary.PayloadDecode.DecodedSizeBytes.P95)} bytes");
+        builder.AppendLine(
+            $"- Decoded size max: {FormatNumber(summary.PayloadDecode.DecodedSizeBytes.Max)} bytes");
+        builder.AppendLine(
+            $"- Expansion ratio p95: {FormatNumber(summary.PayloadDecode.ExpansionRatio.P95)}x");
+        builder.AppendLine(
+            $"- Expansion ratio max: {FormatNumber(summary.PayloadDecode.ExpansionRatio.Max)}x");
         builder.AppendLine();
 
         builder.AppendLine("## Volume");
