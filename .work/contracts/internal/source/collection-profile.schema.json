@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://foxhole-data.example/contracts/internal/source/collection-profile.schema.json",
+  "$id": "urn:foxdata:contract:source:collection-profile",
   "title": "Foxhole-Data source collection profile",
   "type": "object",
   "additionalProperties": false,
