@@ -49,6 +49,13 @@ internal sealed record MeasurementCacheSummary(
     MeasurementPercentiles SourceCacheDelaySeconds,
     MeasurementPercentiles SourceAgeSeconds);
 
+internal sealed record MeasurementPayloadDecodeSummary(
+    int ParseRunCount,
+    int DecodedCount,
+    int MissingDecodedLengthCount,
+    MeasurementPercentiles DecodedSizeBytes,
+    MeasurementPercentiles ExpansionRatio);
+
 internal sealed record MeasurementEtagSummary(
     int PresentCount,
     int StrongCount,
@@ -145,6 +152,7 @@ internal sealed record MeasurementSummary(
     IReadOnlyDictionary<string, int> StatusCounts,
     IReadOnlyDictionary<string, int> ContentEncodingCounts,
     MeasurementEtagSummary Etag,
+    MeasurementPayloadDecodeSummary PayloadDecode,
     IReadOnlyDictionary<string, MeasurementPercentiles> LatencyByResponseClassMs,
     MeasurementVolumeSummary Volume,
     MeasurementExecutorCapacitySummary ExecutorCapacity,
