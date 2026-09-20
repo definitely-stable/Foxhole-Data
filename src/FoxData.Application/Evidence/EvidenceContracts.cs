@@ -19,7 +19,8 @@ public sealed record SourceResponseObservation(
     long DurationMs,
     DateTimeOffset? SourceDate = null,
     long? SourceAgeSeconds = null,
-    string? RetryAfter = null);
+    string? RetryAfter = null,
+    string? BodyErrorCode = null);
 
 public sealed record PayloadDescriptor(
     PayloadId Id,
@@ -49,7 +50,8 @@ public sealed record FetchDescriptor(
     DateTimeOffset CreatedAt,
     DateTimeOffset? SourceDate = null,
     long? SourceAgeSeconds = null,
-    string? RetryAfter = null);
+    string? RetryAfter = null,
+    string? BodyErrorCode = null);
 
 public enum CaptureStatus
 {
