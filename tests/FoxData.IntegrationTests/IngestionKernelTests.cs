@@ -634,6 +634,89 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
         Assert.Equal(AttemptDeferralStatus.AlreadyDeferred, repeated.Status);
     }
 
+    [Fact]
+    public async Task AuthorizedFailureCanBeDeferredAfterLeaseExpiryBeforeRecovery()
+    {
+        await using var fixture = await CreateKernelFixtureAsync("defer-uncertain-expired");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        await fixture.Kernel.EnqueueAsync(
+            fixture.EndpointId,
+            "job-defer-uncertain-expired",
+            now,
+            now,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var worker = WorkerInstanceId.New();
+        var claim = await fixture.Kernel.ClaimNextAsync(
+            worker,
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+        Assert.True(claim.Claimed);
+
+        var attemptId = IngestionAttemptId.New();
+        _ = await fixture.Kernel.BeginAttemptAsync(
+            attemptId,
+            claim.Job!.Id,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        _ = await fixture.Kernel.AcquireEndpointFenceAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        var authorized = await fixture.Kernel.AuthorizeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(ExchangeAuthorizationStatus.AuthorizedNow, authorized.Status);
+
+        await using (var expire = fixture.DataSource.CreateCommand(
+            """
+            UPDATE ingest.collection_jobs
+            SET lease_expires_at = clock_timestamp() - interval '1 second'
+            WHERE id = @job_id;
+            """))
+        {
+            expire.Parameters.AddWithValue("job_id", claim.Job.Id.Value);
+            Assert.Equal(
+                1,
+                await expire.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        }
+
+        var retryAt = DateTimeOffset.UtcNow.AddMinutes(2);
+        var deferred = await fixture.Kernel.DeferUncertainExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            retryAt,
+            "transport",
+            "timeout_after_send",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AttemptDeferralStatus.DeferredNow, deferred.Status);
+        Assert.Equal(IngestionAttemptState.Uncertain, deferred.Attempt!.State);
+        Assert.Equal("uncertain_exchange", deferred.Attempt.OutcomeCode);
+        Assert.Equal(CollectionJobState.Pending, deferred.Job!.State);
+        Assert.Equal(NormalizeTimestamp(retryAt), deferred.Job.AvailableAt);
+        Assert.Null(deferred.Job.LeaseOwnerId);
+        Assert.Null(deferred.Job.LeaseExpiresAt);
+        Assert.Null(await fixture.ReadActiveAttemptAsync());
+
+        var authorizationRetry = await fixture.Kernel.AuthorizeExchangeAsync(
+            attemptId,
+            worker,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ExchangeAuthorizationStatus.AlreadyAuthorized,
+            authorizationRetry.Status);
+        Assert.False(authorizationRetry.MayPerformExchange);
+    }
+
     private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
     {
         const long ticksPerMicrosecond = 10;
