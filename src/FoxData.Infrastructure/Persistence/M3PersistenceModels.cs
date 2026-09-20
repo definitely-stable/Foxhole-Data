@@ -35,4 +35,5 @@ internal sealed class SourceParseRunRow
     public DateTimeOffset CreatedAt { get; set; }
     public long? SourceVersion { get; set; }
     public long? SourceLastUpdated { get; set; }
+    public long? DecodedByteLength { get; set; }
 }
