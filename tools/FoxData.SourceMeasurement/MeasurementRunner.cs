@@ -1232,6 +1232,81 @@ internal static class MeasurementRunner
         }
 
         builder.AppendLine();
+        builder.AppendLine("## ETag");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Present: {summary.Etag.PresentCount}");
+        builder.AppendLine(
+            $"- Strong: {summary.Etag.StrongCount}");
+        builder.AppendLine(
+            $"- Weak: {summary.Etag.WeakCount}");
+        builder.AppendLine(
+            $"- Unusable: {summary.Etag.UnusableCount}");
+        builder.AppendLine(
+            $"- Same ETag / different payload: {summary.Etag.SameEtagDifferentPayloadCount}");
+        builder.AppendLine(
+            $"- Different ETag / same payload: {summary.Etag.DifferentEtagSamePayloadCount}");
+        builder.AppendLine();
+
+        builder.AppendLine("## Volume");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Window days: {summary.Volume.WindowDays:0.###}");
+        builder.AppendLine(
+            $"- Fetch rows/day: {summary.Volume.FetchRowsPerDay:0.##}");
+        builder.AppendLine(
+            $"- Unique Payload rows/day: {summary.Volume.UniquePayloadRowsPerDay:0.##}");
+        builder.AppendLine(
+            $"- Parse runs/day: {summary.Volume.ParseRunsPerDay:0.##}");
+        builder.AppendLine(
+            $"- Scheduling decisions/day: {summary.Volume.ScheduleDecisionsPerDay:0.##}");
+        builder.AppendLine();
+
+        builder.AppendLine("## Executor capacity");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Configured application exchange concurrency: {summary.ExecutorCapacity.ExecutorConcurrency}");
+        builder.AppendLine(
+            $"- Modeled endpoints: {summary.ExecutorCapacity.ModeledEndpointCount}");
+        builder.AppendLine(
+            $"- Required serial service load: {summary.ExecutorCapacity.RequiredSerialServiceLoad:0.####}");
+        builder.AppendLine(
+            $"- Remaining serial headroom: {summary.ExecutorCapacity.RemainingSerialHeadroom:P2}");
+        builder.AppendLine(
+            $"- Minimum modeled concurrency: {summary.ExecutorCapacity.MinimumModeledConcurrency}");
+        builder.AppendLine();
+
+        if (summary.ExecutorCapacity.Groups.Count > 0)
+        {
+            builder.AppendLine(
+                "| Shard | Capability | Endpoints | Required serial load |");
+            builder.AppendLine(
+                "| --- | --- | ---: | ---: |");
+
+            foreach (var group in summary.ExecutorCapacity.Groups)
+            {
+                builder.AppendLine(
+                    $"| {group.ShardKey} | {group.CapabilityKey} | {group.EndpointCount} | {group.RequiredSerialServiceLoad:0.####} |");
+            }
+
+            builder.AppendLine();
+        }
+
+        builder.AppendLine("## Latency by response class");
+        builder.AppendLine();
+        builder.AppendLine(
+            "| Class | p50 ms | p90 ms | p95 ms | p99 ms | max ms |");
+        builder.AppendLine(
+            "| --- | ---: | ---: | ---: | ---: | ---: |");
+
+        foreach (var latency in summary.LatencyByResponseClassMs)
+        {
+            builder.AppendLine(
+                $"| {latency.Key} | {FormatNumber(latency.Value.P50)} | {FormatNumber(latency.Value.P90)} | {FormatNumber(latency.Value.P95)} | {FormatNumber(latency.Value.P99)} | {FormatNumber(latency.Value.Max)} |");
+        }
+
+        builder.AppendLine();
+
         builder.AppendLine("## Burst shape");
         builder.AppendLine();
         builder.AppendLine(
