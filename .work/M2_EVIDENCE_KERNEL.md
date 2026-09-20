@@ -1,6 +1,6 @@
 # M2 — Evidence Kernel
 
-Status: planned.
+Status: in progress. M2-A implemented in PR #5; next slice M2-B.
 Prerequisite: M1 Repository Bootstrap completed.
 Successor: M3 official War API adapter.
 
