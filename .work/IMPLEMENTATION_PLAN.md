@@ -80,9 +80,10 @@ Implementation slices:
 
 ## M4 — source measurement
 
-Status: in progress.
+Status: in progress — M4-A through M4-D are implemented; the M4-E live campaign is automated and awaits execution from the default branch; M4-F remains evidence-gated.
 
 Detailed normative plan: [M4_SOURCE_MEASUREMENT.md](M4_SOURCE_MEASUREMENT.md).
+Operational runbook: [M4_RUNBOOK.md](M4_RUNBOOK.md).
 
 Convert the conservative M3 bootstrap polling assumptions into a measured, versioned source collection profile.
 
@@ -103,12 +104,12 @@ M4 does not implement canonical Foxhole state or quality acceptance.
 
 Implementation slices:
 
-- M4-A specification/contracts;
-- M4-B collection-profile abstraction with behaviour-preserving bootstrap values;
-- M4-C reproducible measurement analyzer;
-- M4-D bounded probe mode;
-- M4-E controlled live campaign;
-- M4-F measured collection-profile@1 and completion.
+- M4-A specification/contracts — complete;
+- M4-B collection-profile abstraction with behaviour-preserving bootstrap values — complete;
+- M4-C reproducible measurement analyzer — complete;
+- M4-D bounded deterministic probe mode — complete;
+- M4-E controlled live campaign — executable through `.github/workflows/m4-live-campaign.yml`; pending real live evidence;
+- M4-F measured `collection-profile@1`, executor/retention decisions and completion — blocked until M4-E validation succeeds.
 
 ## M5 — canonical war/region/report model
 
