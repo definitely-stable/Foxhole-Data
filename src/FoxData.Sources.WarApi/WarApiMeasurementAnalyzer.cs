@@ -37,69 +37,28 @@ public sealed record WarApiEndpointMeasurementSummary(
     double? PollIntervalP95Seconds,
     double? PollIntervalP99Seconds);
 
+public sealed record WarApiDownsampleSummary(
+    string EndpointKey,
+    string CapabilityKey,
+    TimeSpan CandidateCadence,
+    int BaselineEpisodeCount,
+    int CapturedEpisodeCount,
+    int MissedEpisodeCount,
+    int SimulatedRequestCount,
+    double CaptureRatio,
+    double? ObservationDelayP50Seconds,
+    double? ObservationDelayP95Seconds,
+    double? ObservationDelayP99Seconds);
+
 public static class WarApiMeasurementAnalyzer
 {
     public static WarApiEndpointMeasurementSummary AnalyzeEndpoint(
         IEnumerable<WarApiMeasurementSample> samples)
     {
-        ArgumentNullException.ThrowIfNull(samples);
-
-        var ordered = samples
-            .OrderBy(sample => sample.RequestStartedAt)
-            .ToArray();
-
-        if (ordered.Length == 0)
-        {
-            throw new ArgumentException(
-                "At least one measurement sample is required.",
-                nameof(samples));
-        }
+        var ordered = OrderAndValidate(samples);
 
         var endpointKey = ordered[0].EndpointKey;
         var capability = ordered[0].Capability;
-
-        ArgumentException.ThrowIfNullOrWhiteSpace(endpointKey);
-
-        foreach (var sample in ordered)
-        {
-            if (!string.Equals(
-                    endpointKey,
-                    sample.EndpointKey,
-                    StringComparison.Ordinal))
-            {
-                throw new ArgumentException(
-                    "Measurement samples must belong to one endpoint.",
-                    nameof(samples));
-            }
-
-            if (sample.Capability != capability)
-            {
-                throw new ArgumentException(
-                    "Measurement samples must belong to one capability.",
-                    nameof(samples));
-            }
-
-            if (sample.DurationMs < 0)
-            {
-                throw new ArgumentException(
-                    "Measurement duration must not be negative.",
-                    nameof(samples));
-            }
-
-            if (sample.PayloadBytes < 0)
-            {
-                throw new ArgumentException(
-                    "Payload size must not be negative.",
-                    nameof(samples));
-            }
-
-            if (sample.SourceVersion < 0)
-            {
-                throw new ArgumentException(
-                    "Source version must not be negative.",
-                    nameof(samples));
-            }
-        }
 
         var okCount = 0;
         var notModifiedCount = 0;
@@ -239,6 +198,177 @@ public static class WarApiMeasurementAnalyzer
             PercentileCont(pollIntervals, 0.95),
             PercentileCont(pollIntervals, 0.99));
     }
+
+    public static WarApiDownsampleSummary SimulateCadence(
+        IEnumerable<WarApiMeasurementSample> samples,
+        TimeSpan candidateCadence)
+    {
+        if (candidateCadence <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(candidateCadence),
+                candidateCadence,
+                "Candidate cadence must be positive.");
+        }
+
+        var ordered = OrderAndValidate(samples);
+        var episodes = new List<RepresentationEpisode>();
+        string? effectivePayloadHash = null;
+        var currentEpisodeIndex = -1;
+        var sampleEpisodeIndexes = new int?[ordered.Length];
+
+        for (var index = 0; index < ordered.Length; index++)
+        {
+            var sample = ordered[index];
+
+            if (sample.StatusCode == 200 &&
+                sample.PayloadHash is not null &&
+                !string.Equals(
+                    effectivePayloadHash,
+                    sample.PayloadHash,
+                    StringComparison.Ordinal))
+            {
+                effectivePayloadHash = sample.PayloadHash;
+                currentEpisodeIndex = episodes.Count;
+                episodes.Add(
+                    new RepresentationEpisode(
+                        currentEpisodeIndex,
+                        sample.RequestStartedAt,
+                        sample.PayloadHash));
+            }
+
+            if (sample.StatusCode is 200 or 304 &&
+                currentEpisodeIndex >= 0)
+            {
+                sampleEpisodeIndexes[index] = currentEpisodeIndex;
+            }
+        }
+
+        if (episodes.Count == 0)
+        {
+            throw new ArgumentException(
+                "Downsampling requires at least one body-bearing representation.",
+                nameof(samples));
+        }
+
+        var capturedEpisodes = new HashSet<int>();
+        var observationDelays = new List<double>();
+        var simulatedRequestCount = 0;
+        var nextTarget = ordered[0].RequestStartedAt;
+
+        for (var index = 0; index < ordered.Length;)
+        {
+            while (index < ordered.Length &&
+                   ordered[index].RequestStartedAt < nextTarget)
+            {
+                index++;
+            }
+
+            if (index >= ordered.Length)
+            {
+                break;
+            }
+
+            var selected = ordered[index];
+            simulatedRequestCount++;
+
+            if (sampleEpisodeIndexes[index] is { } episodeIndex &&
+                capturedEpisodes.Add(episodeIndex))
+            {
+                var episode = episodes[episodeIndex];
+                observationDelays.Add(
+                    (selected.RequestStartedAt - episode.StartedAt)
+                    .TotalSeconds);
+            }
+
+            nextTarget = selected.RequestStartedAt + candidateCadence;
+            index++;
+        }
+
+        var capturedCount = capturedEpisodes.Count;
+        return new WarApiDownsampleSummary(
+            ordered[0].EndpointKey,
+            ordered[0].Capability.Key,
+            candidateCadence,
+            episodes.Count,
+            capturedCount,
+            episodes.Count - capturedCount,
+            simulatedRequestCount,
+            (double)capturedCount / episodes.Count,
+            PercentileCont(observationDelays, 0.50),
+            PercentileCont(observationDelays, 0.95),
+            PercentileCont(observationDelays, 0.99));
+    }
+
+    private static WarApiMeasurementSample[] OrderAndValidate(
+        IEnumerable<WarApiMeasurementSample> samples)
+    {
+        ArgumentNullException.ThrowIfNull(samples);
+
+        var ordered = samples
+            .OrderBy(sample => sample.RequestStartedAt)
+            .ToArray();
+
+        if (ordered.Length == 0)
+        {
+            throw new ArgumentException(
+                "At least one measurement sample is required.",
+                nameof(samples));
+        }
+
+        var endpointKey = ordered[0].EndpointKey;
+        var capability = ordered[0].Capability;
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpointKey);
+
+        foreach (var sample in ordered)
+        {
+            if (!string.Equals(
+                    endpointKey,
+                    sample.EndpointKey,
+                    StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "Measurement samples must belong to one endpoint.",
+                    nameof(samples));
+            }
+
+            if (sample.Capability != capability)
+            {
+                throw new ArgumentException(
+                    "Measurement samples must belong to one capability.",
+                    nameof(samples));
+            }
+
+            if (sample.DurationMs < 0)
+            {
+                throw new ArgumentException(
+                    "Measurement duration must not be negative.",
+                    nameof(samples));
+            }
+
+            if (sample.PayloadBytes < 0)
+            {
+                throw new ArgumentException(
+                    "Payload size must not be negative.",
+                    nameof(samples));
+            }
+
+            if (sample.SourceVersion < 0)
+            {
+                throw new ArgumentException(
+                    "Source version must not be negative.",
+                    nameof(samples));
+            }
+        }
+
+        return ordered;
+    }
+
+    private sealed record RepresentationEpisode(
+        int Index,
+        DateTimeOffset StartedAt,
+        string PayloadHash);
 
     internal static double? PercentileCont(
         IEnumerable<long> values,
