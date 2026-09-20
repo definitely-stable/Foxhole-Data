@@ -51,6 +51,24 @@ public interface IIngestionKernelStore
         LeaseGeneration leaseGeneration,
         CancellationToken cancellationToken);
 
+    Task<AttemptDeferralResult> DeferBeforeExchangeAsync(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken);
+
+    Task<AttemptDeferralResult> DeferUncertainExchangeAsync(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken);
+
     Task<CollectionJobDescriptor?> GetJobAsync(
         CollectionJobId jobId,
         CancellationToken cancellationToken);
