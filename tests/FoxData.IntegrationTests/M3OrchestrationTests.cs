@@ -409,6 +409,94 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task RepeatedMapsRefreshDoesNotDuplicateInitialDiscoveryJobs()
+    {
+        await using var fixture = await CreateFixtureAsync("maps-refresh-idempotency");
+
+        var body = Encoding.UTF8.GetBytes(
+            """["DeadLandsHex"]""");
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                body,
+                "\"maps-v1\"",
+                "max-age=300"));
+
+        var firstJob = await fixture.EnqueueAndClaimAsync(
+            fixture.MapsEndpoint.Id,
+            "test:maps-refresh:first");
+
+        await fixture.Executor.ExecuteAsync(
+            firstJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                "discover@1:war-report/DeadLandsHex"));
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                "discover@1:map-static/DeadLandsHex"));
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                "discover@1:map-dynamic/DeadLandsHex"));
+
+        var firstSnapshot = await fixture.EvidenceReader.GetCurrentAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(firstSnapshot);
+
+        await fixture.MakeSuccessorAvailableAsync(
+            firstSnapshot.CurrentFetch.Id);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddMinutes(5),
+                HttpStatusCode.OK,
+                body,
+                "\"maps-v2\"",
+                "max-age=300"));
+
+        var secondClaim = await fixture.Ingestion.ClaimNextForSourceAsync(
+            fixture.WorkerId,
+            WarApiCatalog.SourceKey,
+            TimeSpan.FromMinutes(2),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(secondClaim.Claimed);
+        Assert.Equal(fixture.MapsEndpoint.Id, secondClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            secondClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                "discover@1:war-report/DeadLandsHex"));
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                "discover@1:map-static/DeadLandsHex"));
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                "discover@1:map-dynamic/DeadLandsHex"));
+    }
+
     private async Task<Fixture> CreateFixtureAsync(string scenario)
     {
         await MigrateAsync();
