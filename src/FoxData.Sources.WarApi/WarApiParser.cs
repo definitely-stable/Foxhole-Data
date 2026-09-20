@@ -17,7 +17,9 @@ public sealed record WarApiParseResult(
     string? StructuralFingerprint,
     int UnknownPropertyCount,
     int UnknownCodeCount,
-    string? ErrorCode)
+    string? ErrorCode,
+    long? SourceVersion,
+    long? SourceLastUpdated)
 {
     public bool Parsed =>
         Outcome is WarApiParseOutcome.Parsed or WarApiParseOutcome.ParsedWithUnknowns;
@@ -145,7 +147,11 @@ public sealed class WarApiParser
             fingerprint,
             unknownProperties,
             unknownCodes,
-            null);
+            null,
+            value is WarApiMapDataDto map ? map.Version : null,
+            value is WarApiMapDataDto mapWithTimestamp
+                ? mapWithTimestamp.LastUpdated
+                : null);
 
     private static WarApiParseResult Failure(
         WarApiParseOutcome outcome,
@@ -157,7 +163,9 @@ public sealed class WarApiParser
             fingerprint,
             0,
             0,
-            errorCode);
+            errorCode,
+            null,
+            null);
 
     private static bool IsKnownTeam(string? value) =>
         value is null || KnownTeams.Contains(value);
