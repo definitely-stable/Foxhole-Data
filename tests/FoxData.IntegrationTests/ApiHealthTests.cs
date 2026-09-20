@@ -1,6 +1,8 @@
 using System.Net;
+using FoxData.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace FoxData.IntegrationTests;
@@ -21,14 +23,32 @@ public sealed class ApiHealthTests(PostgresFixture postgres) : IClassFixture<Pos
     }
 
     [Fact]
-    public async Task ReadinessIsHealthyWithPostgres()
+    public async Task ReadinessIsHealthyWithCurrentSchema()
     {
-        await using var factory = CreateFactory(postgres.ConnectionString);
+        var connectionString = await postgres.CreateDatabaseConnectionStringAsync(
+            TestContext.Current.CancellationToken);
+        await MigrateAsync(connectionString);
+
+        await using var factory = CreateFactory(connectionString);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReadinessIsUnhealthyWhenPostgresIsReachableButUnmigrated()
+    {
+        var connectionString = await postgres.CreateDatabaseConnectionStringAsync(
+            TestContext.Current.CancellationToken);
+
+        await using var factory = CreateFactory(connectionString);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
     [Fact]
@@ -42,6 +62,16 @@ public sealed class ApiHealthTests(PostgresFixture postgres) : IClassFixture<Pos
         var response = await client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    private static async Task MigrateAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<FoxDataDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        await using var context = new FoxDataDbContext(options);
+        await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
     }
 
     private static WebApplicationFactory<Program> CreateFactory(string connectionString)
