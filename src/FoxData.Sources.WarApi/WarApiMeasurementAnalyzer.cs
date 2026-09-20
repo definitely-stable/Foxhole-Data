@@ -11,7 +11,8 @@ public sealed record WarApiMeasurementSample(
     long? PayloadBytes,
     string? SourceEtag,
     long DurationMs,
-    long? SourceVersion = null);
+    long? SourceVersion = null,
+    bool ValidationHit = false);
 
 public sealed record WarApiEndpointMeasurementSummary(
     string EndpointKey,
@@ -19,14 +20,18 @@ public sealed record WarApiEndpointMeasurementSummary(
     int SampleCount,
     int OkCount,
     int NotModifiedCount,
+    int ValidationHitCount,
+    int OrphanNotModifiedCount,
     int OtherCount,
     int DuplicateOkCount,
     int RepresentationChangeCount,
     int SameEtagDifferentPayloadCount,
     int DifferentEtagSamePayloadCount,
+    int VersionAdvanceCount,
     long VersionGapCount,
     int VersionRegressionCount,
-    double? ValidationRatio,
+    double? NotModifiedRatio,
+    double? ValidationHitRatio,
     double? PayloadP50Bytes,
     double? PayloadP90Bytes,
     double? PayloadP95Bytes,
@@ -41,7 +46,12 @@ public sealed record WarApiEndpointMeasurementSummary(
     double? PollIntervalP90Seconds,
     double? PollIntervalP95Seconds,
     double? PollIntervalP99Seconds,
-    double? PollIntervalMaxSeconds);
+    double? PollIntervalMaxSeconds,
+    double? RepresentationChangeIntervalP50Seconds,
+    double? RepresentationChangeIntervalP90Seconds,
+    double? RepresentationChangeIntervalP95Seconds,
+    double? RepresentationChangeIntervalP99Seconds,
+    double? RepresentationChangeIntervalMaxSeconds);
 
 public sealed record WarApiDownsampleSummary(
     string EndpointKey,
@@ -68,21 +78,26 @@ public static class WarApiMeasurementAnalyzer
 
         var okCount = 0;
         var notModifiedCount = 0;
+        var validationHitCount = 0;
+        var orphanNotModifiedCount = 0;
         var otherCount = 0;
         var duplicateOkCount = 0;
         var representationChangeCount = 0;
         var sameEtagDifferentPayloadCount = 0;
         var differentEtagSamePayloadCount = 0;
+        var versionAdvanceCount = 0;
         long versionGapCount = 0;
         var versionRegressionCount = 0;
 
         string? previousPayloadHash = null;
         string? effectiveValidatorEtag = null;
         long? previousVersion = null;
+        DateTimeOffset? previousRepresentationChangeAt = null;
 
         var payloadSizes = new List<long>();
         var durations = new List<long>(ordered.Length);
         var pollIntervals = new List<double>(Math.Max(0, ordered.Length - 1));
+        var representationChangeIntervals = new List<double>();
 
         for (var index = 0; index < ordered.Length; index++)
         {
@@ -131,6 +146,16 @@ public static class WarApiMeasurementAnalyzer
                         {
                             representationChangeCount++;
 
+                            if (previousRepresentationChangeAt is { } previousChangeAt)
+                            {
+                                representationChangeIntervals.Add(
+                                    (sample.RequestStartedAt - previousChangeAt)
+                                    .TotalSeconds);
+                            }
+
+                            previousRepresentationChangeAt =
+                                sample.RequestStartedAt;
+
                             if (effectiveValidatorEtag is not null &&
                                 sample.SourceEtag is not null &&
                                 string.Equals(
@@ -152,8 +177,15 @@ public static class WarApiMeasurementAnalyzer
                         }
                         else if (currentVersion > oldVersion)
                         {
+                            versionAdvanceCount++;
                             versionGapCount += currentVersion - oldVersion - 1;
                         }
+                    }
+
+                    if (previousPayloadHash is null)
+                    {
+                        previousRepresentationChangeAt =
+                            sample.RequestStartedAt;
                     }
 
                     previousPayloadHash = sample.PayloadHash;
@@ -164,6 +196,15 @@ public static class WarApiMeasurementAnalyzer
             else if (sample.StatusCode == 304)
             {
                 notModifiedCount++;
+
+                if (sample.ValidationHit)
+                {
+                    validationHitCount++;
+                }
+                else
+                {
+                    orphanNotModifiedCount++;
+                }
 
                 if (sample.SourceEtag is not null)
                 {
@@ -176,7 +217,7 @@ public static class WarApiMeasurementAnalyzer
             }
         }
 
-        var validationDenominator = okCount + notModifiedCount;
+        var notModifiedDenominator = okCount + notModifiedCount;
 
         return new WarApiEndpointMeasurementSummary(
             endpointKey,
@@ -184,16 +225,22 @@ public static class WarApiMeasurementAnalyzer
             ordered.Length,
             okCount,
             notModifiedCount,
+            validationHitCount,
+            orphanNotModifiedCount,
             otherCount,
             duplicateOkCount,
             representationChangeCount,
             sameEtagDifferentPayloadCount,
             differentEtagSamePayloadCount,
+            versionAdvanceCount,
             versionGapCount,
             versionRegressionCount,
-            validationDenominator == 0
+            notModifiedDenominator == 0
                 ? null
-                : (double)notModifiedCount / validationDenominator,
+                : (double)notModifiedCount / notModifiedDenominator,
+            notModifiedCount == 0
+                ? null
+                : (double)validationHitCount / notModifiedCount,
             PercentileCont(payloadSizes, 0.50),
             PercentileCont(payloadSizes, 0.90),
             PercentileCont(payloadSizes, 0.95),
@@ -208,7 +255,12 @@ public static class WarApiMeasurementAnalyzer
             PercentileCont(pollIntervals, 0.90),
             PercentileCont(pollIntervals, 0.95),
             PercentileCont(pollIntervals, 0.99),
-            MaxOrNull(pollIntervals));
+            MaxOrNull(pollIntervals),
+            PercentileCont(representationChangeIntervals, 0.50),
+            PercentileCont(representationChangeIntervals, 0.90),
+            PercentileCont(representationChangeIntervals, 0.95),
+            PercentileCont(representationChangeIntervals, 0.99),
+            MaxOrNull(representationChangeIntervals));
     }
 
     public static WarApiDownsampleSummary SimulateCadence(
