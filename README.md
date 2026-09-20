@@ -2,7 +2,7 @@
 
 Independent, language-neutral developer data platform for public Foxhole data.
 
-Status: **M1 Repository Bootstrap completed**. Next milestone: M2 Evidence Kernel. Official War API ingestion begins in M3; the current runtime intentionally performs no upstream Foxhole requests.
+Status: **M2 Evidence Kernel completed**. Next milestone: M3 Official War API Adapter. The current runtime intentionally performs no upstream Foxhole requests; real source ingestion begins in M3.
 
 ## Prerequisites
 
