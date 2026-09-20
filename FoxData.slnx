@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FoxData.Core/FoxData.Core.csproj" />
+    <Project Path="src/FoxData.Application/FoxData.Application.csproj" />
+    <Project Path="src/FoxData.Infrastructure/FoxData.Infrastructure.csproj" />
+    <Project Path="src/FoxData.Hosting/FoxData.Hosting.csproj" />
+    <Project Path="src/FoxData.Sources.Abstractions/FoxData.Sources.Abstractions.csproj" />
+    <Project Path="src/FoxData.Sources.WarApi/FoxData.Sources.WarApi.csproj" />
+    <Project Path="src/FoxData.Api/FoxData.Api.csproj" />
+    <Project Path="src/FoxData.Worker/FoxData.Worker.csproj" />
+    <Project Path="src/FoxData.Cli/FoxData.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FoxData.UnitTests/FoxData.UnitTests.csproj" />
+    <Project Path="tests/FoxData.IntegrationTests/FoxData.IntegrationTests.csproj" />
+    <Project Path="tests/FoxData.ContractTests/FoxData.ContractTests.csproj" />
+    <Project Path="tests/FoxData.SourceTests/FoxData.SourceTests.csproj" />
+    <Project Path="tests/FoxData.RecoveryTests/FoxData.RecoveryTests.csproj" />
+  </Folder>
+</Solution>

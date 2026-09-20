@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>foxdata</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../FoxData.Application/FoxData.Application.csproj" />
+    <ProjectReference Include="../FoxData.Infrastructure/FoxData.Infrastructure.csproj" />
+    <ProjectReference Include="../FoxData.Hosting/FoxData.Hosting.csproj" />
+  </ItemGroup>
+</Project>

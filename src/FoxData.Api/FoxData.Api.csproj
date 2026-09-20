@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="../FoxData.Application/FoxData.Application.csproj" />
+    <ProjectReference Include="../FoxData.Infrastructure/FoxData.Infrastructure.csproj" />
+    <ProjectReference Include="../FoxData.Hosting/FoxData.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+  </ItemGroup>
+</Project>

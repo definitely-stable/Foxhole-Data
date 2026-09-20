@@ -1,0 +1,17 @@
+{
+  "name": "foxdata-contract-tools",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "lint:openapi": "redocly lint ../../.work/contracts/openapi/public-v1.yaml ../../.work/contracts/openapi/compat-warapi-v1.yaml",
+    "lint:asyncapi": "asyncapi validate ../../.work/contracts/asyncapi/events-v1.yaml",
+    "lint": "npm run lint:openapi && npm run lint:asyncapi"
+  },
+  "devDependencies": {
+    "@asyncapi/cli": "6.1.0",
+    "@redocly/cli": "2.53.3"
+  }
+}

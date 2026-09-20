@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../FoxData.Core/FoxData.Core.csproj" />
+  </ItemGroup>
+</Project>
