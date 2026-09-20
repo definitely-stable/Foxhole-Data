@@ -38,6 +38,8 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 captured_fetch.retrieved_at,
                 captured_fetch.status_code,
                 captured_fetch.duration_ms,
+                payload.id,
+                payload.created_at,
                 encode(payload.sha256, 'hex'),
                 payload.byte_length,
                 captured_fetch.source_etag,
@@ -91,21 +93,27 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 reader.GetFieldValue<DateTimeOffset>(9),
                 reader.IsDBNull(10) ? null : reader.GetInt32(10),
                 reader.GetInt64(11),
-                reader.IsDBNull(12) ? null : reader.GetString(12),
-                reader.IsDBNull(13) ? null : reader.GetInt64(13),
+                reader.IsDBNull(12)
+                    ? null
+                    : new PayloadId(reader.GetGuid(12)),
+                reader.IsDBNull(13)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(13),
                 reader.IsDBNull(14) ? null : reader.GetString(14),
-                reader.IsDBNull(15) ? null : reader.GetString(15),
-                reader.IsDBNull(16)
+                reader.IsDBNull(15) ? null : reader.GetInt64(15),
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                reader.IsDBNull(17) ? null : reader.GetString(17),
+                reader.IsDBNull(18)
                     ? null
-                    : reader.GetFieldValue<DateTimeOffset>(16),
-                reader.IsDBNull(17)
+                    : reader.GetFieldValue<DateTimeOffset>(18),
+                reader.IsDBNull(19)
                     ? null
-                    : reader.GetFieldValue<DateTimeOffset>(17),
-                reader.IsDBNull(18) ? null : reader.GetInt64(18),
-                reader.IsDBNull(19) ? null : reader.GetString(19),
-                reader.IsDBNull(20) ? null : reader.GetString(20),
-                reader.IsDBNull(21) ? null : reader.GetInt64(21),
-                reader.IsDBNull(22) ? null : reader.GetString(22));
+                    : reader.GetFieldValue<DateTimeOffset>(19),
+                reader.IsDBNull(20) ? null : reader.GetInt64(20),
+                reader.IsDBNull(21) ? null : reader.GetString(21),
+                reader.IsDBNull(22) ? null : reader.GetString(22),
+                reader.IsDBNull(23) ? null : reader.GetInt64(23),
+                reader.IsDBNull(24) ? null : reader.GetString(24));
         }
     }
 
