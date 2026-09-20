@@ -178,7 +178,11 @@ public static class WarApiMeasurementAnalyzer
                         else if (currentVersion > oldVersion)
                         {
                             versionAdvanceCount++;
-                            versionGapCount += currentVersion - oldVersion - 1;
+                            versionGapCount = SaturatingAdd(
+                                versionGapCount,
+                                MissingVersions(
+                                    oldVersion,
+                                    currentVersion));
                         }
                     }
 
@@ -421,6 +425,37 @@ public static class WarApiMeasurementAnalyzer
 
         return ordered;
     }
+
+    private static long MissingVersions(
+        long previousVersion,
+        long currentVersion)
+    {
+        if (currentVersion <= previousVersion)
+        {
+            return 0;
+        }
+
+        var difference =
+            (decimal)currentVersion -
+            previousVersion -
+            1;
+
+        if (difference <= 0)
+        {
+            return 0;
+        }
+
+        return difference >= long.MaxValue
+            ? long.MaxValue
+            : (long)difference;
+    }
+
+    private static long SaturatingAdd(
+        long left,
+        long right) =>
+        left >= long.MaxValue - right
+            ? long.MaxValue
+            : left + right;
 
     private sealed record RepresentationEpisode(
         DateTimeOffset StartedAt);
