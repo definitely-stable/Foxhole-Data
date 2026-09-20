@@ -49,7 +49,7 @@ public sealed class PostgresSourceMeasurementStorageReader(
             databaseBytes = reader.GetInt64(1);
         }
 
-        var relations = new List<SourceMeasurementRelationSize>(5);
+        var relations = new List<SourceMeasurementRelationSize>(6);
 
         await using (var relation = connection.CreateCommand())
         {
@@ -60,6 +60,7 @@ public sealed class PostgresSourceMeasurementStorageReader(
                         ('evidence', 'fetches'),
                         ('evidence', 'payloads'),
                         ('evidence', 'source_parse_runs'),
+                        ('evidence', 'source_schedule_decisions'),
                         ('ingest', 'collection_jobs'),
                         ('ingest', 'attempts')
                 )
@@ -101,10 +102,10 @@ public sealed class PostgresSourceMeasurementStorageReader(
             }
         }
 
-        if (relations.Count != 5)
+        if (relations.Count != 6)
         {
             throw new InvalidOperationException(
-                $"Expected five M4 storage relations but measured {relations.Count}.");
+                $"Expected six M4 storage relations but measured {relations.Count}.");
         }
 
         return new SourceMeasurementStorageSnapshot(
