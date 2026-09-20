@@ -90,7 +90,7 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
                 SELECT id
                 FROM ingest.collection_jobs
                 WHERE state = 'pending'
-                  AND available_at <= transaction_timestamp()
+                  AND available_at <= clock_timestamp()
                 ORDER BY available_at, priority DESC, id
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
@@ -99,7 +99,7 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             SET state = 'leased',
                 lease_owner_id = @worker_id,
                 lease_generation = job.lease_generation + 1,
-                lease_expires_at = transaction_timestamp() + @lease_duration,
+                lease_expires_at = clock_timestamp() + @lease_duration,
                 updated_at = transaction_timestamp()
             FROM candidate
             WHERE job.id = candidate.id
@@ -126,13 +126,13 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         command.CommandText =
             $"""
             UPDATE ingest.collection_jobs
-            SET lease_expires_at = transaction_timestamp() + @lease_duration,
+            SET lease_expires_at = clock_timestamp() + @lease_duration,
                 updated_at = transaction_timestamp()
             WHERE id = @job_id
               AND lease_owner_id = @worker_id
               AND lease_generation = @lease_generation
               AND state IN ('leased', 'processing')
-              AND lease_expires_at > transaction_timestamp()
+              AND lease_expires_at > clock_timestamp()
             RETURNING {JobColumns};
             """;
 
@@ -182,7 +182,7 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
               AND lease_owner_id = @worker_id
               AND lease_generation = @lease_generation
               AND state = 'leased'
-              AND lease_expires_at > transaction_timestamp()
+              AND lease_expires_at > clock_timestamp()
             RETURNING {JobColumns};
             """;
 
@@ -335,14 +335,14 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             IsolationLevel.ReadCommitted,
             cancellationToken);
 
-        var attempt = await GetAttemptAsync(
+        var attemptSnapshot = await GetAttemptAsync(
             connection,
             transaction,
             attemptId,
-            forUpdate: true,
+            forUpdate: false,
             cancellationToken);
 
-        if (attempt is null)
+        if (attemptSnapshot is null)
         {
             await transaction.RollbackAsync(cancellationToken);
             return new FenceAcquireResult(FenceAcquireStatus.InvalidAttempt, null);
@@ -351,12 +351,28 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         var ownedJob = await GetOwnedJobForUpdateAsync(
             connection,
             transaction,
-            attempt.JobId,
+            attemptSnapshot.JobId,
             workerId,
             leaseGeneration,
             cancellationToken);
 
-        if (ownedJob is null || attempt.LeaseGeneration != leaseGeneration)
+        if (ownedJob is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new FenceAcquireResult(FenceAcquireStatus.LeaseLost, attemptSnapshot);
+        }
+
+        var attempt = await GetAttemptAsync(
+            connection,
+            transaction,
+            attemptId,
+            forUpdate: true,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Attempt disappeared after its collection job was locked.");
+
+        if (attempt.JobId != ownedJob.Id ||
+            attempt.LeaseGeneration != leaseGeneration)
         {
             await transaction.RollbackAsync(cancellationToken);
             return new FenceAcquireResult(FenceAcquireStatus.LeaseLost, attempt);
@@ -463,20 +479,63 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             IsolationLevel.ReadCommitted,
             cancellationToken);
 
-        var attempt = await GetAttemptAsync(
+        var attemptSnapshot = await GetAttemptAsync(
             connection,
             transaction,
             attemptId,
-            forUpdate: true,
+            forUpdate: false,
             cancellationToken);
 
-        if (attempt is null)
+        if (attemptSnapshot is null)
         {
             await transaction.RollbackAsync(cancellationToken);
             return new ExchangeAuthorizationResult(
                 ExchangeAuthorizationStatus.InvalidAttempt,
                 null);
         }
+
+        if (attemptSnapshot.ExchangeAuthorizedAt is not null ||
+            attemptSnapshot.State is IngestionAttemptState.ExchangeAuthorized)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new ExchangeAuthorizationResult(
+                ExchangeAuthorizationStatus.AlreadyAuthorized,
+                attemptSnapshot);
+        }
+
+        if (attemptSnapshot.State is not IngestionAttemptState.Fenced ||
+            attemptSnapshot.FenceToken is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new ExchangeAuthorizationResult(
+                ExchangeAuthorizationStatus.InvalidState,
+                attemptSnapshot);
+        }
+
+        var ownedJob = await GetOwnedJobForUpdateAsync(
+            connection,
+            transaction,
+            attemptSnapshot.JobId,
+            workerId,
+            leaseGeneration,
+            cancellationToken);
+
+        if (ownedJob is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new ExchangeAuthorizationResult(
+                ExchangeAuthorizationStatus.LeaseLost,
+                attemptSnapshot);
+        }
+
+        var attempt = await GetAttemptAsync(
+            connection,
+            transaction,
+            attemptId,
+            forUpdate: true,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Attempt disappeared after its collection job was locked.");
 
         if (attempt.ExchangeAuthorizedAt is not null ||
             attempt.State is IngestionAttemptState.ExchangeAuthorized)
@@ -487,28 +546,21 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
                 attempt);
         }
 
+        if (attempt.JobId != ownedJob.Id ||
+            attempt.LeaseGeneration != leaseGeneration)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new ExchangeAuthorizationResult(
+                ExchangeAuthorizationStatus.LeaseLost,
+                attempt);
+        }
+
         if (attempt.State is not IngestionAttemptState.Fenced ||
             attempt.FenceToken is null)
         {
             await transaction.RollbackAsync(cancellationToken);
             return new ExchangeAuthorizationResult(
                 ExchangeAuthorizationStatus.InvalidState,
-                attempt);
-        }
-
-        var ownedJob = await GetOwnedJobForUpdateAsync(
-            connection,
-            transaction,
-            attempt.JobId,
-            workerId,
-            leaseGeneration,
-            cancellationToken);
-
-        if (ownedJob is null || attempt.LeaseGeneration != leaseGeneration)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return new ExchangeAuthorizationResult(
-                ExchangeAuthorizationStatus.LeaseLost,
                 attempt);
         }
 
@@ -531,10 +583,10 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
                 attempt);
         }
 
-        await using (var authorize = connection.CreateCommand())
+        await using (var authorizeCommand = connection.CreateCommand())
         {
-            authorize.Transaction = transaction;
-            authorize.CommandText =
+            authorizeCommand.Transaction = transaction;
+            authorizeCommand.CommandText =
                 """
                 UPDATE ingest.attempts
                 SET state = 'exchange_authorized',
@@ -542,9 +594,9 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
                     updated_at = transaction_timestamp()
                 WHERE id = @attempt_id;
                 """;
-            AddUuid(authorize, "attempt_id", attemptId.Value);
+            AddUuid(authorizeCommand, "attempt_id", attemptId.Value);
 
-            var changed = await authorize.ExecuteNonQueryAsync(cancellationToken);
+            var changed = await authorizeCommand.ExecuteNonQueryAsync(cancellationToken);
             if (changed != 1)
             {
                 throw new InvalidOperationException(
@@ -643,7 +695,7 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
               AND lease_owner_id = @worker_id
               AND lease_generation = @lease_generation
               AND state IN ('leased', 'processing')
-              AND lease_expires_at > transaction_timestamp()
+              AND lease_expires_at > clock_timestamp()
             FOR UPDATE;
             """;
         AddUuid(command, "job_id", jobId.Value);
