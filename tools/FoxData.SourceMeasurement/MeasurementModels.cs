@@ -52,6 +52,27 @@ internal sealed record MeasurementAttemptSummary(
     IReadOnlyDictionary<string, int> OutcomeCounts,
     IReadOnlyDictionary<string, int> ErrorClassCounts);
 
+internal sealed record MeasurementSchedulingSummary(
+    int WindowDecisionCount,
+    int MissingWindowDecisionCount,
+    int ProbeSelectedDecisionCount,
+    int SuccessorDecisionCount,
+    int ProbeAttributedFetchCount,
+    int BaselineAttributedFetchCount,
+    int UnattributedFetchCount,
+    MeasurementPercentiles EffectiveCadenceSeconds,
+    MeasurementPercentiles SourceCacheDelaySeconds,
+    MeasurementPercentiles RetryDelaySeconds,
+    MeasurementPercentiles SuccessorDelaySeconds,
+    MeasurementPercentiles SuccessorExtensionBeyondCadenceSeconds);
+
+internal sealed record MeasurementDownsampleSeries(
+    string ShardKey,
+    string EndpointKey,
+    string CapabilityKey,
+    int ProbeAttributedFetchCount,
+    IReadOnlyList<WarApiDownsampleSummary> Candidates);
+
 internal sealed record MeasurementStorageGrowthRelation(
     string SchemaName,
     string RelationName,
@@ -87,6 +108,8 @@ internal sealed record MeasurementSummary(
     IReadOnlyDictionary<string, int> ContentEncodingCounts,
     MeasurementCacheSummary Cache,
     MeasurementAttemptSummary Attempts,
+    MeasurementSchedulingSummary Scheduling,
+    IReadOnlyList<MeasurementDownsampleSeries> Downsampling,
     MeasurementStorageGrowth? StorageGrowth,
     WarApiMeasurementReport WarApi);
 
