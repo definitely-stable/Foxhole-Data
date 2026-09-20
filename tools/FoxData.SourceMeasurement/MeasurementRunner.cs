@@ -277,6 +277,8 @@ internal static class MeasurementRunner
             AnalyzePayloadDecode(
                 fetches,
                 parseRuns),
+            AnalyzeParseDurationByCapability(
+                parseRuns),
             AnalyzeLatencyByResponseClass(fetches),
             AnalyzeVolume(
                 options,
@@ -472,6 +474,31 @@ internal static class MeasurementRunner
             missingDecodedLengthCount,
             Percentiles(decodedSizes),
             Percentiles(expansionRatios));
+    }
+
+    private static IReadOnlyDictionary<string, MeasurementPercentiles>
+        AnalyzeParseDurationByCapability(
+            IReadOnlyCollection<SourceMeasurementParseRun> parseRuns)
+    {
+        var result =
+            new SortedDictionary<string, MeasurementPercentiles>(
+                StringComparer.Ordinal);
+
+        foreach (var group in parseRuns.GroupBy(
+                     parseRun => parseRun.CapabilityKey,
+                     StringComparer.Ordinal))
+        {
+            result[group.Key] = Percentiles(
+                group.Select(
+                    parseRun =>
+                        Math.Max(
+                            0,
+                            (parseRun.CompletedAt -
+                             parseRun.StartedAt)
+                            .TotalMilliseconds)));
+        }
+
+        return result;
     }
 
     private static IReadOnlyDictionary<string, MeasurementPercentiles>
@@ -1705,6 +1732,25 @@ internal static class MeasurementRunner
         builder.AppendLine(
             $"- Expansion ratio max: {FormatNumber(summary.PayloadDecode.ExpansionRatio.Max)}x");
         builder.AppendLine();
+
+        if (summary.ParseDurationByCapabilityMs.Count > 0)
+        {
+            builder.AppendLine("## Parse elapsed time");
+            builder.AppendLine();
+            builder.AppendLine(
+                "| Capability | p50 ms | p90 ms | p95 ms | p99 ms | max ms |");
+            builder.AppendLine(
+                "| --- | ---: | ---: | ---: | ---: | ---: |");
+
+            foreach (var parseDuration in
+                     summary.ParseDurationByCapabilityMs)
+            {
+                builder.AppendLine(
+                    $"| {parseDuration.Key} | {FormatNumber(parseDuration.Value.P50)} | {FormatNumber(parseDuration.Value.P90)} | {FormatNumber(parseDuration.Value.P95)} | {FormatNumber(parseDuration.Value.P99)} | {FormatNumber(parseDuration.Value.Max)} |");
+            }
+
+            builder.AppendLine();
+        }
 
         builder.AppendLine("## Volume");
         builder.AppendLine();
