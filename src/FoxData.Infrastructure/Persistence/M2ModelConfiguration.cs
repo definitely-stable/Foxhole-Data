@@ -272,6 +272,7 @@ internal static class M2ModelConfiguration
         builder.Property(x => x.SourceDate).HasColumnName("source_date");
         builder.Property(x => x.SourceAgeSeconds).HasColumnName("source_age_seconds");
         builder.Property(x => x.RetryAfter).HasColumnName("retry_after").HasMaxLength(1024);
+        builder.Property(x => x.BodyErrorCode).HasColumnName("body_error_code").HasMaxLength(128);
         builder.Property(x => x.PayloadId).HasColumnName("payload_id");
         builder.Property(x => x.PriorFetchId).HasColumnName("prior_fetch_id");
         builder.Property(x => x.DurationMs).HasColumnName("duration_ms");
