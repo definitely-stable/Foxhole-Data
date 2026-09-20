@@ -175,6 +175,14 @@ internal sealed record AnalyzeOptions(
     int? ProbeMaxMapsPerShard,
     int? ProbeTargetCadenceSeconds);
 
+internal sealed record MeasurementValidationResult(
+    bool EvidenceComplete,
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<string> Warnings);
+
+internal sealed record ValidationOptions(
+    string OutputDirectory);
+
 internal sealed record StorageOptions(
     string Label,
     string OutputDirectory);
