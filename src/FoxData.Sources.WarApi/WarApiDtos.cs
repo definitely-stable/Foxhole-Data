@@ -6,116 +6,116 @@ namespace FoxData.Sources.WarApi;
 public sealed class WarApiWarStateDto
 {
     [JsonPropertyName("warId")]
-    public string? WarId { get; init; }
+    public string? WarId { get; set; }
 
     [JsonPropertyName("warNumber")]
-    public int? WarNumber { get; init; }
+    public int? WarNumber { get; set; }
 
     [JsonPropertyName("winner")]
-    public string? Winner { get; init; }
+    public string? Winner { get; set; }
 
     [JsonPropertyName("conquestStartTime")]
-    public long? ConquestStartTime { get; init; }
+    public long? ConquestStartTime { get; set; }
 
     [JsonPropertyName("conquestEndTime")]
-    public long? ConquestEndTime { get; init; }
+    public long? ConquestEndTime { get; set; }
 
     [JsonPropertyName("resistanceStartTime")]
-    public long? ResistanceStartTime { get; init; }
+    public long? ResistanceStartTime { get; set; }
 
     [JsonPropertyName("scheduledConquestEndTime")]
-    public long? ScheduledConquestEndTime { get; init; }
+    public long? ScheduledConquestEndTime { get; set; }
 
     [JsonPropertyName("requiredVictoryTowns")]
-    public int? RequiredVictoryTowns { get; init; }
+    public int? RequiredVictoryTowns { get; set; }
 
     [JsonPropertyName("shortRequiredVictoryTowns")]
-    public int? ShortRequiredVictoryTowns { get; init; }
+    public int? ShortRequiredVictoryTowns { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class WarApiWarReportDto
 {
     [JsonPropertyName("totalEnlistments")]
-    public long? TotalEnlistments { get; init; }
+    public long? TotalEnlistments { get; set; }
 
     [JsonPropertyName("colonialCasualties")]
-    public long? ColonialCasualties { get; init; }
+    public long? ColonialCasualties { get; set; }
 
     [JsonPropertyName("wardenCasualties")]
-    public long? WardenCasualties { get; init; }
+    public long? WardenCasualties { get; set; }
 
     [JsonPropertyName("dayOfWar")]
-    public int? DayOfWar { get; init; }
+    public int? DayOfWar { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class WarApiMapDataDto
 {
     [JsonPropertyName("regionId")]
-    public int? RegionId { get; init; }
+    public int? RegionId { get; set; }
 
     [JsonPropertyName("scorchedVictoryTowns")]
-    public int? ScorchedVictoryTowns { get; init; }
+    public int? ScorchedVictoryTowns { get; set; }
 
     [JsonPropertyName("mapItems")]
-    public WarApiMapItemDto[]? MapItems { get; init; }
+    public WarApiMapItemDto[]? MapItems { get; set; }
 
     [JsonPropertyName("mapTextItems")]
-    public WarApiMapTextItemDto[]? MapTextItems { get; init; }
+    public WarApiMapTextItemDto[]? MapTextItems { get; set; }
 
     [JsonPropertyName("lastUpdated")]
-    public long? LastUpdated { get; init; }
+    public long? LastUpdated { get; set; }
 
     [JsonPropertyName("version")]
-    public int? Version { get; init; }
+    public int? Version { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class WarApiMapItemDto
 {
     [JsonPropertyName("teamId")]
-    public string? TeamId { get; init; }
+    public string? TeamId { get; set; }
 
     [JsonPropertyName("iconType")]
-    public int? IconType { get; init; }
+    public int? IconType { get; set; }
 
     [JsonPropertyName("x")]
-    public double? X { get; init; }
+    public double? X { get; set; }
 
     [JsonPropertyName("y")]
-    public double? Y { get; init; }
+    public double? Y { get; set; }
 
     [JsonPropertyName("flags")]
-    public int? Flags { get; init; }
+    public int? Flags { get; set; }
 
     [JsonPropertyName("viewDirection")]
-    public int? ViewDirection { get; init; }
+    public int? ViewDirection { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class WarApiMapTextItemDto
 {
     [JsonPropertyName("text")]
-    public string? Text { get; init; }
+    public string? Text { get; set; }
 
     [JsonPropertyName("x")]
-    public double? X { get; init; }
+    public double? X { get; set; }
 
     [JsonPropertyName("y")]
-    public double? Y { get; init; }
+    public double? Y { get; set; }
 
     [JsonPropertyName("mapMarkerType")]
-    public string? MapMarkerType { get; init; }
+    public string? MapMarkerType { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
