@@ -43,11 +43,17 @@ internal sealed record MeasurementCacheSummary(
     int NoCacheCount,
     int NoStoreCount,
     int ExpiresPresentCount,
+    int SourceDatePresentCount,
+    int SourceAgePresentCount,
     int RetryAfterPresentCount,
     int RetryAfterMalformedCount,
+    MeasurementPercentiles MaxAgeSeconds,
+    MeasurementPercentiles SharedMaxAgeSeconds,
+    MeasurementPercentiles ExpiresLifetimeSeconds,
     MeasurementPercentiles FreshnessLifetimeSeconds,
     MeasurementPercentiles SourceCacheDelaySeconds,
-    MeasurementPercentiles SourceAgeSeconds);
+    MeasurementPercentiles SourceAgeSeconds,
+    MeasurementPercentiles RetryAfterDelaySeconds);
 
 internal sealed record MeasurementPayloadDecodeSummary(
     int ParseRunCount,
