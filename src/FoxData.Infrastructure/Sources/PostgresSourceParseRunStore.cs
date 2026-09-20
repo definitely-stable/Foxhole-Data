@@ -13,7 +13,8 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
         """
         id, representation_fetch_id, capability_key, adapter_version, parser_version,
         fingerprint_algorithm, structural_fingerprint, outcome, unknown_property_count,
-        unknown_code_count, error_code, started_at, completed_at, created_at
+        unknown_code_count, error_code, started_at, completed_at, created_at,
+        source_version, source_last_updated
         """;
 
     public async Task<SourceParseRunDescriptor?> GetAsync(
@@ -61,11 +62,13 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
             INSERT INTO evidence.source_parse_runs
                 (id, representation_fetch_id, capability_key, adapter_version, parser_version,
                  fingerprint_algorithm, structural_fingerprint, outcome, unknown_property_count,
-                 unknown_code_count, error_code, started_at, completed_at)
+                 unknown_code_count, error_code, started_at, completed_at,
+                 source_version, source_last_updated)
             VALUES
                 (@id, @representation_fetch_id, @capability_key, @adapter_version, @parser_version,
                  @fingerprint_algorithm, @structural_fingerprint, @outcome, @unknown_property_count,
-                 @unknown_code_count, @error_code, @started_at, @completed_at)
+                 @unknown_code_count, @error_code, @started_at, @completed_at,
+                 @source_version, @source_last_updated)
             ON CONFLICT (representation_fetch_id, capability_key, parser_version)
             DO NOTHING
             RETURNING {Columns};
@@ -84,6 +87,8 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
         AddNullableText(insert, "error_code", run.ErrorCode);
         AddTimestamp(insert, "started_at", run.StartedAt);
         AddTimestamp(insert, "completed_at", run.CompletedAt);
+        AddNullableBigint(insert, "source_version", run.SourceVersion);
+        AddNullableBigint(insert, "source_last_updated", run.SourceLastUpdated);
 
         var inserted = await ReadAsync(insert, cancellationToken);
         if (inserted is not null)
@@ -160,7 +165,9 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
             reader.IsDBNull(10) ? null : reader.GetString(10),
             reader.GetFieldValue<DateTimeOffset>(11),
             reader.GetFieldValue<DateTimeOffset>(12),
-            reader.GetFieldValue<DateTimeOffset>(13));
+            reader.GetFieldValue<DateTimeOffset>(13),
+            reader.IsDBNull(14) ? null : reader.GetInt64(14),
+            reader.IsDBNull(15) ? null : reader.GetInt64(15));
     }
 
     private static async Task EnsureBodyBearingRepresentationAsync(
@@ -200,7 +207,9 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
             !string.Equals(existing.Outcome, supplied.Outcome, StringComparison.Ordinal) ||
             existing.UnknownPropertyCount != supplied.UnknownPropertyCount ||
             existing.UnknownCodeCount != supplied.UnknownCodeCount ||
-            !string.Equals(existing.ErrorCode, supplied.ErrorCode, StringComparison.Ordinal))
+            !string.Equals(existing.ErrorCode, supplied.ErrorCode, StringComparison.Ordinal) ||
+            existing.SourceVersion != supplied.SourceVersion ||
+            existing.SourceLastUpdated != supplied.SourceLastUpdated)
         {
             throw new SourceStateIntegrityException(
                 "Repeated parse-run input differs from the durable parse run.");
@@ -277,6 +286,13 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
 
     private static void AddInteger(NpgsqlCommand command, string name, int value) =>
         command.Parameters.Add(name, NpgsqlDbType.Integer).Value = value;
+
+    private static void AddNullableBigint(
+        NpgsqlCommand command,
+        string name,
+        long? value) =>
+        command.Parameters.Add(name, NpgsqlDbType.Bigint).Value =
+            value is null ? DBNull.Value : value.Value;
 
     private static void AddTimestamp(
         NpgsqlCommand command,
