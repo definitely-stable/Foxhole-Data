@@ -704,9 +704,9 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             await using var command = DataSource.CreateCommand(
                 """
                 SELECT COUNT(*)
-                FROM evidence.fetches AS fetch
+                FROM evidence.fetches AS captured_fetch
                 INNER JOIN ingest.attempts AS attempt
-                    ON attempt.id = fetch.attempt_id
+                    ON attempt.id = captured_fetch.attempt_id
                 WHERE attempt.job_id = @job_id;
                 """);
             command.Parameters.AddWithValue("job_id", jobId.Value);
