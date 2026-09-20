@@ -28,7 +28,7 @@ jobs:
       - name: Restore
         run: |
           dotnet tool restore
-          dotnet restore FoxData.slnx --locked-mode
+          dotnet restore FoxData.slnx
 
       - name: Build
         run: dotnet build FoxData.slnx -c Release --no-restore
@@ -47,13 +47,13 @@ jobs:
       - name: Commit migration
         shell: bash
         run: |
-          git add src/FoxData.Infrastructure/Persistence/Migrations
+          git add src/FoxData.Infrastructure/Persistence/Migrations '**/packages.lock.json'
           if git diff --cached --quiet; then
-            echo "No migration changes generated."
+            echo "No migration or lockfile changes generated."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "build: generate M2 evidence kernel migration"
+          git commit -m "build: generate M2 migration and refresh locks"
           git push origin HEAD:m2-a/evidence-registry
