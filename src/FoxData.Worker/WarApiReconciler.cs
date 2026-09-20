@@ -61,7 +61,6 @@ public sealed class WarApiReconciler(
             {
                 await ReconcileMapDiscoveryAsync(
                     context,
-                    snapshot.CurrentFetch,
                     maps,
                     cancellationToken);
             }
@@ -173,7 +172,6 @@ public sealed class WarApiReconciler(
 
     private async Task ReconcileMapDiscoveryAsync(
         WarApiRegistryContext context,
-        FetchDescriptor mapsFetch,
         IEnumerable<string> sourceMapNames,
         CancellationToken cancellationToken)
     {
@@ -218,18 +216,19 @@ public sealed class WarApiReconciler(
                         $"Discovered endpoint '{sourceEndpoint.SemanticKey}' conflicts with durable registry state.");
                 }
 
-                var cadence = WarApiResponsePolicy.Cadence(
-                    sourceEndpoint.Capability);
+                var discoveryWindow =
+                    WarApiResponsePolicy.DiscoveryWindow(
+                        sourceEndpoint.Capability);
                 var target =
-                    mapsFetch.RetrievedAt +
+                    registration.Resource.CreatedAt +
                     WarApiResponsePolicy.Spread(
                         context.Shard.Key,
                         sourceEndpoint.SemanticKey,
-                        cadence);
+                        discoveryWindow);
 
                 var job = await ingestion.EnqueueAsync(
                     registration.Resource.Id,
-                    $"discover:{mapsFetch.Id}:{sourceEndpoint.SemanticKey}",
+                    $"discover@1:{sourceEndpoint.SemanticKey}",
                     target,
                     target,
                     cancellationToken: cancellationToken);
