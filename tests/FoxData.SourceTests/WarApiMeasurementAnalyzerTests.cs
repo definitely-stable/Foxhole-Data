@@ -235,6 +235,36 @@ public sealed class WarApiMeasurementAnalyzerTests
     }
 
     [Fact]
+    public void AnalyzerSaturatesExtremeVersionGap()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var summary = WarApiMeasurementAnalyzer.AnalyzeEndpoint(
+        [
+            Sample(
+                start,
+                200,
+                "A",
+                100,
+                "etag-a",
+                10,
+                version: long.MinValue),
+            Sample(
+                start.AddSeconds(15),
+                200,
+                "B",
+                100,
+                "etag-b",
+                10,
+                version: long.MaxValue),
+        ]);
+
+        Assert.Equal(1, summary.VersionAdvanceCount);
+        Assert.Equal(long.MaxValue, summary.VersionGapCount);
+        Assert.Equal(0, summary.VersionRegressionCount);
+    }
+
+    [Fact]
     public void EmptyAnalyzerInputIsRejected()
     {
         Assert.Throws<ArgumentException>(
