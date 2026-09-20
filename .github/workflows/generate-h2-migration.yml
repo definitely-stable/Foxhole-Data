@@ -28,6 +28,9 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet restore FoxData.slnx --locked-mode
 
+      - name: Build
+        run: dotnet build FoxData.slnx -c Release --no-restore
+
       - name: Generate forward migration
         run: >-
           dotnet ef migrations add M2HardeningCurrentCaptureNaming
@@ -35,6 +38,8 @@ jobs:
           --startup-project src/FoxData.Api/FoxData.Api.csproj
           --context FoxDataDbContext
           --output-dir Persistence/Migrations
+          --configuration Release
+          --no-build
 
       - name: Commit generated migration
         shell: bash
