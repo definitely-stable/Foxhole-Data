@@ -1,0 +1,104 @@
+using FoxData.Infrastructure.Sources;
+using FoxData.Sources.WarApi;
+
+namespace FoxData.SourceMeasurement;
+
+internal sealed record MeasurementManifest(
+    string MeasurementVersion,
+    string RunId,
+    string SourceKey,
+    DateTimeOffset StartInclusive,
+    DateTimeOffset EndExclusive,
+    DateTimeOffset GeneratedAt,
+    string RepositorySha,
+    string ObserverRegion,
+    string AdapterVersion,
+    string ParserVersion,
+    string CachePolicyVersion,
+    string BackoffPolicyVersion,
+    string PollPolicyVersion,
+    string CollectionProfileVersion,
+    IReadOnlyList<string> Shards,
+    IReadOnlyList<string> Limitations);
+
+internal sealed record MeasurementPercentiles(
+    double? P50,
+    double? P90,
+    double? P95,
+    double? P99,
+    double? Max);
+
+internal sealed record MeasurementCacheSummary(
+    int CacheControlPresentCount,
+    int CacheControlMalformedCount,
+    int NoCacheCount,
+    int NoStoreCount,
+    int ExpiresPresentCount,
+    int RetryAfterPresentCount,
+    int RetryAfterMalformedCount,
+    MeasurementPercentiles FreshnessLifetimeSeconds,
+    MeasurementPercentiles SourceCacheDelaySeconds,
+    MeasurementPercentiles SourceAgeSeconds);
+
+internal sealed record MeasurementAttemptSummary(
+    int AttemptCount,
+    int ExchangeAuthorizedCount,
+    int PreExchangeFailureCount,
+    int UncertainExchangeCount,
+    int CapturedLateCount,
+    int NegativeLogicalStartLagCount,
+    MeasurementPercentiles LogicalStartLagSeconds,
+    IReadOnlyDictionary<string, int> StateCounts,
+    IReadOnlyDictionary<string, int> OutcomeCounts,
+    IReadOnlyDictionary<string, int> ErrorClassCounts);
+
+internal sealed record MeasurementStorageGrowthRelation(
+    string SchemaName,
+    string RelationName,
+    long DeltaBytes,
+    double BytesPerDay,
+    double Projected30DayBytes,
+    double Projected365DayBytes);
+
+internal sealed record MeasurementStorageGrowth(
+    DateTimeOffset BeforeCapturedAt,
+    DateTimeOffset AfterCapturedAt,
+    long DatabaseDeltaBytes,
+    double DatabaseBytesPerDay,
+    double Projected30DayBytes,
+    double Projected365DayBytes,
+    IReadOnlyList<MeasurementStorageGrowthRelation> Relations);
+
+internal sealed record MeasurementSummary(
+    string RunId,
+    string SourceKey,
+    DateTimeOffset StartInclusive,
+    DateTimeOffset EndExclusive,
+    int FetchCount,
+    int AttemptCount,
+    int ParseRunCount,
+    int EndpointCount,
+    int BodyBearingFetchCount,
+    int UniquePayloadCount,
+    double? PayloadDeduplicationRatio,
+    int DeclaredLengthMismatchCount,
+    int EtagPresentCount,
+    IReadOnlyDictionary<string, int> StatusCounts,
+    IReadOnlyDictionary<string, int> ContentEncodingCounts,
+    MeasurementCacheSummary Cache,
+    MeasurementAttemptSummary Attempts,
+    MeasurementStorageGrowth? StorageGrowth,
+    WarApiMeasurementReport WarApi);
+
+internal sealed record AnalyzeOptions(
+    string RunId,
+    DateTimeOffset StartInclusive,
+    DateTimeOffset EndExclusive,
+    string OutputDirectory,
+    string RepositorySha,
+    string ObserverRegion,
+    string CollectionProfileVersion);
+
+internal sealed record StorageOptions(
+    string Label,
+    string OutputDirectory);
