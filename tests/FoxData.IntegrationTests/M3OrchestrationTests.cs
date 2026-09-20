@@ -256,7 +256,6 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             pollState,
             resolver,
             transport,
-            options,
             timeProvider,
             NullLogger<WarApiAttemptExecutor>.Instance);
 
