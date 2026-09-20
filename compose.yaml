@@ -13,6 +13,18 @@ services:
     volumes:
       - foxdata-postgres:/var/lib/postgresql
 
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/docker/migrations/Dockerfile
+    command:
+      - --connection
+      - Host=postgres;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -21,8 +33,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__FoxData: Host=postgres;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_dev
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
 
@@ -34,8 +46,8 @@ services:
       DOTNET_ENVIRONMENT: Development
       ConnectionStrings__FoxData: Host=postgres;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_dev
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   foxdata-postgres:
