@@ -1,0 +1,96 @@
+using System.Globalization;
+using FoxData.Sources.WarApi;
+using Microsoft.Extensions.Configuration;
+
+namespace FoxData.Worker;
+
+public static class WarApiMeasurementProbeConfiguration
+{
+    public static WarApiMeasurementProbeProfile FromConfiguration(
+        IConfiguration configuration,
+        WarApiWorkerOptions workerOptions)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(workerOptions);
+
+        var section = configuration
+            .GetSection("WarApi")
+            .GetSection("MeasurementProbe");
+
+        var enabled = ReadBoolean(
+            section,
+            "Enabled",
+            defaultValue: false);
+        var runId = section["RunId"];
+        var maxMaps = ReadInt32(
+            section,
+            "MaxMapsPerShard",
+            3);
+        var targetCadence = TimeSpan.FromSeconds(
+            ReadInt32(
+                section,
+                "TargetCadenceSeconds",
+                15));
+
+        var profile = new WarApiMeasurementProbeProfile(
+            enabled,
+            runId,
+            maxMaps,
+            targetCadence);
+
+        profile.Validate();
+
+        if (enabled &&
+            workerOptions.Shards.Contains(WarApiShard.Dev))
+        {
+            throw new InvalidOperationException(
+                "WarApi:MeasurementProbe cannot run against the Dev shard.");
+        }
+
+        return profile;
+    }
+
+    private static bool ReadBoolean(
+        IConfiguration section,
+        string key,
+        bool defaultValue)
+    {
+        var value = section[key];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!bool.TryParse(value, out var parsed))
+        {
+            throw new InvalidOperationException(
+                $"Configuration value 'WarApi:MeasurementProbe:{key}' must be a boolean.");
+        }
+
+        return parsed;
+    }
+
+    private static int ReadInt32(
+        IConfiguration section,
+        string key,
+        int defaultValue)
+    {
+        var value = section[key];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!int.TryParse(
+                value,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsed))
+        {
+            throw new InvalidOperationException(
+                $"Configuration value 'WarApi:MeasurementProbe:{key}' must be an integer.");
+        }
+
+        return parsed;
+    }
+}
