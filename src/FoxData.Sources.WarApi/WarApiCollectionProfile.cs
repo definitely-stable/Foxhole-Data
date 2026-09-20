@@ -74,7 +74,7 @@ public sealed class WarApiCollectionProfile
 
         var unknown = copy.Keys
             .Except(RequiredCapabilityKeys, StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
+            .OrderBy(key => key, StringComparer.Ordinal)
             .ToArray();
 
         if (unknown.Length != 0)
