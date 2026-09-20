@@ -14,6 +14,7 @@ public sealed class WarApiReconciler(
     IEndpointEvidenceReader evidenceReader,
     IEndpointPollStateStore pollStateStore,
     ISourceParseRunStore parseRunStore,
+    ISourceScheduleDecisionStore scheduleDecisionStore,
     SourceRegistry registry,
     IngestionKernel ingestion,
     WarApiWorkerOptions options,
@@ -105,6 +106,7 @@ public sealed class WarApiReconciler(
             cadence,
             schedulingPolicy);
 
+        CollectionJobDescriptor? successorJob = null;
         if (transition.SuccessorAvailableAt is { } successorAvailableAt)
         {
             var successor = await ingestion.EnqueueAsync(
@@ -119,7 +121,24 @@ public sealed class WarApiReconciler(
                 throw new SourceStateIntegrityException(
                     $"Successor job for fetch {snapshot.CurrentFetch.Id} conflicts with durable scheduling.");
             }
+
+            successorJob = successor.Job;
         }
+
+        await scheduleDecisionStore.RecordAsync(
+            new SourceScheduleDecisionWrite(
+                snapshot.CurrentFetch.Id,
+                context.Endpoint.Id,
+                schedulingPolicy,
+                checked((long)cadence.TotalMilliseconds),
+                activity.Active,
+                probeSelected,
+                transition.State.SourceCacheEligibleAt,
+                transition.State.NextTargetAt,
+                transition.State.RetryEligibleAt,
+                successorJob?.Id,
+                transition.SuccessorAvailableAt),
+            cancellationToken);
 
         await pollStateStore.PutAsync(
             transition.State,
