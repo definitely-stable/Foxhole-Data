@@ -1,0 +1,50 @@
+name: Generate M3 Migration
+
+on:
+  push:
+    branches:
+      - feat/m3-official-war-api-adapter
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: "!contains(github.event.head_commit.message, '[m3-migration-generated]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore
+        run: dotnet restore FoxData.slnx --locked-mode
+
+      - name: Generate migration
+        run: >-
+          dotnet ef migrations add M3OfficialWarApiState
+          --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj
+          --startup-project src/FoxData.Api/FoxData.Api.csproj
+          --context FoxDataDbContext
+          --output-dir Persistence/Migrations
+          --no-build
+
+      - name: Commit generated migration
+        shell: bash
+        run: |
+          if git diff --quiet -- src/FoxData.Infrastructure/Persistence/Migrations; then
+            echo "No migration changes generated."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/FoxData.Infrastructure/Persistence/Migrations
+          git commit -m "build: generate M3 persistence migration [m3-migration-generated]"
+          git push
