@@ -277,7 +277,7 @@ internal static class MeasurementRunner
             AnalyzePayloadDecode(
                 fetches,
                 parseRuns),
-            AnalyzeParseDurationByCapability(
+            AnalyzeDecodeAndParseDurationByCapability(
                 parseRuns),
             AnalyzeLatencyByResponseClass(fetches),
             AnalyzeVolume(
@@ -477,7 +477,7 @@ internal static class MeasurementRunner
     }
 
     private static IReadOnlyDictionary<string, MeasurementPercentiles>
-        AnalyzeParseDurationByCapability(
+        AnalyzeDecodeAndParseDurationByCapability(
             IReadOnlyCollection<SourceMeasurementParseRun> parseRuns)
     {
         var result =
@@ -1733,9 +1733,9 @@ internal static class MeasurementRunner
             $"- Expansion ratio max: {FormatNumber(summary.PayloadDecode.ExpansionRatio.Max)}x");
         builder.AppendLine();
 
-        if (summary.ParseDurationByCapabilityMs.Count > 0)
+        if (summary.DecodeAndParseDurationByCapabilityMs.Count > 0)
         {
-            builder.AppendLine("## Parse elapsed time");
+            builder.AppendLine("## Decode + parse elapsed time");
             builder.AppendLine();
             builder.AppendLine(
                 "| Capability | p50 ms | p90 ms | p95 ms | p99 ms | max ms |");
@@ -1743,7 +1743,7 @@ internal static class MeasurementRunner
                 "| --- | ---: | ---: | ---: | ---: | ---: |");
 
             foreach (var parseDuration in
-                     summary.ParseDurationByCapabilityMs)
+                     summary.DecodeAndParseDurationByCapabilityMs)
             {
                 builder.AppendLine(
                     $"| {parseDuration.Key} | {FormatNumber(parseDuration.Value.P50)} | {FormatNumber(parseDuration.Value.P90)} | {FormatNumber(parseDuration.Value.P95)} | {FormatNumber(parseDuration.Value.P99)} | {FormatNumber(parseDuration.Value.Max)} |");
