@@ -59,8 +59,8 @@ public static class WarApiResponsePolicy
         }
 
         if (statusCode is HttpStatusCode.RequestTimeout or
-            HttpStatusCode.TooEarly or
-            HttpStatusCode.TooManyRequests)
+            HttpStatusCode.TooManyRequests ||
+            code == 425)
         {
             return WarApiResponseClass.RetryableFailure;
         }
