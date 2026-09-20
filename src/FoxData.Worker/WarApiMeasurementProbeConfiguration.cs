@@ -22,6 +22,13 @@ public static class WarApiMeasurementProbeConfiguration
             "Enabled",
             defaultValue: false);
         var runId = section["RunId"];
+        var shardKeys = section
+            .GetSection("EnabledShards")
+            .GetChildren()
+            .Select(child => child.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToArray();
         var maxMaps = ReadInt32(
             section,
             "MaxMapsPerShard",
@@ -35,16 +42,29 @@ public static class WarApiMeasurementProbeConfiguration
         var profile = new WarApiMeasurementProbeProfile(
             enabled,
             runId,
+            shardKeys,
             maxMaps,
             targetCadence);
 
         profile.Validate();
 
-        if (enabled &&
-            workerOptions.Shards.Contains(WarApiShard.Dev))
+        if (enabled)
         {
-            throw new InvalidOperationException(
-                "WarApi:MeasurementProbe cannot run against the Dev shard.");
+            foreach (var shardKey in shardKeys)
+            {
+                var shard = WarApiCatalog.ParseShardKey(shardKey);
+                if (shard == WarApiShard.Dev)
+                {
+                    throw new InvalidOperationException(
+                        "WarApi:MeasurementProbe cannot run against the Dev shard.");
+                }
+
+                if (!workerOptions.Shards.Contains(shard))
+                {
+                    throw new InvalidOperationException(
+                        $"Probe shard '{shardKey}' must also be enabled in WarApi:EnabledShards.");
+                }
+            }
         }
 
         return profile;
