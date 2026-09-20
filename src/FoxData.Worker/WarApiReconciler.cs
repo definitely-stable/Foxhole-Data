@@ -414,7 +414,7 @@ public sealed class WarApiReconciler(
                 fetch.StatusCode is null ? previous?.LastHttpResponseAt : fetch.RetrievedAt,
                 lastSuccessAt,
                 consecutiveFailures,
-                WarApiVersions.PollPolicy),
+                WarApiVersions.SchedulingPolicy(collectionProfile)),
             successorAvailableAt);
     }
 
