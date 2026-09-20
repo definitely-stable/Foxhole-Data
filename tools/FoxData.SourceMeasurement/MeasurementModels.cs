@@ -10,6 +10,13 @@ internal sealed record MeasurementProbeManifest(
     int MaxMapsPerShard,
     int TargetCadenceSeconds);
 
+internal sealed record MeasurementPhaseObservation(
+    string Kind,
+    string Scope,
+    DateTimeOffset FirstObservedAt,
+    DateTimeOffset LastObservedAt,
+    int EvidenceCount);
+
 internal sealed record MeasurementManifest(
     string MeasurementVersion,
     string RunId,
@@ -28,6 +35,7 @@ internal sealed record MeasurementManifest(
     IReadOnlyList<string> Shards,
     MeasurementProbeManifest? Probe,
     IReadOnlyDictionary<string, int> SchedulingPolicyCounts,
+    IReadOnlyList<MeasurementPhaseObservation> ObservedPhases,
     IReadOnlyList<string> Limitations);
 
 internal sealed record MeasurementPercentiles(
