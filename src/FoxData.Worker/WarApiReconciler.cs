@@ -167,6 +167,7 @@ public sealed class WarApiReconciler(
         var unknownProperties = 0;
         var unknownCodes = 0;
         string? errorCode = null;
+        long? decodedByteLength = null;
 
         try
         {
@@ -176,6 +177,8 @@ public sealed class WarApiReconciler(
                 options.MaxDecodedBytes,
                 options.MaxExpansionRatio,
                 cancellationToken);
+
+            decodedByteLength = decoded.LongLength;
 
             parsed = _parser.Parse(
                 context.SourceEndpoint.Capability,
@@ -210,7 +213,8 @@ public sealed class WarApiReconciler(
                 startedAt,
                 completedAt,
                 parsed?.SourceVersion,
-                parsed?.SourceLastUpdated),
+                parsed?.SourceLastUpdated,
+                decodedByteLength),
             cancellationToken);
 
         WarApiTelemetry.ParseRuns.Add(
