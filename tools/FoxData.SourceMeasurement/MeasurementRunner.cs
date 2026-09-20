@@ -783,6 +783,12 @@ internal static class MeasurementRunner
                 $"{summary.Attempts.UncertainExchangeCount} uncertain exchanges were observed.");
         }
 
+        if (summary.BodyErrorCounts.Count > 0)
+        {
+            warnings.Add(
+                $"Body read/limit errors were observed: {string.Join(", ", summary.BodyErrorCounts.Select(entry => $"{entry.Key}={entry.Value}"))}.");
+        }
+
         if (summary.PayloadDecode.MissingDecodedLengthCount > 0)
         {
             warnings.Add(
