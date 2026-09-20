@@ -1,6 +1,6 @@
 # M3 — Official War API Adapter
 
-Status: planned.
+Status: completed 2026-09-20. Completion record: [M3_COMPLETION.md](M3_COMPLETION.md).
 Planning date: 2026-09-20.
 Predecessor: [M2 Evidence Kernel](M2_COMPLETION.md).
 Successor: M4 source measurement.

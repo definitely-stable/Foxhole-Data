@@ -49,6 +49,8 @@ Primary documents:
 - M2_COMPLETION.md
 - M2_HARDENING_PLAN.md
 - M3_OFFICIAL_WAR_API_ADAPTER.md
+- M3_ACTIVATION.md
+- M3_COMPLETION.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:

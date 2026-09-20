@@ -38,7 +38,7 @@ External object storage is deliberately deferred until M4 measurements justify i
 
 ## M3 — official War API adapter
 
-Status: planned; next implementation milestone.
+Status: completed 2026-09-20. Completion record: [M3_COMPLETION.md](M3_COMPLETION.md).
 
 Detailed normative plan: [M3_OFFICIAL_WAR_API_ADAPTER.md](M3_OFFICIAL_WAR_API_ADAPTER.md).
 
@@ -79,6 +79,8 @@ Implementation slices:
 - M3-F controlled activation and completion.
 
 ## M4 — source measurement
+
+Status: next milestone.
 
 Run bounded 48–72 hour measurement.
 
