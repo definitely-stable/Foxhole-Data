@@ -85,14 +85,14 @@ public sealed class WarApiAttemptExecutor(
                 "War API request construction failed for endpoint {EndpointId}.",
                 job.EndpointId);
 
-            await ingestion.DeferBeforeExchangeAsync(
-                attemptId,
+            await DeferBeforeExchangeBestEffortAsync(
                 workerId,
-                job.LeaseGeneration,
-                timeProvider.GetUtcNow().AddMinutes(5),
+                attemptId,
+                job,
                 "war_api_request",
-                "request_construction_failed",
-                cancellationToken);
+                cancellationToken.IsCancellationRequested
+                    ? "request_cancelled"
+                    : "request_construction_failed");
             return;
         }
 
@@ -264,6 +264,10 @@ public sealed class WarApiAttemptExecutor(
         byte[]? body,
         FoxData.Core.Evidence.FetchId? priorFetchId)
     {
+        using var captureDeadline = new CancellationTokenSource(
+            TimeSpan.FromSeconds(10),
+            timeProvider);
+
         try
         {
             var captured = await evidence.CaptureSourceResponseAsync(
@@ -274,7 +278,7 @@ public sealed class WarApiAttemptExecutor(
                 observation,
                 body,
                 priorFetchId,
-                CancellationToken.None);
+                captureDeadline.Token);
 
             if (!captured.Captured &&
                 captured.Status is not CaptureStatus.AlreadyCaptured)
@@ -349,6 +353,37 @@ public sealed class WarApiAttemptExecutor(
             attemptNumber,
             "evidence_capture",
             "capture_uncertain");
+    }
+
+    private async Task DeferBeforeExchangeBestEffortAsync(
+        WorkerInstanceId workerId,
+        IngestionAttemptId attemptId,
+        CollectionJobDescriptor job,
+        string errorClass,
+        string errorCode)
+    {
+        using var cleanupDeadline = new CancellationTokenSource(
+            TimeSpan.FromSeconds(5),
+            timeProvider);
+
+        try
+        {
+            await ingestion.DeferBeforeExchangeAsync(
+                attemptId,
+                workerId,
+                job.LeaseGeneration,
+                timeProvider.GetUtcNow().AddMinutes(5),
+                errorClass,
+                errorCode,
+                cleanupDeadline.Token);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Could not persist pre-exchange deferral for attempt {AttemptId}; M2 lease expiry recovery remains authoritative.",
+                attemptId);
+        }
     }
 
     private async Task DeferUncertainBestEffortAsync(
