@@ -53,7 +53,7 @@ public sealed class PostgresIngestionRecoveryStore(NpgsqlDataSource dataSource) 
             SELECT id, endpoint_id, lease_generation
             FROM ingest.collection_jobs
             WHERE state IN ('leased', 'processing')
-              AND lease_expires_at <= transaction_timestamp()
+              AND lease_expires_at <= clock_timestamp()
             ORDER BY lease_expires_at, id
             FOR UPDATE SKIP LOCKED
             LIMIT @batch_size;
