@@ -21,7 +21,11 @@ public static class WarApiCapabilities
 
 public static class WarApiCatalog
 {
+    public const string SourceKey = "official-war-api";
     public const int MaximumMapNameLength = 128;
+
+    public static string GetEnvironment(WarApiShard shard) =>
+        shard == WarApiShard.Dev ? "dev" : "live";
 
     public static string GetShardKey(WarApiShard shard) =>
         shard switch
