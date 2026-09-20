@@ -4,6 +4,8 @@ Do not lock polling, retention or infrastructure decisions from intuition.
 
 ## 48–72 hour source measurement
 
+The normative campaign, metric definitions and acceptance gates are defined in [M4_SOURCE_MEASUREMENT.md](M4_SOURCE_MEASUREMENT.md).
+
 Capture:
 
 - active region count per shard;
