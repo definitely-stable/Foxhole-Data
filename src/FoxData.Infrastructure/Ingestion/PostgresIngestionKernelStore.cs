@@ -121,8 +121,31 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            cancellationToken);
+
+        var current = await GetJobForUpdateAsync(
+            connection,
+            transaction,
+            jobId,
+            cancellationToken);
+
+        if (!await IsCurrentLeaseOwnerAsync(
+                connection,
+                transaction,
+                current,
+                workerId,
+                leaseGeneration,
+                allowProcessing: true,
+                cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new LeaseRenewalResult(LeaseRenewalStatus.Lost, current);
+        }
 
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             $"""
             UPDATE ingest.collection_jobs
@@ -132,7 +155,6 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
               AND lease_owner_id = @worker_id
               AND lease_generation = @lease_generation
               AND state IN ('leased', 'processing')
-              AND lease_expires_at > clock_timestamp()
             RETURNING {JobColumns};
             """;
 
@@ -141,11 +163,13 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         AddBigint(command, "lease_generation", leaseGeneration.Value);
         AddInterval(command, "lease_duration", leaseDuration);
 
-        var renewed = await ReadJobAsync(command, cancellationToken);
+        var renewed = await ReadJobAsync(command, cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Locked lease renewal did not return the collection job.");
 
-        return renewed is null
-            ? new LeaseRenewalResult(LeaseRenewalStatus.Lost, null)
-            : new LeaseRenewalResult(LeaseRenewalStatus.Renewed, renewed);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new LeaseRenewalResult(LeaseRenewalStatus.Renewed, renewed);
     }
 
     public async Task<LeaseReleaseResult> ReleaseLeaseAsync(
@@ -155,22 +179,44 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            cancellationToken);
 
-        var current = await GetJobAsync(connection, jobId, cancellationToken);
+        var current = await GetJobForUpdateAsync(
+            connection,
+            transaction,
+            jobId,
+            cancellationToken);
+
         if (current is null ||
             current.LeaseOwnerId != workerId ||
             current.LeaseGeneration != leaseGeneration ||
             current.LeaseExpiresAt is null)
         {
+            await transaction.RollbackAsync(cancellationToken);
             return new LeaseReleaseResult(LeaseReleaseStatus.Lost, current);
         }
 
         if (current.State is not CollectionJobState.Leased)
         {
+            await transaction.RollbackAsync(cancellationToken);
             return new LeaseReleaseResult(LeaseReleaseStatus.InvalidState, current);
         }
 
+        var databaseNow = await GetDatabaseNowAsync(
+            connection,
+            transaction,
+            cancellationToken);
+
+        if (current.LeaseExpiresAt <= databaseNow)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new LeaseReleaseResult(LeaseReleaseStatus.Lost, current);
+        }
+
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             $"""
             UPDATE ingest.collection_jobs
@@ -182,7 +228,6 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
               AND lease_owner_id = @worker_id
               AND lease_generation = @lease_generation
               AND state = 'leased'
-              AND lease_expires_at > clock_timestamp()
             RETURNING {JobColumns};
             """;
 
@@ -190,11 +235,13 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         AddUuid(command, "worker_id", workerId.Value);
         AddBigint(command, "lease_generation", leaseGeneration.Value);
 
-        var released = await ReadJobAsync(command, cancellationToken);
+        var released = await ReadJobAsync(command, cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Locked lease release did not return the collection job.");
 
-        return released is null
-            ? new LeaseReleaseResult(LeaseReleaseStatus.Lost, null)
-            : new LeaseReleaseResult(LeaseReleaseStatus.Released, released);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new LeaseReleaseResult(LeaseReleaseStatus.Released, released);
     }
 
     public async Task<BeginAttemptResult> BeginAttemptAsync(
@@ -685,6 +732,30 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         LeaseGeneration leaseGeneration,
         CancellationToken cancellationToken)
     {
+        var current = await GetJobForUpdateAsync(
+            connection,
+            transaction,
+            jobId,
+            cancellationToken);
+
+        return await IsCurrentLeaseOwnerAsync(
+                connection,
+                transaction,
+                current,
+                workerId,
+                leaseGeneration,
+                allowProcessing: true,
+                cancellationToken)
+            ? current
+            : null;
+    }
+
+    private static async Task<CollectionJobDescriptor?> GetJobForUpdateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CollectionJobId jobId,
+        CancellationToken cancellationToken)
+    {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText =
@@ -692,17 +763,55 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             SELECT {JobColumns}
             FROM ingest.collection_jobs
             WHERE id = @job_id
-              AND lease_owner_id = @worker_id
-              AND lease_generation = @lease_generation
-              AND state IN ('leased', 'processing')
-              AND lease_expires_at > clock_timestamp()
             FOR UPDATE;
             """;
         AddUuid(command, "job_id", jobId.Value);
-        AddUuid(command, "worker_id", workerId.Value);
-        AddBigint(command, "lease_generation", leaseGeneration.Value);
 
         return await ReadJobAsync(command, cancellationToken);
+    }
+
+    private static async Task<bool> IsCurrentLeaseOwnerAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CollectionJobDescriptor? current,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        bool allowProcessing,
+        CancellationToken cancellationToken)
+    {
+        if (current is null ||
+            current.LeaseOwnerId != workerId ||
+            current.LeaseGeneration != leaseGeneration ||
+            current.LeaseExpiresAt is null ||
+            current.State is not CollectionJobState.Leased &&
+            !(allowProcessing && current.State is CollectionJobState.Processing))
+        {
+            return false;
+        }
+
+        var databaseNow = await GetDatabaseNowAsync(
+            connection,
+            transaction,
+            cancellationToken);
+
+        return current.LeaseExpiresAt > databaseNow;
+    }
+
+    private static async Task<DateTimeOffset> GetDatabaseNowAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT clock_timestamp();";
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+
+        return value is DateTimeOffset timestamp
+            ? timestamp
+            : throw new InvalidOperationException(
+                "PostgreSQL did not return clock_timestamp() as timestamptz.");
     }
 
     private static async Task<IngestionAttemptDescriptor?> GetAttemptAsync(
