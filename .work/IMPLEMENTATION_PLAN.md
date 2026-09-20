@@ -18,26 +18,11 @@ No runtime source ingestion yet.
 
 ## M1 — repository bootstrap
 
-Create:
+Detailed normative plan: [M1_REPOSITORY_BOOTSTRAP.md](M1_REPOSITORY_BOOTSTRAP.md).
 
-- FoxData.Core
-- FoxData.Application
-- FoxData.Infrastructure
-- FoxData.Sources.Abstractions
-- FoxData.Sources.WarApi
-- FoxData.Api
-- FoxData.Worker
-- FoxData.Cli
+Create the reproducible .NET 10 repository foundation, explicit project-reference graph, PostgreSQL/Testcontainers bootstrap, common hosting/OpenTelemetry defaults, API health surface, inert Worker/CLI processes, Docker/Compose bootstrap, MTP/xUnit v3 testing, contract tooling and supply-chain CI.
 
-Tests:
-
-- Unit
-- Integration
-- Contract
-- Source
-- Recovery
-
-Add PostgreSQL 18, OpenTelemetry, health endpoints, central package management and Testcontainers.
+M1 must not implement source polling, War API DTOs, evidence tables or canonical domain state.
 
 ## M2 — evidence kernel
 

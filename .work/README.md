@@ -44,6 +44,7 @@ Primary documents:
 - TESTING.md
 - OPERATIONS.md
 - PERFORMANCE_CAPACITY.md
+- M1_REPOSITORY_BOOTSTRAP.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
