@@ -16,7 +16,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: deploy/docker/Api.Dockerfile
+      dockerfile: deploy/docker/api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__FoxData: Host=postgres;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_dev
@@ -29,7 +29,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: deploy/docker/Worker.Dockerfile
+      dockerfile: deploy/docker/worker/Dockerfile
     environment:
       DOTNET_ENVIRONMENT: Development
       ConnectionStrings__FoxData: Host=postgres;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_dev

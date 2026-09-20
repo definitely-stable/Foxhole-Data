@@ -48,8 +48,10 @@ M1 MUST NOT implement:
 │  └─ ...
 ├─ .work/
 ├─ deploy/docker/
-│  ├─ Api.Dockerfile
-│  └─ Worker.Dockerfile
+│  ├─ api/
+│  │  └─ Dockerfile
+│  └─ worker/
+│     └─ Dockerfile
 ├─ src/
 │  ├─ FoxData.Core/
 │  ├─ FoxData.Application/
@@ -534,6 +536,8 @@ Do not add a command framework package until the real CLI surface justifies it.
 ## 22. Containers
 
 Build separate API and Worker images using multi-stage builds.
+
+Use standard Dockerfile names in per-service directories (`deploy/docker/api/Dockerfile` and `deploy/docker/worker/Dockerfile`). This keeps Docker tooling and Dependabot discovery deterministic without relying on custom Dockerfile-name support.
 
 Initial base lines:
 
