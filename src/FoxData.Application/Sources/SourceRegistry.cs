@@ -59,6 +59,14 @@ public sealed class SourceRegistry(ISourceRegistryStore store)
             cancellationToken);
     }
 
+    public Task<SourceDescriptor?> GetSourceAsync(
+        SourceId sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNonEmpty(sourceId.Value, nameof(sourceId));
+        return store.GetSourceAsync(sourceId, cancellationToken);
+    }
+
     public Task<ShardDescriptor?> GetShardByKeyAsync(
         SourceId sourceId,
         string key,
