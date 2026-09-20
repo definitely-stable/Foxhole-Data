@@ -662,6 +662,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var evidenceReader = new PostgresEndpointEvidenceReader(dataSource);
         var pollState = new PostgresEndpointPollStateStore(dataSource);
         var parseRuns = new PostgresSourceParseRunStore(dataSource);
+        var scheduleDecisions =
+            new PostgresSourceScheduleDecisionStore(dataSource);
 
         var source = await registry.RegisterSourceAsync(
             WarApiCatalog.SourceKey,
@@ -711,6 +713,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             evidenceReader,
             pollState,
             parseRuns,
+            scheduleDecisions,
             registry,
             ingestion,
             options,
@@ -726,6 +729,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             evidenceReader,
             pollState,
             parseRuns,
+            scheduleDecisions,
             executor,
             reconciler,
             transport,
@@ -860,6 +864,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         IEndpointEvidenceReader evidenceReader,
         IEndpointPollStateStore pollState,
         ISourceParseRunStore parseRuns,
+        ISourceScheduleDecisionStore scheduleDecisions,
         WarApiAttemptExecutor executor,
         WarApiReconciler reconciler,
         QueueTransport transport,
@@ -875,6 +880,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         public IEndpointEvidenceReader EvidenceReader { get; } = evidenceReader;
         public IEndpointPollStateStore PollState { get; } = pollState;
         public ISourceParseRunStore ParseRuns { get; } = parseRuns;
+        public ISourceScheduleDecisionStore ScheduleDecisions { get; } =
+            scheduleDecisions;
         public WarApiAttemptExecutor Executor { get; } = executor;
         public WarApiReconciler Reconciler { get; } = reconciler;
         public QueueTransport Transport { get; } = transport;
