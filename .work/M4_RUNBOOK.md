@@ -225,12 +225,19 @@ Then generate the reproducible report:
 dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   analyze   --run-id "$RUN_ID"   --start "$START"   --end "$END"   --output artifacts/m4/m4-2026-09-live   --observer-region "$REGION"   --repository-sha "$SHA"   --profile-version warapi-bootstrap-profile@1   --probe-shards live-1   --probe-max-maps 3   --probe-target-seconds 15
 ~~~
 
+Validate the frozen artifact set before M4-F publication work:
+
+~~~text
+dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   validate   --output artifacts/m4/m4-2026-09-live
+~~~
+
 Expected outputs:
 
 ~~~text
 measurement-manifest.json
 measurement-summary.json
 measurement-report.md
+measurement-validation.json
 storage-before.json
 storage-after.json
 ~~~
