@@ -591,6 +591,45 @@ jobs:
           test "$(jq -r '.observerRegion' m4-ci/checkpoint/campaign.json)" = "$EXPECTED_OBSERVER_REGION"
           test "$(jq -r '.endExclusive // empty' m4-ci/checkpoint/campaign.json)" != ""
 
+      - name: Verify complete active campaign ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ledger="m4-ci/checkpoint/segments.ndjson"
+          segment_count="$(wc -l < "$ledger" | tr -d '[:space:]')"
+          actual_segments="$(jq -r '.segment' "$ledger" | paste -sd, -)"
+          actual_phases="$(jq -r '.phase' "$ledger" | paste -sd, -)"
+          expected_segments="s01,s02,s03,s04,s05,s06,s07,s08,s09,s10,s11,s12,s13,s14,s15,s16,s17,s18"
+          expected_phases="baseline-live1,baseline-live1,probe-live1,probe-live1,live2,live2,live3,live3,live3,live3,live3,live3,live3,live3,live3,live3,live3,live3"
+
+          test "$segment_count" = "18"
+          test "$actual_segments" = "$expected_segments"
+          test "$actual_phases" = "$expected_phases"
+
+          active_seconds="$(
+            jq -s -r '
+              [
+                .[] |
+                ((.endExclusive | fromdateiso8601) -
+                 (.startInclusive | fromdateiso8601))
+              ] | add | floor
+            ' "$ledger"
+          )"
+
+          if (( active_seconds < 259200 )); then
+            echo "M4-E recorded only $active_seconds active seconds; 259200 are required." >&2
+            exit 1
+          fi
+
+          {
+            echo "### M4-E campaign ledger"
+            echo
+            echo "- Segments: $segment_count"
+            echo "- Active Worker seconds: $active_seconds"
+            echo "- Phase plan: 8h baseline Live-1 → 8h probe Live-1 → 8h Live-2 expansion → 48h Live-3 expansion"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate final M4 report
         shell: bash
         run: |
