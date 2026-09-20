@@ -1,6 +1,8 @@
+using FoxData.Application.Sources;
 using FoxData.Infrastructure.Configuration;
 using FoxData.Infrastructure.Health;
 using FoxData.Infrastructure.Persistence;
+using FoxData.Infrastructure.Sources;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +34,9 @@ public static class DependencyInjection
 
         services.AddDbContext<FoxDataDbContext>((serviceProvider, options) =>
             options.UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>()));
+
+        services.AddScoped<ISourceRegistryStore, PostgresSourceRegistryStore>();
+        services.AddScoped<SourceRegistry>();
 
         services.AddSingleton<PostgresHealthCheck>();
 

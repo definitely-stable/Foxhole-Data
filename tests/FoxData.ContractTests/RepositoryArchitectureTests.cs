@@ -46,10 +46,12 @@ public sealed class RepositoryArchitectureTests
     }
 
     [Fact]
-    public void CanonicalContractsArePresent()
+    public void CanonicalContractsAndGovernanceArePresent()
     {
         var root = FindRepositoryRoot();
 
+        Assert.True(File.Exists(Path.Combine(root, "AGENTS.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M2_EVIDENCE_KERNEL.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "public-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "compat-warapi-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "asyncapi", "events-v1.yaml")));
