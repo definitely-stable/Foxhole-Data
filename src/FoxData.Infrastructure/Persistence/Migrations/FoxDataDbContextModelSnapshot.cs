@@ -662,6 +662,14 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("representation_fetch_id");
 
+                    b.Property<long?>("SourceLastUpdated")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_last_updated");
+
+                    b.Property<long?>("SourceVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_version");
+
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
