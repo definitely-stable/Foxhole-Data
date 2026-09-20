@@ -18,11 +18,11 @@ public sealed class WarApiMeasurementAnalyzerTests
 
         var samples = new[]
         {
-            Sample(start, 200, "A", 100, ""a"", 10, version: 10),
-            Sample(start.AddSeconds(60), 304, null, null, ""a"", 5),
-            Sample(start.AddSeconds(120), 200, "A", 100, ""b"", 20, version: 10),
-            Sample(start.AddSeconds(180), 200, "B", 200, ""b"", 30, version: 13),
-            Sample(start.AddSeconds(240), 200, "C", 300, ""c"", 40, version: 12),
+            Sample(start, 200, "A", 100, "etag-a", 10, version: 10),
+            Sample(start.AddSeconds(60), 304, null, null, "etag-a", 5),
+            Sample(start.AddSeconds(120), 200, "A", 100, "etag-b", 20, version: 10),
+            Sample(start.AddSeconds(180), 200, "B", 200, "etag-b", 30, version: 13),
+            Sample(start.AddSeconds(240), 200, "C", 300, "etag-c", 40, version: 12),
             Sample(start.AddSeconds(300), 500, null, null, null, 50),
         };
 
@@ -64,23 +64,23 @@ public sealed class WarApiMeasurementAnalyzerTests
 
         var samples = new[]
         {
-            Sample(start.AddSeconds(120), 304, null, null, ""a"", 10),
-            Sample(start, 200, "A", 100, ""a"", 10, version: 1),
-            Sample(start.AddSeconds(60), 304, null, null, ""a"", 10),
+            Sample(start.AddSeconds(120), 304, null, null, "etag-a", 10),
+            Sample(start, 200, "A", 100, "etag-a", 10, version: 1),
+            Sample(start.AddSeconds(60), 304, null, null, "etag-a", 10),
         };
 
         var summary = WarApiMeasurementAnalyzer.AnalyzeEndpoint(samples);
 
-        Assert.Equal(60, summary.PollIntervalP50Seconds);
-        Assert.Equal(60, summary.PollIntervalP95Seconds);
-        Assert.Equal(60, summary.PollIntervalP99Seconds);
+        Assert.Equal(60d, summary.PollIntervalP50Seconds!.Value);
+        Assert.Equal(60d, summary.PollIntervalP95Seconds!.Value);
+        Assert.Equal(60d, summary.PollIntervalP99Seconds!.Value);
     }
 
     [Fact]
     public void AnalyzerRejectsMixedEndpoints()
     {
         var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
-        var first = Sample(start, 200, "A", 100, ""a"", 10);
+        var first = Sample(start, 200, "A", 100, "etag-a", 10);
         var second = first with
         {
             EndpointKey = "map-dynamic/MarbanHollow",
@@ -99,13 +99,13 @@ public sealed class WarApiMeasurementAnalyzerTests
         Assert.Throws<ArgumentException>(
             () => WarApiMeasurementAnalyzer.AnalyzeEndpoint(
             [
-                Sample(start, 200, "A", 100, ""a"", -1),
+                Sample(start, 200, "A", 100, "etag-a", -1),
             ]));
 
         Assert.Throws<ArgumentException>(
             () => WarApiMeasurementAnalyzer.AnalyzeEndpoint(
             [
-                Sample(start, 200, "A", -1, ""a"", 10),
+                Sample(start, 200, "A", -1, "etag-a", 10),
             ]));
     }
 
