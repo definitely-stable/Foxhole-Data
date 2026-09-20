@@ -215,7 +215,9 @@ public sealed class WarApiAttemptExecutor(
                 fenceToken,
                 begun.Attempt!.AttemptNumber,
                 observation,
-                response.Body,
+                response.Body is null
+                    ? (ReadOnlyMemory<byte>?)null
+                    : response.Body,
                 priorFetchId);
         }
     }
