@@ -61,7 +61,8 @@ public enum CaptureStatus
 public sealed record CaptureResult(
     CaptureStatus Status,
     FetchDescriptor? Fetch,
-    PayloadDescriptor? Payload)
+    PayloadDescriptor? Payload,
+    bool PayloadDeduplicated = false)
 {
     public bool Captured =>
         Status is CaptureStatus.CapturedCurrent or CaptureStatus.CapturedLate;
