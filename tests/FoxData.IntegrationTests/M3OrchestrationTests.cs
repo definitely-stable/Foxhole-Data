@@ -144,6 +144,162 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Orphan304ClearsValidatorAndNextRequestIsUnconditional()
+    {
+        await using var fixture = await CreateFixtureAsync("orphan-304");
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.NotModified,
+                body: null,
+                "\"orphan\"",
+                "max-age=60"));
+
+        var firstJob = await fixture.EnqueueAndClaimAsync(
+            fixture.WarEndpoint.Id,
+            "test:orphan-304");
+
+        await fixture.Executor.ExecuteAsync(
+            firstJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var firstSnapshot = await fixture.EvidenceReader.GetCurrentAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+        var poll = await fixture.PollState.GetAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(firstSnapshot);
+        Assert.Null(firstSnapshot.RepresentationFetch);
+        Assert.NotNull(poll);
+        Assert.Null(poll.RepresentationFetchId);
+        Assert.Null(poll.ValidatorEtag);
+        Assert.Equal(1, poll.ConsecutiveFailures);
+
+        await fixture.MakeSuccessorAvailableAsync(
+            firstSnapshot.CurrentFetch.Id);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddMinutes(1),
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """{"warId":"war-129","warNumber":129,"winner":"NONE"}"""),
+                "\"fresh\"",
+                "max-age=60"));
+
+        var secondClaim = await fixture.Ingestion.ClaimNextForSourceAsync(
+            fixture.WorkerId,
+            WarApiCatalog.SourceKey,
+            TimeSpan.FromMinutes(2),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(secondClaim.Claimed);
+
+        await fixture.Executor.ExecuteAsync(
+            secondClaim.Job!,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, fixture.Transport.SendCount);
+        Assert.Null(fixture.Transport.Requests[1].IfNoneMatch);
+    }
+
+    [Fact]
+    public async Task ExistingSuccessorBeforePollStateIsReconciledAfterCrash()
+    {
+        await using var fixture = await CreateFixtureAsync("successor-replay");
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """{"warId":"war-129","warNumber":129,"winner":"NONE"}"""),
+                "\"war-v1\"",
+                "max-age=60"));
+
+        var job = await fixture.EnqueueAndClaimAsync(
+            fixture.WarEndpoint.Id,
+            "test:successor-replay");
+
+        await fixture.Executor.ExecuteAsync(
+            job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+
+        var snapshot = await fixture.EvidenceReader.GetCurrentAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(snapshot);
+        Assert.Null(await fixture.PollState.GetAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken));
+
+        var successorAt = snapshot.CurrentFetch.RetrievedAt.AddMinutes(1);
+        var precreated = await fixture.Ingestion.EnqueueAsync(
+            fixture.WarEndpoint.Id,
+            $"after-fetch:{snapshot.CurrentFetch.Id}",
+            snapshot.CurrentFetch.RetrievedAt,
+            successorAt,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(JobEnqueueStatus.Created, precreated.Status);
+
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var poll = await fixture.PollState.GetAsync(
+            fixture.WarEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(snapshot.CurrentFetch.Id, poll!.LastProcessedFetchId);
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                $"after-fetch:{snapshot.CurrentFetch.Id}"));
+    }
+
+    [Fact]
+    public async Task TransportFailureAfterAuthorizationBecomesUncertainAfterOneSend()
+    {
+        await using var fixture = await CreateFixtureAsync("transport-uncertain");
+
+        fixture.Transport.EnqueueFailure(
+            new HttpRequestException("synthetic connection failure"));
+
+        var job = await fixture.EnqueueAndClaimAsync(
+            fixture.WarEndpoint.Id,
+            "test:transport-uncertain");
+
+        await fixture.Executor.ExecuteAsync(
+            job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, fixture.Transport.SendCount);
+        Assert.Equal(0L, await fixture.CountFetchesForJobAsync(job.Id));
+
+        var attempt = await fixture.ReadLatestAttemptAsync(job.Id);
+        var storedJob = await fixture.Ingestion.GetJobAsync(
+            job.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(IngestionAttemptState.Uncertain, attempt.State);
+        Assert.Equal("uncertain_exchange", attempt.OutcomeCode);
+        Assert.Equal(CollectionJobState.Pending, storedJob!.State);
+        Assert.Null(storedJob.LeaseOwnerId);
+    }
+
+    [Fact]
     public async Task BodyErrorIsDurableButNeverBecomesReusableRepresentation()
     {
         await using var fixture = await CreateFixtureAsync("body-error");
@@ -422,14 +578,17 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
     private sealed class QueueTransport : IWarApiTransport
     {
-        private readonly Queue<WarApiHttpExchangeResult> _responses = new();
+        private readonly Queue<Func<WarApiHttpExchangeResult>> _outcomes = new();
 
         public List<RecordedRequest> Requests { get; } = [];
 
         public int SendCount => Requests.Count;
 
         public void Enqueue(WarApiHttpExchangeResult response) =>
-            _responses.Enqueue(response);
+            _outcomes.Enqueue(() => response);
+
+        public void EnqueueFailure(Exception exception) =>
+            _outcomes.Enqueue(() => throw exception);
 
         public Task<WarApiHttpExchangeResult> SendAsync(
             HttpRequestMessage request,
@@ -442,12 +601,12 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                     request.RequestUri!,
                     request.Headers.IfNoneMatch.SingleOrDefault()?.ToString()));
 
-            if (!_responses.TryDequeue(out var response))
+            if (!_outcomes.TryDequeue(out var outcome))
             {
-                throw new InvalidOperationException("No fake War API response is queued.");
+                throw new InvalidOperationException("No fake War API outcome is queued.");
             }
 
-            return Task.FromResult(response);
+            return Task.FromResult(outcome());
         }
     }
 
@@ -524,6 +683,61 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             Assert.Equal(
                 1,
                 await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        }
+
+        public async Task<long> CountJobsByKeyAsync(string key)
+        {
+            await using var command = DataSource.CreateCommand(
+                """
+                SELECT COUNT(*)
+                FROM ingest.collection_jobs
+                WHERE idempotency_key = @key;
+                """);
+            command.Parameters.AddWithValue("key", key);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
+        public async Task<long> CountFetchesForJobAsync(CollectionJobId jobId)
+        {
+            await using var command = DataSource.CreateCommand(
+                """
+                SELECT COUNT(*)
+                FROM evidence.fetches AS fetch
+                INNER JOIN ingest.attempts AS attempt
+                    ON attempt.id = fetch.attempt_id
+                WHERE attempt.job_id = @job_id;
+                """);
+            command.Parameters.AddWithValue("job_id", jobId.Value);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
+        public async Task<IngestionAttemptDescriptor> ReadLatestAttemptAsync(
+            CollectionJobId jobId)
+        {
+            await using var command = DataSource.CreateCommand(
+                """
+                SELECT id
+                FROM ingest.attempts
+                WHERE job_id = @job_id
+                ORDER BY attempt_number DESC
+                LIMIT 1;
+                """);
+            command.Parameters.AddWithValue("job_id", jobId.Value);
+
+            var value = await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken);
+            var attemptId = value is Guid guid
+                ? new IngestionAttemptId(guid)
+                : throw new InvalidOperationException("Job has no attempt.");
+
+            return await Ingestion.GetAttemptAsync(
+                attemptId,
+                TestContext.Current.CancellationToken)
+                ?? throw new InvalidOperationException("Attempt disappeared.");
         }
 
         public async Task<long> CountPayloadsAsync()
