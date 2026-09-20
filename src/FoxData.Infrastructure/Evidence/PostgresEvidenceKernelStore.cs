@@ -35,6 +35,8 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         FetchId? priorFetchId,
         CancellationToken cancellationToken)
     {
+        ValidatePayloadIdentity(proposedPayloadId, payloadHash, body);
+
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         var existing = await GetFetchByAttemptAsync(connection, transaction: null, attemptId, cancellationToken);
@@ -270,6 +272,36 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             transaction: null,
             payloadId,
             cancellationToken);
+    }
+
+    private static void ValidatePayloadIdentity(
+        PayloadId? proposedPayloadId,
+        PayloadHash? payloadHash,
+        ReadOnlyMemory<byte>? body)
+    {
+        if (body is null)
+        {
+            if (payloadHash is not null || proposedPayloadId is not null)
+            {
+                throw new EvidenceIntegrityException(
+                    "No-body capture must not carry payload identity.");
+            }
+
+            return;
+        }
+
+        if (payloadHash is null || proposedPayloadId is null)
+        {
+            throw new EvidenceIntegrityException(
+                "Body capture requires both a payload hash and proposed PayloadId.");
+        }
+
+        var computed = PayloadHash.Compute(body.Value.Span);
+        if (computed != payloadHash.Value)
+        {
+            throw new EvidenceIntegrityException(
+                "Supplied payload SHA-256 does not match the exact payload bytes.");
+        }
     }
 
     private static async Task<CaptureResult> BuildAlreadyCapturedResultAsync(
