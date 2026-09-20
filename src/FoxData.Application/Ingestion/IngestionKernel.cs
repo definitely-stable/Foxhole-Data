@@ -18,7 +18,10 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
         EnsureNonEmpty(endpointId.Value, nameof(endpointId));
         ValidateIdempotencyKey(idempotencyKey);
 
-        if (availableAt < scheduledFor)
+        var normalizedScheduledFor = NormalizeTimestamp(scheduledFor);
+        var normalizedAvailableAt = NormalizeTimestamp(availableAt);
+
+        if (normalizedAvailableAt < normalizedScheduledFor)
         {
             throw new ArgumentException(
                 "AvailableAt must not be earlier than ScheduledFor.",
@@ -29,8 +32,8 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
             CollectionJobId.New(),
             endpointId,
             idempotencyKey,
-            scheduledFor,
-            availableAt,
+            normalizedScheduledFor,
+            normalizedAvailableAt,
             priority,
             cancellationToken);
     }
@@ -151,6 +154,15 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
     {
         EnsureNonEmpty(attemptId.Value, nameof(attemptId));
         return store.GetAttemptAsync(attemptId, cancellationToken);
+    }
+
+    private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
+    {
+        const long ticksPerMicrosecond = 10;
+        var utc = value.ToUniversalTime();
+        var normalizedTicks = utc.Ticks - (utc.Ticks % ticksPerMicrosecond);
+
+        return new DateTimeOffset(normalizedTicks, TimeSpan.Zero);
     }
 
     private static void ValidateIdempotencyKey(string value)

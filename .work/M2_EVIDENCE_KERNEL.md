@@ -1108,11 +1108,15 @@ Register/read Source, Shard and Endpoint with idempotent semantics.
 
 ### M2.3 — Durable queue and leases
 
-Enqueue, SKIP LOCKED claim, renew, release/complete and lease generation.
+Enqueue, SKIP LOCKED claim, renew, safe lease release and lease generation.
+
+Successful job completion is deliberately coupled to the M2-C raw-capture boundary: a job MUST NOT become completed before durable evidence exists.
 
 ### M2.4 — Attempts and endpoint fencing
 
-BeginAttempt, endpoint_state, monotonic fence, transition validator and exchange authorization.
+BeginAttempt, endpoint_state, monotonic fence, transition validator and one-way exchange authorization.
+
+AttemptId is caller-generated before BeginAttempt. Concurrent/retried BeginAttempt calls with the same AttemptId converge to the same durable attempt. Only an `AuthorizedNow` result grants permission to perform the attempt's single external exchange; `AlreadyAuthorized` is observation-only and MUST NOT trigger another exchange.
 
 ### M2.5 — Inline evidence payloads
 

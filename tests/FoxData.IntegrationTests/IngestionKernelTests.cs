@@ -15,7 +15,7 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     [Fact]
     public async Task EnqueueIsIdempotentAndRejectsConflictingDefinition()
     {
-        var fixture = await CreateKernelFixtureAsync("enqueue");
+        await using var fixture = await CreateKernelFixtureAsync("enqueue");
 
         var scheduledFor = DateTimeOffset.UtcNow.AddMinutes(-1);
         var availableAt = scheduledFor;
@@ -54,7 +54,7 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     [Fact]
     public async Task ConcurrentClaimersClaimEachAvailableJobOnce()
     {
-        var fixture = await CreateKernelFixtureAsync("claim");
+        await using var fixture = await CreateKernelFixtureAsync("claim");
         const int jobCount = 32;
         const int workerCount = 8;
 
@@ -107,7 +107,7 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     [Fact]
     public async Task StaleWorkerCannotRenewOrReleaseAndReclaimAdvancesGeneration()
     {
-        var fixture = await CreateKernelFixtureAsync("lease");
+        await using var fixture = await CreateKernelFixtureAsync("lease");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
 
         var queued = await fixture.Kernel.EnqueueAsync(
@@ -174,7 +174,7 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     [Fact]
     public async Task BeginAttemptAndFenceAreIdempotentAndAuthorizationIsOneWay()
     {
-        var fixture = await CreateKernelFixtureAsync("attempt");
+        await using var fixture = await CreateKernelFixtureAsync("attempt");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
 
         await fixture.Kernel.EnqueueAsync(
@@ -248,7 +248,7 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     [Fact]
     public async Task NewerFenceMakesOlderAttemptStale()
     {
-        var fixture = await CreateKernelFixtureAsync("stale-fence");
+        await using var fixture = await CreateKernelFixtureAsync("stale-fence");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
 
         await fixture.Kernel.EnqueueAsync(

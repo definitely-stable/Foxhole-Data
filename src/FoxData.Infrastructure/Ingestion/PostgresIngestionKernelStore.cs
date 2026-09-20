@@ -240,6 +240,23 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             return new BeginAttemptResult(BeginAttemptStatus.LeaseLost, null);
         }
 
+        existing = await GetAttemptAsync(
+            connection,
+            transaction,
+            attemptId,
+            forUpdate: false,
+            cancellationToken);
+
+        if (existing is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+
+            return existing.JobId == jobId
+                ? new BeginAttemptResult(BeginAttemptStatus.Existing, existing)
+                : throw new InvalidOperationException(
+                    "Attempt identifier already exists for a different job.");
+        }
+
         await using (var active = connection.CreateCommand())
         {
             active.Transaction = transaction;
