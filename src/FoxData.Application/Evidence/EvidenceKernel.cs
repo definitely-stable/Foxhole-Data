@@ -1,12 +1,30 @@
+using System.Diagnostics;
+using FoxData.Application.Diagnostics;
 using FoxData.Core.Evidence;
 using FoxData.Core.Ingestion;
 using FoxData.Core.Sources;
 
 namespace FoxData.Application.Evidence;
 
-public sealed class EvidenceKernel(IEvidenceKernelStore store)
+public sealed class EvidenceKernel
 {
-    public Task<CaptureResult> CaptureSourceResponseAsync(
+    private readonly IEvidenceKernelStore _store;
+    private readonly EvidenceKernelLimits _limits;
+
+    public EvidenceKernel(IEvidenceKernelStore store)
+        : this(store, new EvidenceKernelLimits())
+    {
+    }
+
+    public EvidenceKernel(
+        IEvidenceKernelStore store,
+        EvidenceKernelLimits limits)
+    {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _limits = limits ?? throw new ArgumentNullException(nameof(limits));
+    }
+
+    public async Task<CaptureResult> CaptureSourceResponseAsync(
         IngestionAttemptId attemptId,
         EndpointId endpointId,
         LeaseGeneration expectedLeaseGeneration,
@@ -55,24 +73,77 @@ public sealed class EvidenceKernel(IEvidenceKernelStore store)
 
         if (body is { } suppliedBody)
         {
+            if (suppliedBody.Length > _limits.MaxPayloadBytes)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(body),
+                    suppliedBody.Length,
+                    $"Payload exceeds the configured Evidence Kernel limit of {_limits.MaxPayloadBytes} bytes.");
+            }
+
             var copy = suppliedBody.ToArray();
             stableBody = copy;
             payloadHash = PayloadHash.Compute(copy);
             proposedPayloadId = PayloadId.New();
         }
 
-        return store.CaptureSourceResponseAsync(
-            FetchId.New(),
-            proposedPayloadId,
-            attemptId,
-            endpointId,
-            expectedLeaseGeneration,
-            expectedFenceToken,
-            normalizedObservation,
-            payloadHash,
-            stableBody,
-            priorFetchId,
-            cancellationToken);
+        using var activity = KernelTelemetry.ActivitySource.StartActivity("evidence.capture");
+        activity?.SetTag("foxdata.attempt.id", attemptId.ToString());
+        activity?.SetTag("foxdata.endpoint.id", endpointId.ToString());
+        activity?.SetTag("foxdata.lease.generation", expectedLeaseGeneration.Value);
+        activity?.SetTag("foxdata.fence.token", expectedFenceToken.Value);
+
+        var startedAt = Stopwatch.GetTimestamp();
+
+        try
+        {
+            var result = await _store.CaptureSourceResponseAsync(
+                FetchId.New(),
+                proposedPayloadId,
+                attemptId,
+                endpointId,
+                expectedLeaseGeneration,
+                expectedFenceToken,
+                normalizedObservation,
+                payloadHash,
+                stableBody,
+                priorFetchId,
+                cancellationToken);
+
+            var outcome = ToMetricOutcome(result.Status);
+            var outcomeTag = new KeyValuePair<string, object?>("outcome", outcome);
+
+            KernelTelemetry.CaptureDuration.Record(
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                outcomeTag);
+
+            if (result.Captured)
+            {
+                KernelTelemetry.FetchesCaptured.Add(1, outcomeTag);
+
+                if (stableBody is { } capturedBody)
+                {
+                    KernelTelemetry.PayloadBytes.Add(capturedBody.Length, outcomeTag);
+                }
+
+                if (result.PayloadDeduplicated)
+                {
+                    KernelTelemetry.PayloadDedupeHits.Add(1);
+                }
+            }
+
+            activity?.SetTag("foxdata.capture.outcome", outcome);
+
+            return result;
+        }
+        catch
+        {
+            KernelTelemetry.CaptureDuration.Record(
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                new KeyValuePair<string, object?>("outcome", "error"));
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw;
+        }
     }
 
     public Task<FetchDescriptor?> GetAttemptEvidenceAsync(
@@ -80,7 +151,7 @@ public sealed class EvidenceKernel(IEvidenceKernelStore store)
         CancellationToken cancellationToken = default)
     {
         EnsureNonEmpty(attemptId.Value, nameof(attemptId));
-        return store.GetFetchByAttemptAsync(attemptId, cancellationToken);
+        return _store.GetFetchByAttemptAsync(attemptId, cancellationToken);
     }
 
     public Task<FetchDescriptor?> GetFetchAsync(
@@ -88,7 +159,7 @@ public sealed class EvidenceKernel(IEvidenceKernelStore store)
         CancellationToken cancellationToken = default)
     {
         EnsureNonEmpty(fetchId.Value, nameof(fetchId));
-        return store.GetFetchAsync(fetchId, cancellationToken);
+        return _store.GetFetchAsync(fetchId, cancellationToken);
     }
 
     public Task<PayloadDescriptor?> GetPayloadAsync(
@@ -96,7 +167,7 @@ public sealed class EvidenceKernel(IEvidenceKernelStore store)
         CancellationToken cancellationToken = default)
     {
         EnsureNonEmpty(payloadId.Value, nameof(payloadId));
-        return store.GetPayloadAsync(payloadId, cancellationToken);
+        return _store.GetPayloadAsync(payloadId, cancellationToken);
     }
 
     private static SourceResponseObservation NormalizeObservation(SourceResponseObservation value)
@@ -182,6 +253,21 @@ public sealed class EvidenceKernel(IEvidenceKernelStore store)
 
         return new DateTimeOffset(normalizedTicks, TimeSpan.Zero);
     }
+
+    private static string ToMetricOutcome(CaptureStatus status) =>
+        status switch
+        {
+            CaptureStatus.CapturedCurrent => "current",
+            CaptureStatus.CapturedLate => "late",
+            CaptureStatus.AlreadyCaptured => "already_captured",
+            CaptureStatus.InvalidAttempt => "invalid_attempt",
+            CaptureStatus.InvalidState => "invalid_state",
+            CaptureStatus.EndpointMismatch => "endpoint_mismatch",
+            CaptureStatus.LeaseGenerationMismatch => "lease_generation_mismatch",
+            CaptureStatus.FenceMismatch => "fence_mismatch",
+            CaptureStatus.InvalidPriorFetch => "invalid_prior_fetch",
+            _ => "unknown",
+        };
 
     private static void ValidateOptionalLength(string? value, int maximum, string parameterName)
     {

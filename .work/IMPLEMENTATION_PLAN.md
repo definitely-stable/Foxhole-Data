@@ -18,6 +18,8 @@ No runtime source ingestion yet.
 
 ## M1 — repository bootstrap
 
+Status: completed.
+
 Detailed normative plan: [M1_REPOSITORY_BOOTSTRAP.md](M1_REPOSITORY_BOOTSTRAP.md).
 
 Create the reproducible .NET 10 repository foundation, explicit project-reference graph, PostgreSQL/Testcontainers bootstrap, common hosting/OpenTelemetry defaults, API health surface, inert Worker/CLI processes, Docker/Compose bootstrap, MTP/xUnit v3 testing, contract tooling and supply-chain CI.
@@ -26,6 +28,8 @@ M1 must not implement source polling, War API DTOs, evidence tables or canonical
 
 ## M2 — evidence kernel
 
+Status: completed 2026-09-20. Completion record: [M2_COMPLETION.md](M2_COMPLETION.md).
+
 Detailed normative plan: [M2_EVIDENCE_KERNEL.md](M2_EVIDENCE_KERNEL.md).
 
 Implement source/shard/endpoint registry, durable queue, database-time leases, attempt lifecycle, endpoint fencing, one-way exchange authorization, immutable fetch evidence, SHA-256 payload identity, PostgreSQL-inline bytea raw storage, raw-capture transactions and crash/unknown-outcome recovery.
@@ -33,6 +37,8 @@ Implement source/shard/endpoint registry, durable queue, database-time leases, a
 External object storage is deliberately deferred until M4 measurements justify it.
 
 ## M3 — official War API adapter
+
+Status: next milestone.
 
 Implement all documented endpoints:
 

@@ -1,4 +1,5 @@
 using FoxData.Application.Evidence;
+using FoxData.Application.Ingestion;
 using FoxData.Core.Evidence;
 using FoxData.Core.Ingestion;
 using FoxData.Core.Sources;
@@ -64,6 +65,55 @@ public sealed class EvidenceKernelValidationTests
                     1),
                 body: null,
                 cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task PayloadLimitRejectsOversizedBodyBeforeStoreInvocation()
+    {
+        var kernel = new EvidenceKernel(
+            new ThrowingStore(),
+            new EvidenceKernelLimits(maxPayloadBytes: 2));
+        var now = DateTimeOffset.UtcNow;
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => kernel.CaptureSourceResponseAsync(
+                IngestionAttemptId.New(),
+                EndpointId.New(),
+                new LeaseGeneration(1),
+                new FenceToken(1),
+                new SourceResponseObservation(
+                    now,
+                    now,
+                    now,
+                    "fixture",
+                    200,
+                    "application/octet-stream",
+                    null,
+                    3,
+                    null,
+                    null,
+                    null,
+                    1),
+                new byte[] { 1, 2, 3 },
+                cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(EvidenceKernelLimits.MaximumMaxPayloadBytes + 1)]
+    public void EvidenceKernelLimitsRejectInvalidBounds(long value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new EvidenceKernelLimits(value));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(IngestionRecoveryLimits.MaximumBatchSize + 1)]
+    public void RecoveryLimitsRejectInvalidBounds(int value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new IngestionRecoveryLimits(value));
     }
 
     private sealed class ThrowingStore : IEvidenceKernelStore

@@ -127,6 +127,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         }
 
         PayloadDescriptor? payload = null;
+        var payloadDeduplicated = false;
         if (body is not null)
         {
             if (payloadHash is null || proposedPayloadId is null)
@@ -135,13 +136,15 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
                     "Body capture requires both a payload hash and proposed PayloadId.");
             }
 
-            payload = await InsertOrReusePayloadAsync(
+            var payloadWrite = await InsertOrReusePayloadAsync(
                 connection,
                 transaction,
                 proposedPayloadId.Value,
                 payloadHash.Value,
                 body.Value,
                 cancellationToken);
+            payload = payloadWrite.Payload;
+            payloadDeduplicated = payloadWrite.Deduplicated;
         }
         else if (payloadHash is not null || proposedPayloadId is not null)
         {
@@ -207,7 +210,8 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         return new CaptureResult(
             authoritative ? CaptureStatus.CapturedCurrent : CaptureStatus.CapturedLate,
             fetch,
-            payload);
+            payload,
+            payloadDeduplicated);
     }
 
     public async Task<FetchDescriptor?> GetFetchByAttemptAsync(
@@ -290,7 +294,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         return new CaptureResult(CaptureStatus.AlreadyCaptured, existing, payload);
     }
 
-    private static async Task<PayloadDescriptor> InsertOrReusePayloadAsync(
+    private static async Task<PayloadWriteResult> InsertOrReusePayloadAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         PayloadId proposedPayloadId,
@@ -317,7 +321,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             var inserted = await ReadPayloadAsync(insert, cancellationToken);
             if (inserted is not null)
             {
-                return inserted;
+                return new PayloadWriteResult(inserted, Deduplicated: false);
             }
         }
 
@@ -342,7 +346,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
                 $"SHA-256 collision or storage corruption detected for payload hash {hash}.");
         }
 
-        return existing;
+        return new PayloadWriteResult(existing, Deduplicated: true);
     }
 
     private static async Task<FetchDescriptor> InsertFetchAsync(
@@ -754,6 +758,10 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         DateTimeOffset? value) =>
         command.Parameters.Add(name, NpgsqlDbType.TimestampTz).Value =
             value is null ? DBNull.Value : value.Value;
+
+    private sealed record PayloadWriteResult(
+        PayloadDescriptor Payload,
+        bool Deduplicated);
 
     private sealed record AttemptContext(
         CollectionJobId JobId,

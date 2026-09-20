@@ -94,6 +94,8 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
 
         Assert.Equal(CaptureStatus.CapturedCurrent, firstCapture.Status);
         Assert.Equal(CaptureStatus.CapturedCurrent, secondCapture.Status);
+        Assert.False(firstCapture.PayloadDeduplicated);
+        Assert.True(secondCapture.PayloadDeduplicated);
         Assert.Equal(firstCapture.Payload!.Id, secondCapture.Payload!.Id);
         Assert.NotEqual(firstCapture.Fetch!.Id, secondCapture.Fetch!.Id);
 

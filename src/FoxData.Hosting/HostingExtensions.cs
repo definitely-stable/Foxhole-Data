@@ -26,10 +26,12 @@ public static class HostingExtensions
                 resource.AddService(serviceName: serviceName, serviceVersion: serviceVersion))
             .WithTracing(tracing =>
                 tracing
+                    .AddSource("FoxData.EvidenceKernel")
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter())
             .WithMetrics(metrics =>
                 metrics
+                    .AddMeter("FoxData.EvidenceKernel")
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
                     .AddOtlpExporter());
