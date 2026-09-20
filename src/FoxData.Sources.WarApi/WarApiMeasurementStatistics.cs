@@ -21,6 +21,7 @@ public sealed record WarApiParseMeasurementSummary(
     int ParsedWithUnknownsCount,
     int FailedCount,
     int StructuralFingerprintChangeCount,
+    int SourceVersionAdvanceCount,
     long SourceVersionGapCount,
     int SourceVersionRegressionCount,
     int SourceLastUpdatedRegressionCount,
@@ -62,6 +63,7 @@ public static class WarApiMeasurementStatistics
         var parsedWithUnknownsCount = 0;
         var failedCount = 0;
         var fingerprintChanges = 0;
+        var sourceVersionAdvances = 0;
         long sourceVersionGaps = 0;
         var sourceVersionRegressions = 0;
         var sourceLastUpdatedRegressions = 0;
@@ -131,8 +133,9 @@ public static class WarApiMeasurementStatistics
                     {
                         sourceVersionRegressions++;
                     }
-                    else
+                    else if (sourceVersion > previousVersion)
                     {
+                        sourceVersionAdvances++;
                         sourceVersionGaps = SaturatingAdd(
                             sourceVersionGaps,
                             MissingVersions(
@@ -164,6 +167,7 @@ public static class WarApiMeasurementStatistics
             parsedWithUnknownsCount,
             failedCount,
             fingerprintChanges,
+            sourceVersionAdvances,
             sourceVersionGaps,
             sourceVersionRegressions,
             sourceLastUpdatedRegressions,
