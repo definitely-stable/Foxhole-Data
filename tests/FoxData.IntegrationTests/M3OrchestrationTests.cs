@@ -497,7 +497,160 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 "discover@1:map-dynamic/DeadLandsHex"));
     }
 
-    private async Task<Fixture> CreateFixtureAsync(string scenario)
+    [Fact]
+    public async Task M4ProbeAcceleratesSelectedMapButCacheStillControlsSuccessor()
+    {
+        var probe = new WarApiMeasurementProbeProfile(
+            Enabled: true,
+            RunId: "m4-probe-integration",
+            MaxMapsPerShard: 1,
+            TargetCadence: TimeSpan.FromSeconds(15));
+        await using var fixture = await CreateFixtureAsync(
+            "m4-probe",
+            probe);
+
+        var activeMaps = new[]
+        {
+            "DeadLandsHex",
+            "MarbanHollow",
+        };
+        var selectedMap = Assert.Single(
+            WarApiMeasurementProbePolicy.SelectMaps(
+                probe,
+                fixture.Shard.Key,
+                activeMaps));
+        var otherMap = activeMaps.Single(
+            mapName => !string.Equals(
+                mapName,
+                selectedMap,
+                StringComparison.Ordinal));
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """["DeadLandsHex","MarbanHollow"]"""),
+                ""maps-probe"",
+                "max-age=300"));
+
+        var mapsJob = await fixture.EnqueueAndClaimAsync(
+            fixture.MapsEndpoint.Id,
+            "test:m4-probe-maps");
+        await fixture.Executor.ExecuteAsync(
+            mapsJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var selectedEndpoint =
+            await fixture.Registry.GetEndpointBySemanticKeyAsync(
+                fixture.Shard.Id,
+                $"map-dynamic/{selectedMap}",
+                TestContext.Current.CancellationToken);
+        var otherEndpoint =
+            await fixture.Registry.GetEndpointBySemanticKeyAsync(
+                fixture.Shard.Id,
+                $"map-dynamic/{otherMap}",
+                TestContext.Current.CancellationToken);
+
+        Assert.NotNull(selectedEndpoint);
+        Assert.NotNull(otherEndpoint);
+
+        var selectedBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":1000,
+              "version":10
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                selectedBody,
+                ""selected-v10"",
+                "max-age=60"));
+
+        var selectedJob = await fixture.EnqueueAndClaimAsync(
+            selectedEndpoint.Id,
+            "test:m4-probe-selected");
+        await fixture.Executor.ExecuteAsync(
+            selectedJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+
+        var selectedSnapshot =
+            await fixture.EvidenceReader.GetCurrentAsync(
+                selectedEndpoint.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedSnapshot);
+
+        await fixture.Reconciler.ReconcileAsync(
+            selectedEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var selectedPoll = await fixture.PollState.GetAsync(
+            selectedEndpoint.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedPoll);
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(15),
+            selectedPoll.NextTargetAt);
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(60),
+            selectedPoll.SourceCacheEligibleAt);
+        Assert.Contains(
+            "m4-probe@1-",
+            selectedPoll.PolicyVersion,
+            StringComparison.Ordinal);
+
+        var successorAvailableAt =
+            await fixture.ReadJobAvailableAtByKeyAsync(
+                $"after-fetch:{selectedSnapshot.CurrentFetch.Id}");
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(60),
+            successorAvailableAt);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                selectedBody,
+                ""other-v10"",
+                "max-age=0"));
+
+        var otherJob = await fixture.EnqueueAndClaimAsync(
+            otherEndpoint.Id,
+            "test:m4-probe-other");
+        await fixture.Executor.ExecuteAsync(
+            otherJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            otherEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var otherPoll = await fixture.PollState.GetAsync(
+            otherEndpoint.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(otherPoll);
+        Assert.Equal(
+            fixture.Now.AddMinutes(1),
+            otherPoll.NextTargetAt);
+        Assert.Equal(
+            "warapi-poll@1/warapi-bootstrap-profile@1",
+            otherPoll.PolicyVersion);
+    }
+
+    private async Task<Fixture> CreateFixtureAsync(
+        string scenario,
+        WarApiMeasurementProbeProfile? measurementProbe = null)
     {
         await MigrateAsync();
         await ResetAsync();
@@ -562,7 +715,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             ingestion,
             options,
             WarApiCollectionProfile.Bootstrap,
-            WarApiMeasurementProbeProfile.Disabled,
+            measurementProbe ?? WarApiMeasurementProbeProfile.Disabled,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
@@ -773,6 +926,26 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             Assert.Equal(
                 1,
                 await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        }
+
+        public async Task<DateTimeOffset> ReadJobAvailableAtByKeyAsync(
+            string key)
+        {
+            await using var command = DataSource.CreateCommand(
+                """
+                SELECT available_at
+                FROM ingest.collection_jobs
+                WHERE idempotency_key = @key;
+                """);
+            command.Parameters.AddWithValue("key", key);
+
+            var value = await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken);
+
+            return value is DateTimeOffset timestamp
+                ? timestamp
+                : throw new InvalidOperationException(
+                    $"Collection job '{key}' was not found.");
         }
 
         public async Task<long> CountJobsByKeyAsync(string key)
