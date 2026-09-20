@@ -102,7 +102,8 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             return new CaptureResult(CaptureStatus.FenceMismatch, null, null);
         }
 
-        if (attempt.ExchangeAuthorizedAt is null)
+        if (attempt.ExchangeAuthorizedAt is null ||
+            attempt.State is not ("exchange_authorized" or "uncertain" or "superseded"))
         {
             await transaction.RollbackAsync(cancellationToken);
             return new CaptureResult(CaptureStatus.InvalidState, null, null);

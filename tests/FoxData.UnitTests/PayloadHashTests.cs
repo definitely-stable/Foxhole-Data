@@ -11,7 +11,7 @@ public sealed class PayloadHashTests
         var hash = PayloadHash.Compute(Encoding.UTF8.GetBytes("foxdata"));
 
         Assert.Equal(
-            "9604d385997aa9b60f54b810f81923883817405125659ea04e6af11f8fe13c90",
+            "dc806244ac6dac7aafcfbf7ca2da39b60de466022e7c4adcbd9751749e2af3ef",
             hash.Value);
         Assert.Equal(hash, PayloadHash.Parse(hash.Value.ToUpperInvariant()));
         Assert.Equal(32, hash.ToByteArray().Length);

@@ -1,6 +1,8 @@
+using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
 using FoxData.Application.Sources;
 using FoxData.Infrastructure.Configuration;
+using FoxData.Infrastructure.Evidence;
 using FoxData.Infrastructure.Health;
 using FoxData.Infrastructure.Ingestion;
 using FoxData.Infrastructure.Persistence;
@@ -42,6 +44,9 @@ public static class DependencyInjection
 
         services.AddScoped<IIngestionKernelStore, PostgresIngestionKernelStore>();
         services.AddScoped<IngestionKernel>();
+
+        services.AddScoped<IEvidenceKernelStore, PostgresEvidenceKernelStore>();
+        services.AddScoped<EvidenceKernel>();
 
         services.AddSingleton<PostgresHealthCheck>();
 
