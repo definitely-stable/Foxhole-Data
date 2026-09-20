@@ -175,7 +175,7 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
             TestContext.Current.CancellationToken);
 
         Assert.True(snapshot.DatabaseBytes > 0);
-        Assert.Equal(5, snapshot.Relations.Count);
+        Assert.Equal(6, snapshot.Relations.Count);
 
         Assert.Contains(
             snapshot.Relations,
@@ -187,6 +187,11 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
             relation =>
                 relation.SchemaName == "evidence" &&
                 relation.RelationName == "payloads");
+        Assert.Contains(
+            snapshot.Relations,
+            relation =>
+                relation.SchemaName == "evidence" &&
+                relation.RelationName == "source_schedule_decisions");
         Assert.All(
             snapshot.Relations,
             relation =>
