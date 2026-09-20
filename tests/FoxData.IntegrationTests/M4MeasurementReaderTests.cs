@@ -109,6 +109,44 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task StorageReaderMeasuresRequiredM4Relations()
+    {
+        await MigrateAsync();
+
+        await using var dataSource =
+            NpgsqlDataSource.Create(postgres.ConnectionString);
+        var storage =
+            new PostgresSourceMeasurementStorageReader(dataSource);
+
+        var snapshot = await storage.ReadAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.True(snapshot.DatabaseBytes > 0);
+        Assert.Equal(5, snapshot.Relations.Count);
+
+        Assert.Contains(
+            snapshot.Relations,
+            relation =>
+                relation.SchemaName == "evidence" &&
+                relation.RelationName == "fetches");
+        Assert.Contains(
+            snapshot.Relations,
+            relation =>
+                relation.SchemaName == "evidence" &&
+                relation.RelationName == "payloads");
+        Assert.All(
+            snapshot.Relations,
+            relation =>
+            {
+                Assert.True(relation.TotalBytes >= 0);
+                Assert.True(relation.TableBytesIncludingToast >= 0);
+                Assert.True(relation.IndexBytes >= 0);
+                Assert.True(relation.ToastBytes >= 0);
+                Assert.True(relation.TotalBytes >= relation.IndexBytes);
+            });
+    }
+
+    [Fact]
     public async Task ReaderRejectsInvalidMeasurementWindow()
     {
         await using var dataSource =
