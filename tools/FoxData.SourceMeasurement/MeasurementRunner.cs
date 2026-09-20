@@ -165,7 +165,9 @@ internal static class MeasurementRunner
                             fetch.PayloadBytes,
                             fetch.SourceEtag,
                             fetch.DurationMs,
-                            parseRun?.SourceVersion);
+                            parseRun?.SourceVersion,
+                            fetch.StatusCode == 304 &&
+                                fetch.PriorFetchId is not null);
                     })
                     .ToArray();
 
@@ -1188,7 +1190,9 @@ internal static class MeasurementRunner
                             fetch.PayloadBytes,
                             fetch.SourceEtag,
                             fetch.DurationMs,
-                            parseRun?.SourceVersion);
+                            parseRun?.SourceVersion,
+                            fetch.StatusCode == 304 &&
+                                fetch.PriorFetchId is not null);
                     })
                     .ToArray();
 
