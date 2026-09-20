@@ -1,0 +1,72 @@
+openapi: 3.1.0
+info:
+  title: Foxhole-Data War API Compatibility Facade
+  version: 1.0.0-alpha.1
+  description: Shard-explicit source-shaped compatibility API for documented official War API resources.
+paths:
+  /compat/warapi/v1/{shard}/worldconquest/war:
+    get:
+      operationId: compatGetWar
+      parameters:
+        - name: shard
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Source-shaped current war representation.
+          headers:
+            ETag:
+              schema: { type: string }
+            X-FoxData-Observed-At:
+              schema: { type: string, format: date-time }
+            X-FoxData-Representation-Sha256:
+              schema: { type: string }
+            X-FoxData-Source-ETag:
+              schema: { type: string }
+        "304":
+          description: Not modified.
+  /compat/warapi/v1/{shard}/worldconquest/maps:
+    get:
+      operationId: compatListMaps
+      parameters:
+        - name: shard
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Source-shaped active map list.
+  /compat/warapi/v1/{shard}/worldconquest/warReport/{mapName}:
+    get:
+      operationId: compatGetWarReport
+      parameters:
+        - { name: shard, in: path, required: true, schema: { type: string } }
+        - { name: mapName, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Source-shaped map war report.
+  /compat/warapi/v1/{shard}/worldconquest/maps/{mapName}/static:
+    get:
+      operationId: compatGetStaticMap
+      parameters:
+        - { name: shard, in: path, required: true, schema: { type: string } }
+        - { name: mapName, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Source-shaped static map representation.
+  /compat/warapi/v1/{shard}/worldconquest/maps/{mapName}/dynamic/public:
+    get:
+      operationId: compatGetDynamicMap
+      parameters:
+        - { name: shard, in: path, required: true, schema: { type: string } }
+        - { name: mapName, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Source-shaped public dynamic map representation.

@@ -1,0 +1,61 @@
+asyncapi: 3.1.0
+info:
+  title: Foxhole-Data Events
+  version: 1.0.0-alpha.1
+  description: Public canonical event contract. CloudEvents 1.0.2 JSON format is used as the event envelope.
+defaultContentType: application/cloudevents+json
+channels:
+  changes:
+    address: foxdata.changes
+    messages:
+      observedChange:
+        $ref: "#/components/messages/ObservedChange"
+operations:
+  receiveChanges:
+    action: receive
+    channel:
+      $ref: "#/channels/changes"
+components:
+  messages:
+    ObservedChange:
+      name: ObservedChange
+      title: Canonical observed change
+      contentType: application/cloudevents+json
+      payload:
+        type: object
+        required: [specversion, id, source, type, data]
+        properties:
+          specversion:
+            type: string
+            const: "1.0"
+          id:
+            type: string
+          source:
+            type: string
+          type:
+            type: string
+          subject:
+            type: string
+          time:
+            type: string
+            format: date-time
+          datacontenttype:
+            type: string
+            const: application/json
+          data:
+            type: object
+            required: [changeSeq, currentObservedAt]
+            properties:
+              changeSeq:
+                type: integer
+              previousObservedAt:
+                type: [string, "null"]
+                format: date-time
+              currentObservedAt:
+                type: string
+                format: date-time
+              reconstructionBoundaryAt:
+                type: string
+                format: date-time
+              quality:
+                type: string
