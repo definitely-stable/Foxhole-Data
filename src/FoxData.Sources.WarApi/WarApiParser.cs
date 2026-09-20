@@ -37,10 +37,20 @@ public sealed class WarApiParser
         SourceCapability capability,
         ReadOnlySpan<byte> utf8Json)
     {
+        string fingerprint;
         try
         {
-            var fingerprint = JsonStructuralFingerprinter.Compute(utf8Json);
+            fingerprint = JsonStructuralFingerprinter.Compute(utf8Json);
+        }
+        catch (JsonException)
+        {
+            return Failure(
+                WarApiParseOutcome.MalformedJson,
+                "malformed_json");
+        }
 
+        try
+        {
             if (capability == WarApiCapabilities.RuntimeWarState)
             {
                 var value = JsonSerializer.Deserialize(
@@ -108,23 +118,17 @@ public sealed class WarApiParser
         }
         catch (JsonException)
         {
-            return new WarApiParseResult(
-                WarApiParseOutcome.MalformedJson,
-                null,
-                null,
-                0,
-                0,
-                "malformed_json");
+            return Failure(
+                WarApiParseOutcome.IncompatibleShape,
+                "incompatible_shape",
+                fingerprint);
         }
         catch (InvalidOperationException)
         {
-            return new WarApiParseResult(
+            return Failure(
                 WarApiParseOutcome.IncompatibleShape,
-                null,
-                null,
-                0,
-                0,
-                "incompatible_shape");
+                "incompatible_shape",
+                fingerprint);
         }
     }
 
@@ -142,6 +146,18 @@ public sealed class WarApiParser
             unknownProperties,
             unknownCodes,
             null);
+
+    private static WarApiParseResult Failure(
+        WarApiParseOutcome outcome,
+        string errorCode,
+        string? fingerprint = null) =>
+        new(
+            outcome,
+            null,
+            fingerprint,
+            0,
+            0,
+            errorCode);
 
     private static bool IsKnownTeam(string? value) =>
         value is null || KnownTeams.Contains(value);
