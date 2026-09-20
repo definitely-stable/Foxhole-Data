@@ -136,6 +136,10 @@ internal static class M3ModelConfiguration
             .HasColumnName("created_at")
             .HasDefaultValueSql("transaction_timestamp()")
             .ValueGeneratedOnAdd();
+        builder.Property(x => x.SourceVersion)
+            .HasColumnName("source_version");
+        builder.Property(x => x.SourceLastUpdated)
+            .HasColumnName("source_last_updated");
 
         builder.HasIndex(
                 x => new
