@@ -232,9 +232,7 @@ public static class WarApiMeasurementAnalyzer
                 currentEpisodeIndex = episodes.Count;
                 episodes.Add(
                     new RepresentationEpisode(
-                        currentEpisodeIndex,
-                        sample.RequestStartedAt,
-                        sample.PayloadHash));
+                        sample.RequestStartedAt));
             }
 
             if (sample.StatusCode is 200 or 304 &&
@@ -276,9 +274,10 @@ public static class WarApiMeasurementAnalyzer
                 capturedEpisodes.Add(episodeIndex))
             {
                 var episode = episodes[episodeIndex];
+                var observationDelay =
+                    selected.RequestStartedAt - episode.StartedAt;
                 observationDelays.Add(
-                    (selected.RequestStartedAt - episode.StartedAt)
-                    .TotalSeconds);
+                    observationDelay.TotalSeconds);
             }
 
             nextTarget = selected.RequestStartedAt + candidateCadence;
@@ -366,9 +365,7 @@ public static class WarApiMeasurementAnalyzer
     }
 
     private sealed record RepresentationEpisode(
-        int Index,
-        DateTimeOffset StartedAt,
-        string PayloadHash);
+        DateTimeOffset StartedAt);
 
     internal static double? PercentileCont(
         IEnumerable<long> values,
