@@ -44,14 +44,14 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 body,
-                ""war-v1"",
+                ""war - v1"",
                 "max-age=60"));
         fixture.Transport.Enqueue(
             CreateResponse(
                 fixture.Now.AddMinutes(1),
                 HttpStatusCode.NotModified,
                 body: null,
-                ""war-v1"",
+                ""war - v1"",
                 "max-age=60"));
 
         var firstJob = await fixture.EnqueueAndClaimAsync(
@@ -83,7 +83,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
         Assert.NotNull(firstPoll);
         Assert.Equal(firstFetchId, firstPoll.RepresentationFetchId);
-        Assert.Equal(""war-v1"", firstPoll.ValidatorEtag);
+        Assert.Equal(""war - v1"", firstPoll.ValidatorEtag);
         Assert.Equal(firstFetchId, firstPoll.LastProcessedFetchId);
 
         var parseRun = await fixture.ParseRuns.GetAsync(
@@ -113,7 +113,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
         Assert.Equal(2, fixture.Transport.SendCount);
         Assert.Null(fixture.Transport.Requests[0].IfNoneMatch);
-        Assert.Equal(""war-v1"", fixture.Transport.Requests[1].IfNoneMatch);
+        Assert.Equal(""war - v1"", fixture.Transport.Requests[1].IfNoneMatch);
 
         var secondSnapshot = await fixture.EvidenceReader.GetCurrentAsync(
             fixture.WarEndpoint.Id,
@@ -136,7 +136,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
 
         Assert.Equal(secondSnapshot.CurrentFetch.Id, secondPoll!.LastProcessedFetchId);
         Assert.Equal(firstFetchId, secondPoll.RepresentationFetchId);
-        Assert.Equal(""war-v1"", secondPoll.ValidatorEtag);
+        Assert.Equal(""war - v1"", secondPoll.ValidatorEtag);
 
         Assert.Equal(
             1L,
@@ -156,7 +156,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 body,
-                ""maps-v1"",
+                ""maps - v1"",
                 "max-age=300"));
 
         var job = await fixture.EnqueueAndClaimAsync(
