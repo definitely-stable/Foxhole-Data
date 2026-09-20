@@ -13,6 +13,8 @@ public sealed class WarApiCollectionProfileTests
 
         Assert.Equal(WarApiCollectionProfile.BootstrapVersion, profile.Version);
         Assert.Equal(1, profile.ExecutorConcurrency);
+        Assert.Null(profile.MeasurementReference);
+        Assert.Empty(profile.Limitations);
 
         AssertCapability(
             profile,
@@ -122,6 +124,43 @@ public sealed class WarApiCollectionProfileTests
         Assert.Equal(
             retrievedAt.AddMinutes(2),
             decision.NextEligibleAt);
+    }
+
+    [Fact]
+    public void MeasuredProfileCarriesReferenceAndLimitations()
+    {
+        var profile = new WarApiCollectionProfile(
+            "collection-profile@1",
+            1,
+            FullProfile(),
+            "m4:m4-2026-09-live",
+            ["48-hour minimum observation window"]);
+
+        Assert.Equal(
+            "m4:m4-2026-09-live",
+            profile.MeasurementReference);
+        Assert.Equal(
+            ["48-hour minimum observation window"],
+            profile.Limitations);
+    }
+
+    [Fact]
+    public void ProfileRejectsInvalidProvenanceMetadata()
+    {
+        Assert.Throws<ArgumentException>(
+            () => new WarApiCollectionProfile(
+                "collection-profile@1",
+                1,
+                FullProfile(),
+                " measurement "));
+
+        Assert.Throws<ArgumentException>(
+            () => new WarApiCollectionProfile(
+                "collection-profile@1",
+                1,
+                FullProfile(),
+                "measurement",
+                ["duplicate", "duplicate"]));
     }
 
     [Fact]
