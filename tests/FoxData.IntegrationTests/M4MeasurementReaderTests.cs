@@ -34,6 +34,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
             new PostgresSourceMeasurementReader(dataSource);
         var parseRuns =
             new PostgresSourceParseRunStore(dataSource);
+        var scheduleDecisions =
+            new PostgresSourceScheduleDecisionStore(dataSource);
 
         var officialEndpoint = await RegisterEndpointAsync(
             registry,
@@ -85,6 +87,21 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
                 1_758_000_000_000),
             TestContext.Current.CancellationToken);
 
+        var recordedDecision = await scheduleDecisions.RecordAsync(
+            new SourceScheduleDecisionWrite(
+                officialCapture.Fetch.Id,
+                officialEndpoint,
+                "warapi-poll@1/warapi-bootstrap-profile@1",
+                60_000,
+                EndpointActive: false,
+                ProbeSelected: false,
+                SourceCacheEligibleAt: observedAt.AddMinutes(1),
+                NextTargetAt: null,
+                RetryEligibleAt: null,
+                SuccessorJobId: null,
+                SuccessorAvailableAt: null),
+            TestContext.Current.CancellationToken);
+
         var fetches = new List<SourceMeasurementFetch>();
         await foreach (var fetch in measurement.ReadFetchesAsync(
             "official-war-api",
@@ -97,6 +114,7 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
 
         var measuredFetch = Assert.Single(fetches);
         Assert.Equal(officialCapture.Fetch!.Id, measuredFetch.FetchId);
+        Assert.Equal(officialCapture.Fetch.AttemptId, measuredFetch.AttemptId);
         Assert.Equal("official-war-api", measuredFetch.SourceKey);
         Assert.Equal("live-1", measuredFetch.ShardKey);
         Assert.Equal("live", measuredFetch.Environment);
@@ -159,6 +177,27 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         AssertWithinPostgresTimestampPrecision(
             parseCompletedAt,
             measuredParse.CompletedAt);
+
+        var measuredDecisions =
+            new List<SourceMeasurementScheduleDecision>();
+        await foreach (var decision in measurement.ReadScheduleDecisionsAsync(
+            "official-war-api",
+            observedAt.AddSeconds(-1),
+            observedAt.AddSeconds(1),
+            TestContext.Current.CancellationToken))
+        {
+            measuredDecisions.Add(decision);
+        }
+
+        var measuredDecision = Assert.Single(measuredDecisions);
+        Assert.Equal(recordedDecision.FetchId, measuredDecision.FetchId);
+        Assert.Equal(60_000, measuredDecision.EffectiveCadenceMs);
+        Assert.False(measuredDecision.EndpointActive);
+        Assert.False(measuredDecision.ProbeSelected);
+        Assert.Null(measuredDecision.SuccessorJobId);
+        Assert.Equal(
+            "warapi-poll@1/warapi-bootstrap-profile@1",
+            measuredDecision.PolicyVersion);
     }
 
     [Fact]
