@@ -17,5 +17,6 @@ RUN FOXDATA_DESIGN_CONNECTION="Host=localhost;Port=5432;Database=foxdata_design;
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-noble AS final
 WORKDIR /app
 COPY --from=build /out/foxdata-migrate /app/foxdata-migrate
+COPY deploy/docker/migrate/entrypoint.sh /app/entrypoint.sh
 USER app
-ENTRYPOINT ["/app/foxdata-migrate"]
+ENTRYPOINT ["/app/entrypoint.sh"]
