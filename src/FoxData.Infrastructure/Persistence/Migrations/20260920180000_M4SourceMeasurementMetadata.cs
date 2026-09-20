@@ -24,6 +24,19 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                 type: "bigint",
                 nullable: true);
 
+            migrationBuilder.AddColumn<long>(
+                name: "decoded_byte_length",
+                schema: "evidence",
+                table: "source_parse_runs",
+                type: "bigint",
+                nullable: true);
+
+            migrationBuilder.AddCheckConstraint(
+                name: "ck_source_parse_runs_decoded_byte_length",
+                schema: "evidence",
+                table: "source_parse_runs",
+                sql: "decoded_byte_length IS NULL OR decoded_byte_length >= 0");
+
             migrationBuilder.CreateTable(
                 name: "source_schedule_decisions",
                 schema: "evidence",
@@ -91,6 +104,16 @@ namespace FoxData.Infrastructure.Persistence.Migrations
             migrationBuilder.DropTable(
                 name: "source_schedule_decisions",
                 schema: "evidence");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "ck_source_parse_runs_decoded_byte_length",
+                schema: "evidence",
+                table: "source_parse_runs");
+
+            migrationBuilder.DropColumn(
+                name: "decoded_byte_length",
+                schema: "evidence",
+                table: "source_parse_runs");
 
             migrationBuilder.DropColumn(
                 name: "source_version",
