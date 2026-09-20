@@ -18,6 +18,7 @@ public sealed class WarApiReconciler(
     IngestionKernel ingestion,
     WarApiWorkerOptions options,
     WarApiCollectionProfile collectionProfile,
+    WarApiMeasurementProbeProfile measurementProbe,
     TimeProvider timeProvider,
     ILogger<WarApiReconciler> logger)
 {
@@ -67,15 +68,42 @@ public sealed class WarApiReconciler(
             }
         }
 
-        var active = await IsEndpointActiveAsync(
+        var activity = await ResolveEndpointActivityAsync(
             context,
             cancellationToken);
+
+        var baseCadence = collectionProfile.TargetCadence(
+            context.SourceEndpoint.Capability);
+        var activeMapNames =
+            activity.ActiveMapNames ??
+            Array.Empty<string>();
+        var probeSelected =
+            activity.ActiveMapNames is not null &&
+            WarApiMeasurementProbePolicy.IsSelectedEndpoint(
+                measurementProbe,
+                context.Shard.Key,
+                context.SourceEndpoint,
+                activeMapNames);
+        var cadence =
+            WarApiMeasurementProbePolicy.ResolveCadence(
+                measurementProbe,
+                context.Shard.Key,
+                context.SourceEndpoint,
+                activeMapNames,
+                baseCadence);
+        var schedulingPolicy =
+            WarApiMeasurementProbePolicy.SchedulingPolicy(
+                WarApiVersions.SchedulingPolicy(collectionProfile),
+                measurementProbe,
+                probeSelected);
 
         var transition = BuildPollTransition(
             context,
             snapshot,
             previousPoll,
-            active);
+            activity.Active,
+            cadence,
+            schedulingPolicy);
 
         if (transition.SuccessorAvailableAt is { } successorAvailableAt)
         {
@@ -245,14 +273,16 @@ public sealed class WarApiReconciler(
         }
     }
 
-    private async Task<bool> IsEndpointActiveAsync(
+    private async Task<EndpointActivity> ResolveEndpointActivityAsync(
         WarApiRegistryContext context,
         CancellationToken cancellationToken)
     {
         var mapName = context.SourceEndpoint.SourceIdentifier;
         if (mapName is null)
         {
-            return true;
+            return new EndpointActivity(
+                Active: true,
+                ActiveMapNames: null);
         }
 
         var mapsEndpoint = await registry.GetEndpointBySemanticKeyAsync(
@@ -262,7 +292,9 @@ public sealed class WarApiReconciler(
 
         if (mapsEndpoint is null)
         {
-            return true;
+            return new EndpointActivity(
+                Active: true,
+                ActiveMapNames: null);
         }
 
         var mapsSnapshot = await evidenceReader.GetCurrentAsync(
@@ -275,7 +307,9 @@ public sealed class WarApiReconciler(
                 (int)HttpStatusCode.OK or
                 (int)HttpStatusCode.NotModified))
         {
-            return true;
+            return new EndpointActivity(
+                Active: true,
+                ActiveMapNames: null);
         }
 
         try
@@ -291,13 +325,25 @@ public sealed class WarApiReconciler(
                 WarApiCapabilities.ActiveMapList,
                 decoded);
 
-            return parsed.Parsed &&
-                parsed.Value is string[] maps &&
-                maps.Contains(mapName, StringComparer.Ordinal);
+            if (!parsed.Parsed ||
+                parsed.Value is not string[] maps)
+            {
+                return new EndpointActivity(
+                    Active: true,
+                    ActiveMapNames: null);
+            }
+
+            return new EndpointActivity(
+                maps.Contains(
+                    mapName,
+                    StringComparer.Ordinal),
+                maps);
         }
         catch (WarApiDecodingException)
         {
-            return true;
+            return new EndpointActivity(
+                Active: true,
+                ActiveMapNames: null);
         }
     }
 
@@ -305,11 +351,11 @@ public sealed class WarApiReconciler(
         WarApiRegistryContext context,
         EndpointEvidenceSnapshot snapshot,
         EndpointPollStateDescriptor? previous,
-        bool active)
+        bool active,
+        TimeSpan cadence,
+        string schedulingPolicy)
     {
         var fetch = snapshot.CurrentFetch;
-        var cadence = collectionProfile.TargetCadence(
-            context.SourceEndpoint.Capability);
 
         var previousValidator =
             WarApiRequestBuilder.UsableValidator(previous?.ValidatorEtag);
@@ -416,7 +462,7 @@ public sealed class WarApiReconciler(
                 fetch.StatusCode is null ? previous?.LastHttpResponseAt : fetch.RetrievedAt,
                 lastSuccessAt,
                 consecutiveFailures,
-                WarApiVersions.SchedulingPolicy(collectionProfile)),
+                schedulingPolicy),
             successorAvailableAt);
     }
 
@@ -505,6 +551,10 @@ public sealed class WarApiReconciler(
         DateTimeOffset first,
         DateTimeOffset second) =>
         first > second ? first : second;
+
+    private sealed record EndpointActivity(
+        bool Active,
+        IReadOnlyList<string>? ActiveMapNames);
 
     private sealed record PollTransition(
         EndpointPollStateWrite State,
