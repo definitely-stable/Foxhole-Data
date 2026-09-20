@@ -198,6 +198,91 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
         }
     }
 
+    public async IAsyncEnumerable<SourceMeasurementParseRun> ReadParseRunsAsync(
+        string sourceKey,
+        DateTimeOffset startInclusive,
+        DateTimeOffset endExclusive,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ValidateWindow(sourceKey, startInclusive, endExclusive);
+
+        await using var connection =
+            await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                parse_run.id,
+                parse_run.representation_fetch_id,
+                endpoint.id,
+                source.key,
+                shard.key,
+                shard.environment,
+                parse_run.capability_key,
+                endpoint.semantic_key,
+                parse_run.adapter_version,
+                parse_run.parser_version,
+                parse_run.fingerprint_algorithm,
+                parse_run.structural_fingerprint,
+                parse_run.outcome,
+                parse_run.unknown_property_count,
+                parse_run.unknown_code_count,
+                parse_run.error_code,
+                representation_fetch.request_started_at,
+                parse_run.started_at,
+                parse_run.completed_at
+            FROM evidence.source_parse_runs AS parse_run
+            INNER JOIN evidence.fetches AS representation_fetch
+                ON representation_fetch.id = parse_run.representation_fetch_id
+            INNER JOIN sources.endpoints AS endpoint
+                ON endpoint.id = representation_fetch.endpoint_id
+            INNER JOIN sources.shards AS shard
+                ON shard.id = endpoint.shard_id
+            INNER JOIN sources.sources AS source
+                ON source.id = shard.source_id
+            WHERE source.key = @source_key
+              AND representation_fetch.request_started_at >= @start_inclusive
+              AND representation_fetch.request_started_at < @end_exclusive
+            ORDER BY
+                endpoint.id,
+                representation_fetch.request_started_at,
+                parse_run.id;
+            """;
+        AddWindowParameters(
+            command,
+            sourceKey,
+            startInclusive,
+            endExclusive);
+
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SequentialAccess,
+            cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            yield return new SourceMeasurementParseRun(
+                new SourceParseRunId(reader.GetGuid(0)),
+                new FetchId(reader.GetGuid(1)),
+                new EndpointId(reader.GetGuid(2)),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetString(8),
+                reader.GetString(9),
+                reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.GetString(12),
+                reader.GetInt32(13),
+                reader.GetInt32(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.GetFieldValue<DateTimeOffset>(16),
+                reader.GetFieldValue<DateTimeOffset>(17),
+                reader.GetFieldValue<DateTimeOffset>(18));
+        }
+    }
+
     private static void ValidateWindow(
         string sourceKey,
         DateTimeOffset startInclusive,
