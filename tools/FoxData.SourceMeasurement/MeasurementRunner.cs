@@ -125,6 +125,10 @@ internal static class MeasurementRunner
             scheduleDecisions.Add(decision);
         }
 
+        var probeManifest = BuildProbeManifest(
+            options,
+            scheduleDecisions);
+
         var parseByFetch = parseRuns.ToDictionary(
             parseRun => parseRun.RepresentationFetchId.Value);
 
@@ -284,6 +288,10 @@ internal static class MeasurementRunner
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToArray(),
+            probeManifest,
+            CountBy(
+                scheduleDecisions,
+                decision => decision.PolicyVersion),
             [
                 "Observations bound source state to retrieval times; they do not prove exact upstream event times.",
                 "Counterfactual cadence downsampling does not synthesize HTTP 200/304 validator behaviour.",
