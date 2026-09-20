@@ -547,6 +547,6 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
 
         public FoxData.Core.Sources.EndpointId EndpointId { get; } = endpointId;
 
-        public ValueTask DisposeAsync() => dataSource.DisposeAsync();
+        public ValueTask DisposeAsync() => DataSource.DisposeAsync();
     }
 }
