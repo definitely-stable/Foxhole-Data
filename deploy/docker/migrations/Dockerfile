@@ -14,7 +14,7 @@ RUN dotnet ef migrations bundle \
     --configuration Release \
     --output /out/foxdata-migrate
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0.12-noble AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble AS final
 WORKDIR /app
 COPY --from=build /out/foxdata-migrate ./foxdata-migrate
 
