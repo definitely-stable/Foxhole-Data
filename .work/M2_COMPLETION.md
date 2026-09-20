@@ -118,3 +118,59 @@ semantic endpoint
 ~~~
 
 M3 must reuse the M2 queue, lease, attempt, fence, authorization, evidence and recovery semantics rather than introducing parallel source-specific correctness mechanisms.
+
+
+## Post-completion hardening audit
+
+A critical audit after the original M2 completion found concrete pre-M3 failure modes. They were addressed before source ingestion was activated.
+
+### H1 — concurrency correctness
+
+PR #9:
+
+- standardized M2 row-lock order to `collection_job -> ingestion_attempt -> endpoint_state`;
+- changed lease-validity decisions after lock waits to actual PostgreSQL clock time;
+- added a deterministic lease-expiry/authorization race test.
+
+### H2 — lifecycle semantics
+
+PR #10:
+
+- renamed endpoint raw-currentness from `last_authoritative_attempt_id` to `last_current_capture_attempt_id`;
+- separated raw source-currentness from later quality/canonical acceptance;
+- added explicit pre-exchange and uncertain post-authorization deferrals with durable retry eligibility;
+- added ADR-0013 and a forward EF migration.
+
+### H3 — operations and integrity
+
+PR #12:
+
+- deploys migrations through a one-shot EF migration bundle;
+- makes readiness unhealthy when the compiled service has pending database migrations;
+- checks test discovery per test project;
+- revalidates exact SHA-256 at the Infrastructure persistence boundary;
+- documents separate production schema/deployment and runtime database identities.
+
+Real War API ingestion remains outside M2 and begins in M3.
+
+
+## Post-hardening verification
+
+The final H3 gate verified the hardened M2 baseline before M3 activation:
+
+~~~text
+Release build:                    success
+Unit suite discovery/execution:   success
+Integration suite:                success
+Recovery suite:                   success
+Source suite:                     success
+Contract test suite:              success
+Contracts workflow:               success
+Dependency Review:                success
+Migration bundle build:           success
+Clean PostgreSQL migration job:   exit 0
+Schema-aware API readiness:       success
+Docker Compose smoke:             success
+~~~
+
+No real War API traffic is enabled by the hardening work.

@@ -32,6 +32,27 @@ API keys:
 
 Admin/operator plane uses separate authentication and deployment policy.
 
+## PostgreSQL identities
+
+Production schema migration and runtime access use separate identities.
+
+The deployment/schema identity:
+
+- exists only for release/migration execution;
+- may perform reviewed DDL and update EF migration history;
+- is not mounted into API or Worker runtime environments.
+
+Runtime identities:
+
+- do not own the database schema;
+- do not receive CREATE/ALTER/DROP privileges;
+- receive only required table/sequence DML;
+- should be split further between read-mostly API and ingestion Worker when deployment complexity permits.
+
+For immutable evidence, supported runtime behavior is append/read. Existing `evidence.payloads` and `evidence.fetches` are not application update targets. Production grants SHOULD deny UPDATE/DELETE on those tables except to explicit administrative/retention tooling introduced by a reviewed policy.
+
+Local development may use a single convenience database user; production security MUST NOT infer its privilege model from Compose.
+
 ## stdio
 
 stdio trusts the local process/user boundary by default.
