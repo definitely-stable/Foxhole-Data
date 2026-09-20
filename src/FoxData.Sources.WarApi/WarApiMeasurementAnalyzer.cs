@@ -126,9 +126,10 @@ public static class WarApiMeasurementAnalyzer
 
             if (index > 0)
             {
-                pollIntervals.Add(
-                    (sample.RequestStartedAt - ordered[index - 1].RequestStartedAt)
-                    .TotalSeconds);
+                var pollInterval =
+                    sample.RequestStartedAt -
+                    ordered[index - 1].RequestStartedAt;
+                pollIntervals.Add(pollInterval.TotalSeconds);
             }
 
             if (sample.StatusCode == 200)
