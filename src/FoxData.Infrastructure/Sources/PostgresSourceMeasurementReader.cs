@@ -124,13 +124,14 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 attempt.id,
                 collection_job.id,
                 endpoint.id,
+                attempt.attempt_number,
+                collection_job.idempotency_key,
                 source.key,
                 shard.key,
                 shard.environment,
                 endpoint.capability_key,
                 endpoint.semantic_key,
                 collection_job.scheduled_for,
-                collection_job.available_at,
                 attempt.started_at,
                 attempt.exchange_authorized_at,
                 attempt.raw_durable_at,
@@ -172,27 +173,28 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
                 new IngestionAttemptId(reader.GetGuid(0)),
                 new CollectionJobId(reader.GetGuid(1)),
                 new EndpointId(reader.GetGuid(2)),
-                reader.GetString(3),
+                reader.GetInt32(3),
                 reader.GetString(4),
                 reader.GetString(5),
                 reader.GetString(6),
                 reader.GetString(7),
-                reader.GetFieldValue<DateTimeOffset>(8),
-                reader.GetFieldValue<DateTimeOffset>(9),
+                reader.GetString(8),
+                reader.GetString(9),
                 reader.GetFieldValue<DateTimeOffset>(10),
-                reader.IsDBNull(11)
-                    ? null
-                    : reader.GetFieldValue<DateTimeOffset>(11),
+                reader.GetFieldValue<DateTimeOffset>(11),
                 reader.IsDBNull(12)
                     ? null
                     : reader.GetFieldValue<DateTimeOffset>(12),
                 reader.IsDBNull(13)
                     ? null
                     : reader.GetFieldValue<DateTimeOffset>(13),
-                reader.GetString(14),
-                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.IsDBNull(14)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(14),
+                reader.GetString(15),
                 reader.IsDBNull(16) ? null : reader.GetString(16),
-                reader.IsDBNull(17) ? null : reader.GetString(17));
+                reader.IsDBNull(17) ? null : reader.GetString(17),
+                reader.IsDBNull(18) ? null : reader.GetString(18));
         }
     }
 
