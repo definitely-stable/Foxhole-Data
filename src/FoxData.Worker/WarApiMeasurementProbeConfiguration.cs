@@ -46,7 +46,16 @@ public static class WarApiMeasurementProbeConfiguration
             maxMaps,
             targetCadence);
 
-        profile.Validate();
+        try
+        {
+            profile.Validate();
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(
+                $"Invalid WarApi:MeasurementProbe configuration: {exception.Message}",
+                exception);
+        }
 
         if (enabled)
         {
