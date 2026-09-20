@@ -12,7 +12,6 @@ public sealed class WarApiAttemptExecutor(
     IEndpointPollStateStore pollState,
     WarApiRegistryResolver resolver,
     IWarApiTransport transport,
-    WarApiWorkerOptions options,
     TimeProvider timeProvider,
     ILogger<WarApiAttemptExecutor> logger)
 {
