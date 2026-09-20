@@ -38,7 +38,9 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         var officialEndpoint = await RegisterEndpointAsync(
             registry,
             "official-war-api",
-            "Official War API");
+            "Official War API",
+            "dynamic-map-state",
+            "map-dynamic/DeadLandsHex");
         var otherEndpoint = await RegisterEndpointAsync(
             registry,
             "other-source",
@@ -68,7 +70,7 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         var recordedParse = await parseRuns.RecordAsync(
             new SourceParseRunWrite(
                 officialCapture.Fetch!.Id,
-                "runtime-war-state",
+                "dynamic-map-state",
                 "warapi-adapter@1",
                 "warapi-parser@1",
                 "json-shape@1",
@@ -78,7 +80,9 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
                 0,
                 null,
                 parseStartedAt,
-                parseCompletedAt),
+                parseCompletedAt,
+                42,
+                1_758_000_000_000),
             TestContext.Current.CancellationToken);
 
         var fetches = new List<SourceMeasurementFetch>();
@@ -96,8 +100,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal("official-war-api", measuredFetch.SourceKey);
         Assert.Equal("live-1", measuredFetch.ShardKey);
         Assert.Equal("live", measuredFetch.Environment);
-        Assert.Equal("runtime-war-state", measuredFetch.CapabilityKey);
-        Assert.Equal("war", measuredFetch.SemanticKey);
+        Assert.Equal("dynamic-map-state", measuredFetch.CapabilityKey);
+        Assert.Equal("map-dynamic/DeadLandsHex", measuredFetch.SemanticKey);
         Assert.Equal(200, measuredFetch.StatusCode);
         Assert.Equal(12, measuredFetch.DurationMs);
         Assert.Equal(officialBody.LongLength, measuredFetch.PayloadBytes);
@@ -123,7 +127,7 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal(1, measuredAttempt.AttemptNumber);
         Assert.Equal("m4:official", measuredAttempt.JobIdempotencyKey);
         Assert.Equal("official-war-api", measuredAttempt.SourceKey);
-        Assert.Equal("runtime-war-state", measuredAttempt.CapabilityKey);
+        Assert.Equal("dynamic-map-state", measuredAttempt.CapabilityKey);
         Assert.NotNull(measuredAttempt.ExchangeAuthorizedAt);
         Assert.NotNull(measuredAttempt.RawDurableAt);
 
@@ -144,6 +148,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal("warapi-parser@1", measuredParse.ParserVersion);
         Assert.Equal("shape-a", measuredParse.StructuralFingerprint);
         Assert.Equal("parsed", measuredParse.Outcome);
+        Assert.Equal(42, measuredParse.SourceVersion);
+        Assert.Equal(1_758_000_000_000, measuredParse.SourceLastUpdated);
         AssertWithinPostgresTimestampPrecision(
             observedAt.AddMilliseconds(-12),
             measuredParse.RepresentationObservedAt);
@@ -218,7 +224,9 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
     private static async Task<EndpointId> RegisterEndpointAsync(
         SourceRegistry registry,
         string sourceKey,
-        string displayName)
+        string displayName,
+        string capabilityKey = "runtime-war-state",
+        string semanticKey = "war")
     {
         var source = await registry.RegisterSourceAsync(
             sourceKey,
@@ -232,8 +240,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
             TestContext.Current.CancellationToken);
         var endpoint = await registry.RegisterEndpointAsync(
             shard.Resource.Id,
-            "runtime-war-state",
-            "war",
+            capabilityKey,
+            semanticKey,
             TestContext.Current.CancellationToken);
 
         return endpoint.Resource.Id;
