@@ -1,3 +1,4 @@
+using System.Net;
 using FoxData.Sources.Abstractions;
 using FoxData.Sources.WarApi;
 
@@ -47,6 +48,80 @@ public sealed class WarApiCollectionProfileTests
             "warapi-poll@1/warapi-bootstrap-profile@1",
             WarApiVersions.SchedulingPolicy(
                 WarApiCollectionProfile.Bootstrap));
+    }
+
+    [Fact]
+    public void FasterMeasuredTargetCannotBypassSourceFreshness()
+    {
+        var profiles = FullProfile();
+        profiles[WarApiCapabilities.DynamicMapState.Key] = new(
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromSeconds(15));
+        var profile = new WarApiCollectionProfile(
+            "collection-profile@test",
+            1,
+            profiles);
+        var retrievedAt = new DateTimeOffset(
+            2026,
+            9,
+            20,
+            12,
+            0,
+            0,
+            TimeSpan.Zero);
+
+        var decision = new WarApiCachePolicy().Evaluate(
+            new WarApiCacheMetadata(
+                HttpStatusCode.OK,
+                "max-age=60",
+                null,
+                retrievedAt,
+                0,
+                null),
+            retrievedAt,
+            profile.TargetCadence(
+                WarApiCapabilities.DynamicMapState));
+
+        Assert.Equal(
+            retrievedAt.AddMinutes(1),
+            decision.NextEligibleAt);
+    }
+
+    [Fact]
+    public void FasterMeasuredTargetCannotBypassRetryAfter()
+    {
+        var profiles = FullProfile();
+        profiles[WarApiCapabilities.DynamicMapState.Key] = new(
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromSeconds(15));
+        var profile = new WarApiCollectionProfile(
+            "collection-profile@test",
+            1,
+            profiles);
+        var retrievedAt = new DateTimeOffset(
+            2026,
+            9,
+            20,
+            12,
+            0,
+            0,
+            TimeSpan.Zero);
+
+        var decision = new WarApiCachePolicy().Evaluate(
+            new WarApiCacheMetadata(
+                HttpStatusCode.TooManyRequests,
+                null,
+                null,
+                null,
+                null,
+                "120"),
+            retrievedAt,
+            profile.TargetCadence(
+                WarApiCapabilities.DynamicMapState));
+
+        Assert.Equal(
+            retrievedAt.AddMinutes(2),
+            decision.NextEligibleAt);
     }
 
     [Fact]
