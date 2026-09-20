@@ -169,6 +169,7 @@ public sealed class WarApiMeasurementProbePolicyTests
         var profile = new WarApiMeasurementProbeProfile(
             Enabled: true,
             RunId: null,
+            ShardKeys: ["live-1"],
             MaxMapsPerShard: 3,
             TargetCadence: TimeSpan.FromSeconds(15));
 
@@ -183,6 +184,7 @@ public sealed class WarApiMeasurementProbePolicyTests
         var profile = new WarApiMeasurementProbeProfile(
             Enabled: true,
             RunId: "m4-test",
+            ShardKeys: ["live-1"],
             MaxMapsPerShard: 3,
             TargetCadence: TimeSpan.FromSeconds(seconds));
 
@@ -195,6 +197,7 @@ public sealed class WarApiMeasurementProbePolicyTests
         new(
             Enabled: true,
             RunId: "m4-test-run",
+            ShardKeys: ["live-1"],
             MaxMapsPerShard: maxMaps,
             TargetCadence: TimeSpan.FromSeconds(15));
 }
