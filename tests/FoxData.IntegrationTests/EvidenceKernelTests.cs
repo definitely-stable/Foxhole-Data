@@ -34,7 +34,7 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CaptureStatus.CapturedCurrent, capture.Status);
-        Assert.True(capture.IsAuthoritative);
+        Assert.True(capture.IsCurrentCapture);
         Assert.NotNull(capture.Fetch);
         Assert.NotNull(capture.Payload);
         Assert.Equal(PayloadHash.Compute(body), capture.Payload!.Hash);
@@ -59,10 +59,10 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
         Assert.Null(storedJob.LeaseOwnerId);
         Assert.Null(storedJob.LeaseExpiresAt);
 
-        var authority = await fixture.ReadEndpointAuthorityAsync();
+        var authority = await fixture.ReadEndpointCaptureStateAsync();
 
         Assert.Null(authority.ActiveAttemptId);
-        Assert.Equal(authorized.AttemptId, authority.LastAuthoritativeAttemptId);
+        Assert.Equal(authorized.AttemptId, authority.LastCurrentCaptureAttemptId);
         Assert.Equal(authorized.FenceToken, authority.FenceToken);
     }
 
@@ -201,12 +201,12 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CaptureStatus.CapturedLate, late.Status);
-        Assert.False(late.IsAuthoritative);
+        Assert.False(late.IsCurrentCapture);
 
-        var beforeCurrent = await fixture.ReadEndpointAuthorityAsync();
+        var beforeCurrent = await fixture.ReadEndpointCaptureStateAsync();
 
         Assert.Equal(second.AttemptId, beforeCurrent.ActiveAttemptId);
-        Assert.Null(beforeCurrent.LastAuthoritativeAttemptId);
+        Assert.Null(beforeCurrent.LastCurrentCaptureAttemptId);
 
         var current = await fixture.Evidence.CaptureSourceResponseAsync(
             second.AttemptId,
@@ -222,11 +222,11 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
         var firstAttempt = await fixture.Ingestion.GetAttemptAsync(
             first.AttemptId,
             TestContext.Current.CancellationToken);
-        var authority = await fixture.ReadEndpointAuthorityAsync();
+        var authority = await fixture.ReadEndpointCaptureStateAsync();
 
         Assert.Equal(IngestionAttemptState.CapturedLate, firstAttempt!.State);
         Assert.Null(authority.ActiveAttemptId);
-        Assert.Equal(second.AttemptId, authority.LastAuthoritativeAttemptId);
+        Assert.Equal(second.AttemptId, authority.LastCurrentCaptureAttemptId);
         Assert.Equal(second.FenceToken, authority.FenceToken);
     }
 
@@ -480,11 +480,11 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             return (reader.GetInt64(0), reader.GetInt64(1));
         }
 
-        public async Task<EndpointAuthority> ReadEndpointAuthorityAsync()
+        public async Task<EndpointCaptureState> ReadEndpointCaptureStateAsync()
         {
             await using var command = DataSource.CreateCommand(
                 """
-                SELECT fence_token, active_attempt_id, last_authoritative_attempt_id
+                SELECT fence_token, active_attempt_id, last_current_capture_attempt_id
                 FROM ingest.endpoint_state
                 WHERE endpoint_id = @endpoint_id;
                 """);
@@ -494,7 +494,7 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
                 TestContext.Current.CancellationToken);
             Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
 
-            return new EndpointAuthority(
+            return new EndpointCaptureState(
                 new FenceToken(reader.GetInt64(0)),
                 reader.IsDBNull(1) ? null : new IngestionAttemptId(reader.GetGuid(1)),
                 reader.IsDBNull(2) ? null : new IngestionAttemptId(reader.GetGuid(2)));
@@ -510,8 +510,8 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
         LeaseGeneration LeaseGeneration,
         FenceToken FenceToken);
 
-    private sealed record EndpointAuthority(
+    private sealed record EndpointCaptureState(
         FenceToken FenceToken,
         IngestionAttemptId? ActiveAttemptId,
-        IngestionAttemptId? LastAuthoritativeAttemptId);
+        IngestionAttemptId? LastCurrentCaptureAttemptId);
 }

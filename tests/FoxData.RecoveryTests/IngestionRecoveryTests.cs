@@ -207,7 +207,7 @@ public sealed class IngestionRecoveryTests(RecoveryPostgresFixture postgres)
 
         var beforeCurrent = await fixture.ReadAuthorityAsync();
         Assert.Equal(newAttempt.AttemptId, beforeCurrent.ActiveAttemptId);
-        Assert.Null(beforeCurrent.LastAuthoritativeAttemptId);
+        Assert.Null(beforeCurrent.LastCurrentCaptureAttemptId);
 
         var newCapture = await fixture.Evidence.CaptureSourceResponseAsync(
             newAttempt.AttemptId,
@@ -222,7 +222,7 @@ public sealed class IngestionRecoveryTests(RecoveryPostgresFixture postgres)
 
         var authority = await fixture.ReadAuthorityAsync();
         Assert.Null(authority.ActiveAttemptId);
-        Assert.Equal(newAttempt.AttemptId, authority.LastAuthoritativeAttemptId);
+        Assert.Equal(newAttempt.AttemptId, authority.LastCurrentCaptureAttemptId);
         Assert.Equal(newAttempt.FenceToken, authority.FenceToken);
     }
 
@@ -440,11 +440,11 @@ public sealed class IngestionRecoveryTests(RecoveryPostgresFixture postgres)
             return authority.ActiveAttemptId;
         }
 
-        public async Task<EndpointAuthority> ReadAuthorityAsync()
+        public async Task<EndpointCaptureState> ReadAuthorityAsync()
         {
             await using var command = dataSource.CreateCommand(
                 """
-                SELECT fence_token, active_attempt_id, last_authoritative_attempt_id
+                SELECT fence_token, active_attempt_id, last_current_capture_attempt_id
                 FROM ingest.endpoint_state
                 WHERE endpoint_id = @endpoint_id;
                 """);
@@ -454,7 +454,7 @@ public sealed class IngestionRecoveryTests(RecoveryPostgresFixture postgres)
                 TestContext.Current.CancellationToken);
             Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
 
-            return new EndpointAuthority(
+            return new EndpointCaptureState(
                 new FenceToken(reader.GetInt64(0)),
                 reader.IsDBNull(1) ? null : new IngestionAttemptId(reader.GetGuid(1)),
                 reader.IsDBNull(2) ? null : new IngestionAttemptId(reader.GetGuid(2)));
@@ -470,8 +470,8 @@ public sealed class IngestionRecoveryTests(RecoveryPostgresFixture postgres)
         LeaseGeneration LeaseGeneration,
         FenceToken FenceToken);
 
-    private sealed record EndpointAuthority(
+    private sealed record EndpointCaptureState(
         FenceToken FenceToken,
         IngestionAttemptId? ActiveAttemptId,
-        IngestionAttemptId? LastAuthoritativeAttemptId);
+        IngestionAttemptId? LastCurrentCaptureAttemptId);
 }

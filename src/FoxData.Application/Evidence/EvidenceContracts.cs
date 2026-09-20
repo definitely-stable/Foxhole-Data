@@ -67,7 +67,7 @@ public sealed record CaptureResult(
     public bool Captured =>
         Status is CaptureStatus.CapturedCurrent or CaptureStatus.CapturedLate;
 
-    public bool IsAuthoritative => Status is CaptureStatus.CapturedCurrent;
+    public bool IsCurrentCapture => Status is CaptureStatus.CapturedCurrent;
 }
 
 public sealed class EvidenceIntegrityException : Exception
