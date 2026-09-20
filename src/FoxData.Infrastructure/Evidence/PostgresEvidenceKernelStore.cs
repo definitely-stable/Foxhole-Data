@@ -324,6 +324,13 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         ReadOnlyMemory<byte> body,
         CancellationToken cancellationToken)
     {
+        var actualHash = PayloadHash.Compute(body.Span);
+        if (actualHash != hash)
+        {
+            throw new EvidenceIntegrityException(
+                $"Supplied payload hash {hash} does not match SHA-256 of the exact payload bytes ({actualHash}).");
+        }
+
         await using (var insert = connection.CreateCommand())
         {
             insert.Transaction = transaction;

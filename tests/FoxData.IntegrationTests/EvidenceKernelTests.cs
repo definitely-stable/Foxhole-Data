@@ -231,6 +231,35 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
     }
 
     [Fact]
+    public async Task PersistenceBoundaryRejectsMismatchedPayloadHash()
+    {
+        await using var fixture = await CreateFixtureAsync("integrity-mismatch");
+        var authorized = await fixture.CreateAuthorizedAttemptAsync("job-integrity");
+
+        var body = new byte[] { 1, 2, 3 };
+        var wrongHash = PayloadHash.Compute(new byte[] { 9, 9, 9 });
+
+        await Assert.ThrowsAsync<EvidenceIntegrityException>(
+            () => fixture.EvidenceStore.CaptureSourceResponseAsync(
+                FetchId.New(),
+                PayloadId.New(),
+                authorized.AttemptId,
+                fixture.EndpointId,
+                authorized.LeaseGeneration,
+                authorized.FenceToken,
+                CreateObservation(200, body.Length),
+                wrongHash,
+                body,
+                priorFetchId: null,
+                TestContext.Current.CancellationToken));
+
+        var counts = await fixture.ReadEvidenceCountsAsync();
+
+        Assert.Equal(0, counts.Payloads);
+        Assert.Equal(0, counts.Fetches);
+    }
+
+    [Fact]
     public async Task PriorFetchFromAnotherEndpointIsRejected()
     {
         await using var firstFixture = await CreateFixtureAsync("prior-source");
@@ -306,11 +335,14 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             $"{scenario}/endpoint",
             TestContext.Current.CancellationToken);
 
+        var evidenceStore = new PostgresEvidenceKernelStore(dataSource);
+
         return new EvidenceFixture(
             dataSource,
             registry,
             new IngestionKernel(new PostgresIngestionKernelStore(dataSource)),
-            new EvidenceKernel(new PostgresEvidenceKernelStore(dataSource)),
+            new EvidenceKernel(evidenceStore),
+            evidenceStore,
             source.Resource.Id,
             shard.Resource.Id,
             endpoint.Resource.Id);
@@ -331,6 +363,7 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             root.Registry,
             root.Ingestion,
             root.Evidence,
+            root.EvidenceStore,
             root.SourceId,
             root.ShardId,
             endpoint.Resource.Id,
@@ -376,6 +409,7 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             SourceRegistry registry,
             IngestionKernel ingestion,
             EvidenceKernel evidence,
+            PostgresEvidenceKernelStore evidenceStore,
             SourceId sourceId,
             ShardId shardId,
             EndpointId endpointId,
@@ -385,6 +419,7 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             Registry = registry;
             Ingestion = ingestion;
             Evidence = evidence;
+            EvidenceStore = evidenceStore;
             SourceId = sourceId;
             ShardId = shardId;
             EndpointId = endpointId;
@@ -398,6 +433,8 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
         public IngestionKernel Ingestion { get; }
 
         public EvidenceKernel Evidence { get; }
+
+        public PostgresEvidenceKernelStore EvidenceStore { get; }
 
         public SourceId SourceId { get; }
 
