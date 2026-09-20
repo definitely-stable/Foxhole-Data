@@ -1,6 +1,6 @@
 # M1 — Repository Bootstrap
 
-Status: implemented in PR #2; awaiting merge.
+Status: completed in PR #2.
 Prerequisite: M0 architecture foundation.
 Successor: M2 evidence kernel.
 
