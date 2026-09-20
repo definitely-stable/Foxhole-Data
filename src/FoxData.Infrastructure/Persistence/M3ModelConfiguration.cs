@@ -140,6 +140,8 @@ internal static class M3ModelConfiguration
             .HasColumnName("source_version");
         builder.Property(x => x.SourceLastUpdated)
             .HasColumnName("source_last_updated");
+        builder.Property(x => x.DecodedByteLength)
+            .HasColumnName("decoded_byte_length");
 
         builder.HasIndex(
                 x => new
