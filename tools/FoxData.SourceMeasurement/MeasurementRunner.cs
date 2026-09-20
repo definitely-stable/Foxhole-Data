@@ -114,6 +114,17 @@ internal static class MeasurementRunner
             }
         }
 
+        var scheduleDecisions =
+            new List<SourceMeasurementScheduleDecision>();
+        await foreach (var decision in reader.ReadScheduleDecisionsAsync(
+            WarApiCatalog.SourceKey,
+            options.StartInclusive,
+            options.EndExclusive,
+            cancellationToken))
+        {
+            scheduleDecisions.Add(decision);
+        }
+
         var parseByFetch = parseRuns.ToDictionary(
             parseRun => parseRun.RepresentationFetchId.Value);
 
@@ -199,6 +210,15 @@ internal static class MeasurementRunner
         var storageGrowth = await TryReadStorageGrowthAsync(
             options.OutputDirectory,
             cancellationToken);
+        var scheduling = AnalyzeScheduling(
+            fetches,
+            attempts,
+            scheduleDecisions);
+        var downsampling = BuildDownsampling(
+            fetches,
+            attempts,
+            scheduleDecisions,
+            parseByFetch);
 
         var summary = new MeasurementSummary(
             options.RunId,
@@ -238,6 +258,8 @@ internal static class MeasurementRunner
                         : fetch.ContentEncoding!),
             AnalyzeCache(fetches),
             AnalyzeAttempts(attempts),
+            scheduling,
+            downsampling,
             storageGrowth,
             warApiReport);
 
@@ -503,6 +525,238 @@ internal static class MeasurementRunner
                         : attempt.ErrorClass!));
     }
 
+    private static MeasurementSchedulingSummary AnalyzeScheduling(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches,
+        IReadOnlyCollection<SourceMeasurementAttempt> attempts,
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+    {
+        var fetchById = fetches.ToDictionary(
+            fetch => fetch.FetchId.Value);
+        var windowDecisions = decisions
+            .Where(
+                decision =>
+                    fetchById.ContainsKey(
+                        decision.FetchId.Value))
+            .ToArray();
+
+        var attemptById = attempts.ToDictionary(
+            attempt => attempt.AttemptId.Value);
+        var decisionBySuccessorJob = decisions
+            .Where(decision => decision.SuccessorJobId is not null)
+            .ToDictionary(
+                decision => decision.SuccessorJobId!.Value.Value);
+
+        var probeAttributed = 0;
+        var baselineAttributed = 0;
+        var unattributed = 0;
+
+        foreach (var fetch in fetches)
+        {
+            if (!attemptById.TryGetValue(
+                    fetch.AttemptId.Value,
+                    out var attempt) ||
+                !decisionBySuccessorJob.TryGetValue(
+                    attempt.JobId.Value,
+                    out var incomingDecision))
+            {
+                unattributed++;
+                continue;
+            }
+
+            if (incomingDecision.ProbeSelected)
+            {
+                probeAttributed++;
+            }
+            else
+            {
+                baselineAttributed++;
+            }
+        }
+
+        var cadenceSeconds = windowDecisions
+            .Select(
+                decision =>
+                    decision.EffectiveCadenceMs / 1000d)
+            .ToArray();
+        var sourceCacheDelay = new List<double>();
+        var retryDelay = new List<double>();
+        var successorDelay = new List<double>();
+        var successorExtension = new List<double>();
+
+        foreach (var decision in windowDecisions)
+        {
+            if (!fetchById.TryGetValue(
+                    decision.FetchId.Value,
+                    out var fetch))
+            {
+                continue;
+            }
+
+            if (decision.SourceCacheEligibleAt is { } cacheEligibleAt)
+            {
+                sourceCacheDelay.Add(
+                    Math.Max(
+                        0,
+                        (cacheEligibleAt - fetch.RetrievedAt)
+                            .TotalSeconds));
+            }
+
+            if (decision.RetryEligibleAt is { } retryEligibleAt)
+            {
+                retryDelay.Add(
+                    Math.Max(
+                        0,
+                        (retryEligibleAt - fetch.RetrievedAt)
+                            .TotalSeconds));
+            }
+
+            if (decision.SuccessorAvailableAt is { } successorAvailableAt)
+            {
+                var delay = Math.Max(
+                    0,
+                    (successorAvailableAt - fetch.RetrievedAt)
+                        .TotalSeconds);
+                successorDelay.Add(delay);
+
+                var cadenceSecondsForDecision =
+                    decision.EffectiveCadenceMs / 1000d;
+                successorExtension.Add(
+                    Math.Max(
+                        0,
+                        delay - cadenceSecondsForDecision));
+            }
+        }
+
+        return new MeasurementSchedulingSummary(
+            windowDecisions.Length,
+            Math.Max(
+                0,
+                fetches.Count - windowDecisions.Length),
+            windowDecisions.Count(
+                decision => decision.ProbeSelected),
+            windowDecisions.Count(
+                decision => decision.SuccessorJobId is not null),
+            probeAttributed,
+            baselineAttributed,
+            unattributed,
+            Percentiles(cadenceSeconds),
+            Percentiles(sourceCacheDelay),
+            Percentiles(retryDelay),
+            Percentiles(successorDelay),
+            Percentiles(successorExtension));
+    }
+
+    private static IReadOnlyList<MeasurementDownsampleSeries> BuildDownsampling(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches,
+        IReadOnlyCollection<SourceMeasurementAttempt> attempts,
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions,
+        IReadOnlyDictionary<Guid, SourceMeasurementParseRun> parseByFetch)
+    {
+        var attemptById = attempts.ToDictionary(
+            attempt => attempt.AttemptId.Value);
+        var decisionBySuccessorJob = decisions
+            .Where(decision => decision.SuccessorJobId is not null)
+            .ToDictionary(
+                decision => decision.SuccessorJobId!.Value.Value);
+
+        var probeFetches = fetches
+            .Where(fetch =>
+            {
+                if (!attemptById.TryGetValue(
+                        fetch.AttemptId.Value,
+                        out var attempt) ||
+                    attempt.AttemptNumber != 1 ||
+                    !decisionBySuccessorJob.TryGetValue(
+                        attempt.JobId.Value,
+                        out var incomingDecision))
+                {
+                    return false;
+                }
+
+                return incomingDecision.ProbeSelected;
+            })
+            .ToArray();
+
+        var candidateCadences = new[]
+        {
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(60),
+            TimeSpan.FromSeconds(120),
+        };
+
+        return probeFetches
+            .GroupBy(
+                fetch => new
+                {
+                    fetch.ShardKey,
+                    fetch.SemanticKey,
+                    fetch.CapabilityKey,
+                })
+            .Select(group =>
+            {
+                var capability =
+                    CapabilityFromKey(group.Key.CapabilityKey);
+                var samples = group
+                    .OrderBy(fetch => fetch.RequestStartedAt)
+                    .ThenBy(fetch => fetch.FetchId.Value)
+                    .Select(fetch =>
+                    {
+                        _ = parseByFetch.TryGetValue(
+                            fetch.FetchId.Value,
+                            out var parseRun);
+
+                        return new WarApiMeasurementSample(
+                            group.Key.SemanticKey,
+                            capability,
+                            fetch.RequestStartedAt,
+                            fetch.StatusCode,
+                            fetch.PayloadSha256Hex,
+                            fetch.PayloadBytes,
+                            fetch.SourceEtag,
+                            fetch.DurationMs,
+                            parseRun?.SourceVersion);
+                    })
+                    .ToArray();
+
+                if (!samples.Any(
+                        sample =>
+                            sample.StatusCode == 200 &&
+                            sample.PayloadHash is not null))
+                {
+                    return null;
+                }
+
+                var candidates = candidateCadences
+                    .Select(
+                        cadence =>
+                            WarApiMeasurementAnalyzer.SimulateCadence(
+                                samples,
+                                cadence))
+                    .ToArray();
+
+                return new MeasurementDownsampleSeries(
+                    group.Key.ShardKey,
+                    group.Key.SemanticKey,
+                    group.Key.CapabilityKey,
+                    samples.Length,
+                    candidates);
+            })
+            .Where(
+                summary => summary is not null)
+            .Select(summary => summary!)
+            .OrderBy(
+                summary => summary.ShardKey,
+                StringComparer.Ordinal)
+            .ThenBy(
+                summary => summary.CapabilityKey,
+                StringComparer.Ordinal)
+            .ThenBy(
+                summary => summary.EndpointKey,
+                StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private static double? PayloadDeduplicationRatio(
         IReadOnlyCollection<SourceMeasurementFetch> fetches)
     {
@@ -690,6 +944,47 @@ internal static class MeasurementRunner
         builder.AppendLine(
             $"- Logical-start lag p95: {FormatNumber(summary.Attempts.LogicalStartLagSeconds.P95)} s");
         builder.AppendLine();
+
+        builder.AppendLine("## Scheduling");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Decisions in window: {summary.Scheduling.WindowDecisionCount}");
+        builder.AppendLine(
+            $"- Missing decisions: {summary.Scheduling.MissingWindowDecisionCount}");
+        builder.AppendLine(
+            $"- Probe-selected decisions: {summary.Scheduling.ProbeSelectedDecisionCount}");
+        builder.AppendLine(
+            $"- Probe-attributed fetches: {summary.Scheduling.ProbeAttributedFetchCount}");
+        builder.AppendLine(
+            $"- Baseline-attributed fetches: {summary.Scheduling.BaselineAttributedFetchCount}");
+        builder.AppendLine(
+            $"- Unattributed fetches: {summary.Scheduling.UnattributedFetchCount}");
+        builder.AppendLine(
+            $"- Effective cadence p95: {FormatNumber(summary.Scheduling.EffectiveCadenceSeconds.P95)} s");
+        builder.AppendLine(
+            $"- Successor extension beyond cadence p95: {FormatNumber(summary.Scheduling.SuccessorExtensionBeyondCadenceSeconds.P95)} s");
+        builder.AppendLine();
+
+        if (summary.Downsampling.Count > 0)
+        {
+            builder.AppendLine("## Probe downsampling");
+            builder.AppendLine();
+            builder.AppendLine(
+                "| Shard | Endpoint | Candidate | Probe fetches | Episodes | Captured | Ratio | Delay p95 |");
+            builder.AppendLine(
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+
+            foreach (var endpoint in summary.Downsampling)
+            {
+                foreach (var candidate in endpoint.Candidates)
+                {
+                    builder.AppendLine(
+                        $"| {endpoint.ShardKey} | {endpoint.EndpointKey} | {candidate.CandidateCadence.TotalSeconds:0}s | {endpoint.ProbeAttributedFetchCount} | {candidate.BaselineEpisodeCount} | {candidate.CapturedEpisodeCount} | {candidate.CaptureRatio:P2} | {FormatNumber(candidate.ObservationDelayP95Seconds)} s |");
+                }
+            }
+
+            builder.AppendLine();
+        }
 
         builder.AppendLine("## Cache");
         builder.AppendLine();
