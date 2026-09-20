@@ -33,4 +33,6 @@ internal sealed class SourceParseRunRow
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset CompletedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public long? SourceVersion { get; set; }
+    public long? SourceLastUpdated { get; set; }
 }
