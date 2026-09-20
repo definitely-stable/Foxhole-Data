@@ -10,6 +10,9 @@
     <Project Path="src/FoxData.Worker/FoxData.Worker.csproj" />
     <Project Path="src/FoxData.Cli/FoxData.Cli.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FoxData.UnitTests/FoxData.UnitTests.csproj" />
     <Project Path="tests/FoxData.IntegrationTests/FoxData.IntegrationTests.csproj" />
