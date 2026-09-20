@@ -389,6 +389,41 @@ storage-after.json
 
 Raw source payloads are not committed to Git.
 
+Implemented tool:
+
+~~~text
+tools/FoxData.SourceMeasurement/
+~~~
+
+The tool never accepts a connection string on the command line. Supply it through `ConnectionStrings__FoxData` or `FOXDATA_CONNECTION_STRING`.
+
+Before the campaign:
+
+~~~text
+dotnet run --project tools/FoxData.SourceMeasurement -- storage \
+  --label before \
+  --output <measurement-directory>
+~~~
+
+After the campaign:
+
+~~~text
+dotnet run --project tools/FoxData.SourceMeasurement -- storage \
+  --label after \
+  --output <measurement-directory>
+
+dotnet run --project tools/FoxData.SourceMeasurement -- analyze \
+  --run-id <stable-run-id> \
+  --start <ISO-8601-with-offset> \
+  --end <ISO-8601-with-offset> \
+  --output <measurement-directory> \
+  --observer-region <coarse-non-secret-region> \
+  --repository-sha <exact-commit-sha> \
+  --profile-version <collection-profile-version>
+~~~
+
+When both storage snapshots exist, `analyze` also emits physical PostgreSQL growth/day and 30/365-day projections in the summary/report.
+
 ## 13. Measurement run manifest
 
 Every live run MUST record enough context to make analysis reproducible:
