@@ -91,6 +91,8 @@ M3 endpoint_poll_state is a separate rebuildable scheduling/validator projection
 - policyVersion
 - updatedAt
 
+From M4 onward, policyVersion is a composite scheduling identity containing both the poll algorithm and collection profile version, for example `warapi-poll@1/collection-profile@1`.
+
 endpoint_poll_state MUST NOT duplicate fenceToken, leaseGeneration or active attempt ownership.
 
 representationFetchId identifies the body-bearing source representation used for conditional validation. It is not simply the latest Fetch.
