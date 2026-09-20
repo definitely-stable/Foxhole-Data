@@ -157,6 +157,7 @@ internal sealed record MeasurementSummary(
     int EtagPresentCount,
     IReadOnlyDictionary<string, int> StatusCounts,
     IReadOnlyDictionary<string, int> ContentEncodingCounts,
+    IReadOnlyDictionary<string, int> BodyErrorCounts,
     MeasurementEtagSummary Etag,
     MeasurementPayloadDecodeSummary PayloadDecode,
     IReadOnlyDictionary<string, MeasurementPercentiles> LatencyByResponseClassMs,
