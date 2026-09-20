@@ -200,19 +200,12 @@ public sealed class PostgresSourceParseRunStore(NpgsqlDataSource dataSource)
             !string.Equals(existing.Outcome, supplied.Outcome, StringComparison.Ordinal) ||
             existing.UnknownPropertyCount != supplied.UnknownPropertyCount ||
             existing.UnknownCodeCount != supplied.UnknownCodeCount ||
-            !string.Equals(existing.ErrorCode, supplied.ErrorCode, StringComparison.Ordinal) ||
-            !SamePostgresTimestamp(existing.StartedAt, supplied.StartedAt) ||
-            !SamePostgresTimestamp(existing.CompletedAt, supplied.CompletedAt))
+            !string.Equals(existing.ErrorCode, supplied.ErrorCode, StringComparison.Ordinal))
         {
             throw new SourceStateIntegrityException(
                 "Repeated parse-run input differs from the durable parse run.");
         }
     }
-
-    private static bool SamePostgresTimestamp(
-        DateTimeOffset first,
-        DateTimeOffset second) =>
-        first.UtcTicks / 10 == second.UtcTicks / 10;
 
     private static void Validate(SourceParseRunWrite run)
     {
