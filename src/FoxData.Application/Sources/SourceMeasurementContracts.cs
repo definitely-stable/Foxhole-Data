@@ -68,7 +68,9 @@ public sealed record SourceMeasurementParseRun(
     string? ErrorCode,
     DateTimeOffset RepresentationObservedAt,
     DateTimeOffset StartedAt,
-    DateTimeOffset CompletedAt);
+    DateTimeOffset CompletedAt,
+    long? SourceVersion,
+    long? SourceLastUpdated);
 
 public interface ISourceMeasurementReader
 {
