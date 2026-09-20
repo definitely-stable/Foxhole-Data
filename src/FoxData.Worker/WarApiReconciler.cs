@@ -96,6 +96,14 @@ public sealed class WarApiReconciler(
         await pollStateStore.PutAsync(
             transition.State,
             cancellationToken);
+
+        WarApiTelemetry.Reconciliations.Add(
+            1,
+            SourceTags(
+                context,
+                transition.SuccessorAvailableAt is null
+                    ? "no_successor"
+                    : "successor_scheduled"));
     }
 
     private async Task<WarApiParseResult?> ParseAndRecordAsync(
@@ -155,6 +163,10 @@ public sealed class WarApiReconciler(
                 startedAt,
                 completedAt),
             cancellationToken);
+
+        WarApiTelemetry.ParseRuns.Add(
+            1,
+            SourceTags(context, outcome));
 
         return parsed;
     }
@@ -450,6 +462,17 @@ public sealed class WarApiReconciler(
             fetch.RetrievedAt,
             TimeSpan.Zero).SourceCacheEligibleAt;
     }
+
+    private static KeyValuePair<string, object?>[] SourceTags(
+        WarApiRegistryContext context,
+        string outcome) =>
+        [
+            new("source", WarApiCatalog.SourceKey),
+            new("environment", context.Shard.Environment),
+            new("shard", context.Shard.Key),
+            new("capability", context.Endpoint.CapabilityKey),
+            new("outcome", outcome),
+        ];
 
     private static WarApiCacheMetadata ToCacheMetadata(
         FetchDescriptor fetch) =>
