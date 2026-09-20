@@ -973,13 +973,17 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 """);
             command.Parameters.AddWithValue("key", key);
 
-            var value = await command.ExecuteScalarAsync(
+            await using var reader = await command.ExecuteReaderAsync(
                 TestContext.Current.CancellationToken);
 
-            return value is DateTimeOffset timestamp
-                ? timestamp
-                : throw new InvalidOperationException(
+            if (!await reader.ReadAsync(
+                    TestContext.Current.CancellationToken))
+            {
+                throw new InvalidOperationException(
                     $"Collection job '{key}' was not found.");
+            }
+
+            return reader.GetFieldValue<DateTimeOffset>(0);
         }
 
         public async Task<long> CountJobsByKeyAsync(string key)
