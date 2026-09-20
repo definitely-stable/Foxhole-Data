@@ -125,6 +125,77 @@ public sealed class WarApiParserTests
         Assert.Equal("FUTURE_FACTION", Assert.Single(map.MapItems!).TeamId);
     }
 
+    [Theory]
+    [InlineData("runtime-war-state", "{\"warId\":\"abc\",\"warNumber\":\"129\"}")]
+    [InlineData("region-war-report", "{\"totalEnlistments\":\"many\"}")]
+    [InlineData("static-map-state", "{\"version\":\"new\"}")]
+    [InlineData("dynamic-map-state", "{\"mapItems\":{}}")]
+    public void ValidJsonWithIncompatibleKnownShapeIsClassifiedSeparately(
+        string capabilityKey,
+        string json)
+    {
+        var capability = capabilityKey switch
+        {
+            "runtime-war-state" => WarApiCapabilities.RuntimeWarState,
+            "region-war-report" => WarApiCapabilities.RegionWarReport,
+            "static-map-state" => WarApiCapabilities.StaticMapState,
+            "dynamic-map-state" => WarApiCapabilities.DynamicMapState,
+            _ => throw new ArgumentOutOfRangeException(nameof(capabilityKey)),
+        };
+
+        var result = Parse(capability, json);
+
+        Assert.Equal(WarApiParseOutcome.IncompatibleShape, result.Outcome);
+        Assert.Null(result.Value);
+        Assert.Equal("incompatible_shape", result.ErrorCode);
+        Assert.NotNull(result.StructuralFingerprint);
+    }
+
+    [Fact]
+    public void WarReportParsesKnownShape()
+    {
+        var result = Parse(
+            WarApiCapabilities.RegionWarReport,
+            """
+            {
+              "totalEnlistments":1234,
+              "colonialCasualties":100,
+              "wardenCasualties":120,
+              "dayOfWar":3
+            }
+            """);
+
+        Assert.Equal(WarApiParseOutcome.Parsed, result.Outcome);
+        var report = Assert.IsType<WarApiWarReportDto>(result.Value);
+        Assert.Equal(1234, report.TotalEnlistments);
+        Assert.Equal(3, report.DayOfWar);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StaticAndDynamicMapFamiliesShareTolerantSourceShape(bool dynamic)
+    {
+        var capability = dynamic
+            ? WarApiCapabilities.DynamicMapState
+            : WarApiCapabilities.StaticMapState;
+
+        var result = Parse(
+            capability,
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":10,
+              "version":2
+            }
+            """);
+
+        Assert.Equal(WarApiParseOutcome.Parsed, result.Outcome);
+        Assert.IsType<WarApiMapDataDto>(result.Value);
+    }
+
     [Fact]
     public void MalformedJsonIsClassifiedWithoutThrowing()
     {
