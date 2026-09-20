@@ -19,9 +19,9 @@ public sealed class WarApiMeasurementAnalyzerTests
         var samples = new[]
         {
             Sample(start, 200, "A", 100, "etag-a", 10, version: 10),
-            Sample(start.AddSeconds(60), 304, null, null, "etag-a", 5),
-            Sample(start.AddSeconds(120), 200, "A", 100, "etag-b", 20, version: 10),
-            Sample(start.AddSeconds(180), 200, "B", 200, "etag-b", 30, version: 13),
+            Sample(start.AddSeconds(60), 304, null, null, "etag-b", 5),
+            Sample(start.AddSeconds(120), 200, "A", 100, "etag-c", 20, version: 10),
+            Sample(start.AddSeconds(180), 200, "B", 200, "etag-c", 30, version: 13),
             Sample(start.AddSeconds(240), 200, "C", 300, "etag-c", 40, version: 12),
             Sample(start.AddSeconds(300), 500, null, null, null, 50),
         };
