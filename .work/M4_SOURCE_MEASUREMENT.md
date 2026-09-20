@@ -393,6 +393,7 @@ It produces aggregated outputs such as:
 measurement-manifest.json
 measurement-summary.json
 measurement-report.md
+measurement-validation.json
 storage-before.json
 storage-after.json
 ~~~
