@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   generate:
+    env:
+      FOXDATA_DESIGN_CONNECTION: "Host=127.0.0.1;Port=5432;Database=foxdata_design;Username=foxdata;Password=foxdata"
     if: "!contains(github.event.head_commit.message, '[m3-migration-generated]')"
     runs-on: ubuntu-latest
     steps:
