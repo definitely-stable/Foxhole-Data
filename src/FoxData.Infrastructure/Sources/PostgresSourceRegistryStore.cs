@@ -162,6 +162,23 @@ public sealed class PostgresSourceRegistryStore(NpgsqlDataSource dataSource) : I
         return await GetSourceByKeyAsync(connection, key, cancellationToken);
     }
 
+    public async Task<SourceDescriptor?> GetSourceAsync(
+        SourceId sourceId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT id, key, display_name, enabled, created_at, updated_at
+            FROM sources.sources
+            WHERE id = @source_id;
+            """;
+        AddUuid(command, "source_id", sourceId.Value);
+
+        return await ReadSourceAsync(command, cancellationToken);
+    }
+
     public async Task<ShardDescriptor?> GetShardByKeyAsync(
         SourceId sourceId,
         string key,
