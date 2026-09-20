@@ -503,6 +503,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var probe = new WarApiMeasurementProbeProfile(
             Enabled: true,
             RunId: "m4-probe-integration",
+            ShardKeys: ["live-1"],
             MaxMapsPerShard: 1,
             TargetCadence: TimeSpan.FromSeconds(15));
         await using var fixture = await CreateFixtureAsync(
