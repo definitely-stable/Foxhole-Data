@@ -7,6 +7,8 @@ namespace FoxData.Application.Sources;
 public sealed record SourceMeasurementFetch(
     FetchId FetchId,
     EndpointId EndpointId,
+    int AttemptNumber,
+    string JobIdempotencyKey,
     string SourceKey,
     string ShardKey,
     string Environment,
@@ -38,7 +40,6 @@ public sealed record SourceMeasurementAttempt(
     string CapabilityKey,
     string SemanticKey,
     DateTimeOffset ScheduledFor,
-    DateTimeOffset AvailableAt,
     DateTimeOffset StartedAt,
     DateTimeOffset? ExchangeAuthorizedAt,
     DateTimeOffset? RawDurableAt,
