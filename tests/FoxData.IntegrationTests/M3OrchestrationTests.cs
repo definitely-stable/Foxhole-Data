@@ -617,6 +617,17 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(60),
             successorAvailableAt);
 
+        var selectedDecision =
+            await fixture.ScheduleDecisions.GetAsync(
+                selectedSnapshot.CurrentFetch.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedDecision);
+        Assert.True(selectedDecision.ProbeSelected);
+        Assert.Equal(15_000, selectedDecision.EffectiveCadenceMs);
+        Assert.Equal(selectedPoll.PolicyVersion, selectedDecision.PolicyVersion);
+        Assert.NotNull(selectedDecision.SuccessorJobId);
+        Assert.Equal(successorAvailableAt, selectedDecision.SuccessorAvailableAt);
+
         fixture.Transport.Enqueue(
             CreateResponse(
                 fixture.Now,
@@ -646,6 +657,21 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         Assert.Equal(
             "warapi-poll@1/warapi-bootstrap-profile@1",
             otherPoll.PolicyVersion);
+
+        var otherSnapshot =
+            await fixture.EvidenceReader.GetCurrentAsync(
+                otherEndpoint.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(otherSnapshot);
+
+        var otherDecision =
+            await fixture.ScheduleDecisions.GetAsync(
+                otherSnapshot.CurrentFetch.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(otherDecision);
+        Assert.False(otherDecision.ProbeSelected);
+        Assert.Equal(60_000, otherDecision.EffectiveCadenceMs);
+        Assert.Equal(otherPoll.PolicyVersion, otherDecision.PolicyVersion);
     }
 
     private async Task<Fixture> CreateFixtureAsync(
