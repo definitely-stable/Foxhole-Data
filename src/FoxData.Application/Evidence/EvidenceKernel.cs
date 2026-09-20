@@ -142,11 +142,11 @@ public sealed class EvidenceKernel(IEvidenceKernelStore store)
         ValidateOptionalLength(value.CacheControl, 2048, nameof(value.CacheControl));
 
         var requestStartedAt = NormalizeTimestamp(value.RequestStartedAt);
-        var responseStartedAt = value.ResponseStartedAt is null
+        DateTimeOffset? responseStartedAt = value.ResponseStartedAt is null
             ? null
             : NormalizeTimestamp(value.ResponseStartedAt.Value);
         var retrievedAt = NormalizeTimestamp(value.RetrievedAt);
-        var expiresAt = value.ExpiresAt is null
+        DateTimeOffset? expiresAt = value.ExpiresAt is null
             ? null
             : NormalizeTimestamp(value.ExpiresAt.Value);
 

@@ -274,7 +274,7 @@ public sealed class EvidenceKernelTests(PostgresFixture postgres) : IClassFixtur
             "application/json",
             null,
             declaredLength,
-            ""fixture-etag"",
+            "\\"fixture-etag\\",
             "max-age=1",
             now.AddSeconds(1),
             2);
