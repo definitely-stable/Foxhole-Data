@@ -707,6 +707,10 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("transaction_timestamp()");
 
+                    b.Property<long?>("DecodedByteLength")
+                        .HasColumnType("bigint")
+                        .HasColumnName("decoded_byte_length");
+
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -771,6 +775,8 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                     b.ToTable("source_parse_runs", "evidence", t =>
                         {
                             t.HasCheckConstraint("ck_source_parse_runs_completed_after_started", "completed_at >= started_at");
+
+                            t.HasCheckConstraint("ck_source_parse_runs_decoded_byte_length", "decoded_byte_length IS NULL OR decoded_byte_length >= 0");
 
                             t.HasCheckConstraint("ck_source_parse_runs_unknown_code_count", "unknown_code_count >= 0");
 
