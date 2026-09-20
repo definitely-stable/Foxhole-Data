@@ -84,7 +84,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
                 parseStartedAt,
                 parseCompletedAt,
                 42,
-                1_758_000_000_000),
+                1_758_000_000_000,
+                officialBody.LongLength),
             TestContext.Current.CancellationToken);
 
         var recordedDecision = await scheduleDecisions.RecordAsync(
@@ -122,6 +123,8 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal("map-dynamic/DeadLandsHex", measuredFetch.SemanticKey);
         Assert.Equal(200, measuredFetch.StatusCode);
         Assert.Equal(12, measuredFetch.DurationMs);
+        Assert.NotNull(measuredFetch.PayloadId);
+        Assert.NotNull(measuredFetch.PayloadCreatedAt);
         Assert.Equal(officialBody.LongLength, measuredFetch.PayloadBytes);
         Assert.Equal(
             Convert.ToHexString(SHA256.HashData(officialBody)).ToLowerInvariant(),
@@ -168,6 +171,7 @@ public sealed class M4MeasurementReaderTests(PostgresFixture postgres)
         Assert.Equal("parsed", measuredParse.Outcome);
         Assert.Equal(42, measuredParse.SourceVersion);
         Assert.Equal(1_758_000_000_000, measuredParse.SourceLastUpdated);
+        Assert.Equal(officialBody.LongLength, measuredParse.DecodedByteLength);
         AssertWithinPostgresTimestampPrecision(
             observedAt.AddMilliseconds(-12),
             measuredParse.RepresentationObservedAt);
