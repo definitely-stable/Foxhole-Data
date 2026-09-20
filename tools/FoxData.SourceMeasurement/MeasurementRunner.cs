@@ -827,11 +827,17 @@ internal static class MeasurementRunner
         var noCache = 0;
         var noStore = 0;
         var expiresPresent = 0;
+        var sourceDatePresent = 0;
+        var sourceAgePresent = 0;
         var retryAfterPresent = 0;
         var retryAfterMalformed = 0;
+        var maxAges = new List<double>();
+        var sharedMaxAges = new List<double>();
+        var expiresLifetimes = new List<double>();
         var freshnessLifetimes = new List<double>();
         var sourceCacheDelays = new List<double>();
         var sourceAges = new List<double>();
+        var retryAfterDelays = new List<double>();
 
         foreach (var fetch in fetches)
         {
@@ -857,12 +863,37 @@ internal static class MeasurementRunner
                     {
                         noStore++;
                     }
+
+                    if (parsedCacheControl.MaxAge is { } maxAge)
+                    {
+                        maxAges.Add(maxAge.TotalSeconds);
+                    }
+
+                    if (parsedCacheControl.SharedMaxAge is { } sharedMaxAge)
+                    {
+                        sharedMaxAges.Add(sharedMaxAge.TotalSeconds);
+                    }
                 }
             }
 
-            if (fetch.ExpiresAt is not null)
+            if (fetch.SourceDate is not null)
+            {
+                sourceDatePresent++;
+            }
+
+            if (fetch.SourceAgeSeconds is not null)
+            {
+                sourceAgePresent++;
+            }
+
+            TimeSpan? expiresLifetime = null;
+            if (fetch.ExpiresAt is { } expiresAt)
             {
                 expiresPresent++;
+                var basis = fetch.SourceDate ?? fetch.RetrievedAt;
+                expiresLifetime = expiresAt - basis;
+                expiresLifetimes.Add(
+                    expiresLifetime.Value.TotalSeconds);
             }
 
             if (!string.IsNullOrWhiteSpace(fetch.RetryAfter))
@@ -870,9 +901,22 @@ internal static class MeasurementRunner
                 retryAfterPresent++;
                 if (!RetryConditionHeaderValue.TryParse(
                         fetch.RetryAfter,
-                        out _))
+                        out var retryAfter))
                 {
                     retryAfterMalformed++;
+                }
+                else if (retryAfter.Delta is { } delta)
+                {
+                    retryAfterDelays.Add(
+                        Math.Max(0, delta.TotalSeconds));
+                }
+                else if (retryAfter.Date is { } retryDate)
+                {
+                    retryAfterDelays.Add(
+                        Math.Max(
+                            0,
+                            (retryDate - fetch.RetrievedAt)
+                                .TotalSeconds));
                 }
             }
 
@@ -881,12 +925,12 @@ internal static class MeasurementRunner
                 parsedCacheControl?.MaxAge;
 
             if (explicitLifetime is null &&
-                fetch.ExpiresAt is { } expiresAt)
+                expiresLifetime is { } expires)
             {
-                var basis = fetch.SourceDate ?? fetch.RetrievedAt;
-                explicitLifetime = expiresAt > basis
-                    ? expiresAt - basis
-                    : TimeSpan.Zero;
+                explicitLifetime =
+                    expires > TimeSpan.Zero
+                        ? expires
+                        : TimeSpan.Zero;
             }
 
             if (explicitLifetime is { } lifetime)
@@ -926,11 +970,17 @@ internal static class MeasurementRunner
             noCache,
             noStore,
             expiresPresent,
+            sourceDatePresent,
+            sourceAgePresent,
             retryAfterPresent,
             retryAfterMalformed,
+            Percentiles(maxAges),
+            Percentiles(sharedMaxAges),
+            Percentiles(expiresLifetimes),
             Percentiles(freshnessLifetimes),
             Percentiles(sourceCacheDelays),
-            Percentiles(sourceAges));
+            Percentiles(sourceAges),
+            Percentiles(retryAfterDelays));
     }
 
     private static MeasurementAttemptSummary AnalyzeAttempts(
@@ -1663,6 +1713,18 @@ internal static class MeasurementRunner
             $"- Retry-After present: {summary.Cache.RetryAfterPresentCount}");
         builder.AppendLine(
             $"- Retry-After malformed: {summary.Cache.RetryAfterMalformedCount}");
+        builder.AppendLine(
+            $"- Source Date present: {summary.Cache.SourceDatePresentCount}");
+        builder.AppendLine(
+            $"- Source Age present: {summary.Cache.SourceAgePresentCount}");
+        builder.AppendLine(
+            $"- max-age p95: {FormatNumber(summary.Cache.MaxAgeSeconds.P95)} s");
+        builder.AppendLine(
+            $"- s-maxage p95: {FormatNumber(summary.Cache.SharedMaxAgeSeconds.P95)} s");
+        builder.AppendLine(
+            $"- Expires lifetime p95: {FormatNumber(summary.Cache.ExpiresLifetimeSeconds.P95)} s");
+        builder.AppendLine(
+            $"- Retry-After delay p95: {FormatNumber(summary.Cache.RetryAfterDelaySeconds.P95)} s");
         builder.AppendLine(
             $"- Source cache delay p95: {FormatNumber(summary.Cache.SourceCacheDelaySeconds.P95)} s");
         builder.AppendLine();
