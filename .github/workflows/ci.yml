@@ -21,7 +21,7 @@ jobs:
   build-test:
     name: Build and test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -55,18 +55,50 @@ jobs:
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --help >/dev/null
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --version >/dev/null
 
-      - name: Test
+      - name: Unit tests
         run: >-
           dotnet test
-          --solution FoxData.slnx
+          --project tests/FoxData.UnitTests/FoxData.UnitTests.csproj
           -c Release
           --no-build
           --minimum-expected-tests 10
 
+      - name: Integration tests
+        run: >-
+          dotnet test
+          --project tests/FoxData.IntegrationTests/FoxData.IntegrationTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 20
+
+      - name: Recovery tests
+        run: >-
+          dotnet test
+          --project tests/FoxData.RecoveryTests/FoxData.RecoveryTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 5
+
+      - name: Source tests
+        run: >-
+          dotnet test
+          --project tests/FoxData.SourceTests/FoxData.SourceTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 1
+
+      - name: Contract tests
+        run: >-
+          dotnet test
+          --project tests/FoxData.ContractTests/FoxData.ContractTests.csproj
+          -c Release
+          --no-build
+          --minimum-expected-tests 2
+
   compose-smoke:
     name: Docker Compose smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -77,6 +109,14 @@ jobs:
 
       - name: Start stack
         run: docker compose up --detach --build
+
+      - name: Verify migration job succeeded
+        shell: bash
+        run: |
+          migrate_id="$(docker compose ps --all --quiet migrate)"
+          test -n "$migrate_id"
+          test "$(docker inspect --format '{{.State.Status}}' "$migrate_id")" = "exited"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$migrate_id")" = "0"
 
       - name: Wait for API readiness
         run: >-
@@ -96,12 +136,12 @@ jobs:
         shell: bash
         run: |
           worker_id="$(docker compose ps --quiet worker)"
-          test -n "${worker_id}"
-          test "$(docker inspect --format '{{.State.Running}}' "${worker_id}")" = "true"
+          test -n "$worker_id"
+          test "$(docker inspect --format '{{.State.Running}}' "$worker_id")" = "true"
 
       - name: Show stack state
         if: always()
-        run: docker compose ps
+        run: docker compose ps --all
 
       - name: Show logs on failure
         if: failure()

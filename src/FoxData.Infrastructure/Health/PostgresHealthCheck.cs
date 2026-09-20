@@ -1,9 +1,12 @@
+using FoxData.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Npgsql;
 
 namespace FoxData.Infrastructure.Health;
 
-public sealed class PostgresHealthCheck(NpgsqlDataSource dataSource) : IHealthCheck
+public sealed class PostgresHealthCheck(IServiceScopeFactory scopeFactory) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
@@ -11,19 +14,31 @@ public sealed class PostgresHealthCheck(NpgsqlDataSource dataSource) : IHealthCh
     {
         try
         {
-            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-            await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT 1";
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<FoxDataDbContext>();
 
-            var result = await command.ExecuteScalarAsync(cancellationToken);
+            var pending = (await dbContext.Database
+                    .GetPendingMigrationsAsync(cancellationToken))
+                .Take(8)
+                .ToArray();
 
-            return Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture) == 1
-                ? HealthCheckResult.Healthy()
-                : HealthCheckResult.Unhealthy("PostgreSQL connectivity probe returned an unexpected value.");
+            if (pending.Length > 0)
+            {
+                return HealthCheckResult.Unhealthy(
+                    "PostgreSQL is reachable but the FoxData schema has pending migrations.",
+                    data: new Dictionary<string, object>
+                    {
+                        ["pendingMigrationCountAtLeast"] = pending.Length,
+                    });
+            }
+
+            return HealthCheckResult.Healthy("PostgreSQL schema is current for this service build.");
         }
         catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
         {
-            return HealthCheckResult.Unhealthy("PostgreSQL connectivity probe failed.", exception);
+            return HealthCheckResult.Unhealthy(
+                "PostgreSQL connectivity/schema readiness probe failed.",
+                exception);
         }
     }
 }
