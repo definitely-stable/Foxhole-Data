@@ -27,6 +27,7 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
             """
             SELECT
                 captured_fetch.id,
+                captured_fetch.prior_fetch_id,
                 captured_fetch.attempt_id,
                 endpoint.id,
                 source.key,
@@ -82,38 +83,41 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
         {
             yield return new SourceMeasurementFetch(
                 new FetchId(reader.GetGuid(0)),
-                new IngestionAttemptId(reader.GetGuid(1)),
-                new EndpointId(reader.GetGuid(2)),
-                reader.GetString(3),
+                reader.IsDBNull(1)
+                    ? null
+                    : new FetchId(reader.GetGuid(1)),
+                new IngestionAttemptId(reader.GetGuid(2)),
+                new EndpointId(reader.GetGuid(3)),
                 reader.GetString(4),
                 reader.GetString(5),
                 reader.GetString(6),
                 reader.GetString(7),
-                reader.GetFieldValue<DateTimeOffset>(8),
+                reader.GetString(8),
                 reader.GetFieldValue<DateTimeOffset>(9),
-                reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                reader.GetInt64(11),
-                reader.IsDBNull(12)
-                    ? null
-                    : new PayloadId(reader.GetGuid(12)),
+                reader.GetFieldValue<DateTimeOffset>(10),
+                reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                reader.GetInt64(12),
                 reader.IsDBNull(13)
                     ? null
-                    : reader.GetFieldValue<DateTimeOffset>(13),
-                reader.IsDBNull(14) ? null : reader.GetString(14),
-                reader.IsDBNull(15) ? null : reader.GetInt64(15),
-                reader.IsDBNull(16) ? null : reader.GetString(16),
-                reader.IsDBNull(17) ? null : reader.GetString(17),
-                reader.IsDBNull(18)
+                    : new PayloadId(reader.GetGuid(13)),
+                reader.IsDBNull(14)
                     ? null
-                    : reader.GetFieldValue<DateTimeOffset>(18),
+                    : reader.GetFieldValue<DateTimeOffset>(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.IsDBNull(16) ? null : reader.GetInt64(16),
+                reader.IsDBNull(17) ? null : reader.GetString(17),
+                reader.IsDBNull(18) ? null : reader.GetString(18),
                 reader.IsDBNull(19)
                     ? null
                     : reader.GetFieldValue<DateTimeOffset>(19),
-                reader.IsDBNull(20) ? null : reader.GetInt64(20),
-                reader.IsDBNull(21) ? null : reader.GetString(21),
+                reader.IsDBNull(20)
+                    ? null
+                    : reader.GetFieldValue<DateTimeOffset>(20),
+                reader.IsDBNull(21) ? null : reader.GetInt64(21),
                 reader.IsDBNull(22) ? null : reader.GetString(22),
-                reader.IsDBNull(23) ? null : reader.GetInt64(23),
-                reader.IsDBNull(24) ? null : reader.GetString(24));
+                reader.IsDBNull(23) ? null : reader.GetString(23),
+                reader.IsDBNull(24) ? null : reader.GetInt64(24),
+                reader.IsDBNull(25) ? null : reader.GetString(25));
         }
     }
 
