@@ -106,6 +106,10 @@ public sealed class WarApiHttpExchange
             {
                 bodyErrorCode = "body_read_failed";
             }
+            catch (HttpRequestException)
+            {
+                bodyErrorCode = "body_read_failed";
+            }
             catch (OperationCanceledException)
             {
                 bodyErrorCode = cancellationToken.IsCancellationRequested
