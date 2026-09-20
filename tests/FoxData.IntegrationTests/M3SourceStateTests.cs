@@ -144,8 +144,14 @@ public sealed class M3SourceStateTests(PostgresFixture postgres) : IClassFixture
         var first = await fixture.ParseRuns.RecordAsync(
             write,
             TestContext.Current.CancellationToken);
+        var replayedWrite = write with
+        {
+            StartedAt = started.AddMinutes(1),
+            CompletedAt = started.AddMinutes(1).AddMilliseconds(1),
+        };
+
         var repeated = await fixture.ParseRuns.RecordAsync(
-            write,
+            replayedWrite,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(first.Id, repeated.Id);
