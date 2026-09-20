@@ -212,6 +212,7 @@ public sealed class EvidenceKernel
         ValidateOptionalLength(value.SourceEtag, 1024, nameof(value.SourceEtag));
         ValidateOptionalLength(value.CacheControl, 2048, nameof(value.CacheControl));
         ValidateOptionalLength(value.RetryAfter, 1024, nameof(value.RetryAfter));
+        ValidateOptionalLength(value.BodyErrorCode, 128, nameof(value.BodyErrorCode));
 
         if (value.SourceAgeSeconds is < 0)
         {
