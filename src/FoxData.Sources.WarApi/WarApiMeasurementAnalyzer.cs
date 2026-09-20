@@ -92,6 +92,13 @@ public static class WarApiMeasurementAnalyzer
                     "Payload size must not be negative.",
                     nameof(samples));
             }
+
+            if (sample.SourceVersion < 0)
+            {
+                throw new ArgumentException(
+                    "Source version must not be negative.",
+                    nameof(samples));
+            }
         }
 
         var okCount = 0;
@@ -177,7 +184,7 @@ public static class WarApiMeasurementAnalyzer
                         {
                             versionRegressionCount++;
                         }
-                        else if (currentVersion > oldVersion + 1)
+                        else if (currentVersion > oldVersion)
                         {
                             versionGapCount += currentVersion - oldVersion - 1;
                         }
