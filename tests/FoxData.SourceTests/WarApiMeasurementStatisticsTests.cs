@@ -26,6 +26,7 @@ public sealed class WarApiMeasurementStatisticsTests
         Assert.Equal(1, summary.ParsedWithUnknownsCount);
         Assert.Equal(1, summary.FailedCount);
         Assert.Equal(2, summary.StructuralFingerprintChangeCount);
+        Assert.Equal(1, summary.SourceVersionAdvanceCount);
         Assert.Equal(2, summary.SourceVersionGapCount);
         Assert.Equal(2, summary.SourceVersionRegressionCount);
         Assert.Equal(1, summary.SourceLastUpdatedRegressionCount);
@@ -44,6 +45,7 @@ public sealed class WarApiMeasurementStatisticsTests
             Sample(start.AddMinutes(1), "parsed", "shape-a", 0, 0, long.MaxValue, 2),
         ]);
 
+        Assert.Equal(1, summary.SourceVersionAdvanceCount);
         Assert.Equal(long.MaxValue, summary.SourceVersionGapCount);
         Assert.Equal(0, summary.SourceVersionRegressionCount);
     }
