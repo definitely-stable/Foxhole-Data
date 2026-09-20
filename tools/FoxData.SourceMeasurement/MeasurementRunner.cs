@@ -1524,14 +1524,14 @@ internal static class MeasurementRunner
         builder.AppendLine("## Shard / capability");
         builder.AppendLine();
         builder.AppendLine(
-            "| Shard | Capability | Endpoints | Fetches | 200 | 304 | Other | Duplicate 200 | Changes | Version gaps | Version regressions | lastUpdated regressions |");
+            "| Shard | Capability | Endpoints | Fetches | 200 | 304 | Validation hits | Orphan 304 | Other | Duplicate 200 | Changes | Version advances | Version gaps | Version regressions | lastUpdated regressions |");
         builder.AppendLine(
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
 
         foreach (var group in summary.WarApi.Groups)
         {
             builder.AppendLine(
-                $"| {group.ShardKey} | {group.CapabilityKey} | {group.EndpointCount} | {group.FetchCount} | {group.OkCount} | {group.NotModifiedCount} | {group.OtherCount} | {group.DuplicateOkCount} | {group.RepresentationChangeCount} | {group.SourceVersionGapCount} | {group.SourceVersionRegressionCount} | {group.SourceLastUpdatedRegressionCount} |");
+                $"| {group.ShardKey} | {group.CapabilityKey} | {group.EndpointCount} | {group.FetchCount} | {group.OkCount} | {group.NotModifiedCount} | {group.ValidationHitCount} | {group.OrphanNotModifiedCount} | {group.OtherCount} | {group.DuplicateOkCount} | {group.RepresentationChangeCount} | {group.SourceVersionAdvanceCount} | {group.SourceVersionGapCount} | {group.SourceVersionRegressionCount} | {group.SourceLastUpdatedRegressionCount} |");
         }
 
         builder.AppendLine();
