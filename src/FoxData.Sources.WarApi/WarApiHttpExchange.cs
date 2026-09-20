@@ -106,11 +106,11 @@ public sealed class WarApiHttpExchange
             {
                 bodyErrorCode = "body_read_failed";
             }
-            catch (OperationCanceledException) when (
-                !cancellationToken.IsCancellationRequested &&
-                deadline.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                bodyErrorCode = "body_timeout";
+                bodyErrorCode = cancellationToken.IsCancellationRequested
+                    ? "body_cancelled"
+                    : "body_timeout";
             }
         }
 
