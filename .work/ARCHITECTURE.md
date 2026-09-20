@@ -76,8 +76,8 @@ These are code/module boundaries, not initial network services.
 3. Every accepted canonical fact is traceable to evidence.
 4. Unknown upstream values survive collection and normalization.
 5. ETag is a transport validator, not durable content identity.
-6. Exact source bytes are identified by SHA-256 before compression.
-7. One durable ingestion attempt performs at most one audited upstream HTTP exchange.
+6. Exact source content bytes are identified by SHA-256 before application content decoding/storage compression.
+7. One durable ingestion attempt performs at most one FoxData application-issued upstream HTTP send. Any later FoxData send requires a new AttemptId; transport-internal connection recovery is governed by ADR-0015.
 8. Live shards are separate provenance domains, never replicas for load balancing.
 9. Downstream consumers never query internal Foxhole-Data tables directly.
 10. Public semantics do not depend on HTTP, stdio, gRPC or any other transport.
@@ -89,3 +89,4 @@ These are code/module boundaries, not initial network services.
 16. Semantic interpretation is versioned independently from transport.
 17. Secondary stores and projections must be rebuildable from authoritative data.
 18. New infrastructure requires a measured requirement and an ADR.
+19. Source HTTP scheduling/validator state must not duplicate or weaken M2 lease/fence authority.
