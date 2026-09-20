@@ -47,6 +47,7 @@ Primary documents:
 - M1_REPOSITORY_BOOTSTRAP.md
 - M2_EVIDENCE_KERNEL.md
 - M2_COMPLETION.md
+- M2_HARDENING_PLAN.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:

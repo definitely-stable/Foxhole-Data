@@ -140,6 +140,58 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
             cancellationToken);
     }
 
+    public Task<AttemptDeferralResult> DeferBeforeExchangeAsync(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateDeferralArguments(
+            attemptId,
+            workerId,
+            leaseGeneration,
+            errorClass,
+            errorCode);
+
+        return store.DeferBeforeExchangeAsync(
+            attemptId,
+            workerId,
+            leaseGeneration,
+            NormalizeTimestamp(retryAvailableAt),
+            errorClass,
+            errorCode,
+            cancellationToken);
+    }
+
+    public Task<AttemptDeferralResult> DeferUncertainExchangeAsync(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateDeferralArguments(
+            attemptId,
+            workerId,
+            leaseGeneration,
+            errorClass,
+            errorCode);
+
+        return store.DeferUncertainExchangeAsync(
+            attemptId,
+            workerId,
+            leaseGeneration,
+            NormalizeTimestamp(retryAvailableAt),
+            errorClass,
+            errorCode,
+            cancellationToken);
+    }
+
     public Task<CollectionJobDescriptor?> GetJobAsync(
         CollectionJobId jobId,
         CancellationToken cancellationToken = default)
@@ -176,6 +228,37 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
             throw new ArgumentException(
                 "Idempotency key must be non-empty, already trimmed, and at most 256 characters.",
                 nameof(value));
+        }
+    }
+
+    private static void ValidateDeferralArguments(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        string errorClass,
+        string errorCode)
+    {
+        EnsureNonEmpty(attemptId.Value, nameof(attemptId));
+        EnsureNonEmpty(workerId.Value, nameof(workerId));
+        EnsurePositive(leaseGeneration, nameof(leaseGeneration));
+        ValidateDiagnosticCode(errorClass, nameof(errorClass), 256);
+        ValidateDiagnosticCode(errorCode, nameof(errorCode), 128);
+    }
+
+    private static void ValidateDiagnosticCode(
+        string value,
+        string parameterName,
+        int maximumLength)
+    {
+        ArgumentNullException.ThrowIfNull(value, parameterName);
+
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > maximumLength ||
+            !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Value must be non-empty, already trimmed, and at most {maximumLength} characters.",
+                parameterName);
         }
     }
 

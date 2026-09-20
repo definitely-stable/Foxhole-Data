@@ -77,7 +77,7 @@ internal sealed class EndpointStateRow
     public Guid EndpointId { get; set; }
     public long FenceToken { get; set; }
     public Guid? ActiveAttemptId { get; set; }
-    public Guid? LastAuthoritativeAttemptId { get; set; }
+    public Guid? LastCurrentCaptureAttemptId { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 

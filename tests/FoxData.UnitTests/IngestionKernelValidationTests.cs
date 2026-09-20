@@ -42,6 +42,20 @@ public sealed class IngestionKernelValidationTests
                 TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task DeferralRejectsBlankDiagnosticCode()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _kernel.DeferBeforeExchangeAsync(
+                IngestionAttemptId.New(),
+                WorkerInstanceId.New(),
+                new LeaseGeneration(1),
+                DateTimeOffset.UtcNow,
+                "network",
+                " ",
+                TestContext.Current.CancellationToken));
+    }
+
     private sealed class ThrowingStore : IIngestionKernelStore
     {
         public Task<JobEnqueueResult> EnqueueAsync(
@@ -88,6 +102,24 @@ public sealed class IngestionKernelValidationTests
             IngestionAttemptId attemptId,
             WorkerInstanceId workerId,
             LeaseGeneration leaseGeneration,
+            CancellationToken cancellationToken) => throw new InvalidOperationException();
+
+        public Task<AttemptDeferralResult> DeferBeforeExchangeAsync(
+            IngestionAttemptId attemptId,
+            WorkerInstanceId workerId,
+            LeaseGeneration leaseGeneration,
+            DateTimeOffset retryAvailableAt,
+            string errorClass,
+            string errorCode,
+            CancellationToken cancellationToken) => throw new InvalidOperationException();
+
+        public Task<AttemptDeferralResult> DeferUncertainExchangeAsync(
+            IngestionAttemptId attemptId,
+            WorkerInstanceId workerId,
+            LeaseGeneration leaseGeneration,
+            DateTimeOffset retryAvailableAt,
+            string errorClass,
+            string errorCode,
             CancellationToken cancellationToken) => throw new InvalidOperationException();
 
         public Task<CollectionJobDescriptor?> GetJobAsync(

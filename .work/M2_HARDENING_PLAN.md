@@ -10,6 +10,8 @@ The hardening is split into three independently reviewable slices.
 
 ### H1 — concurrency correctness
 
+Status: completed in PR #9.
+
 Fix confirmed PostgreSQL concurrency defects before adding any source traffic.
 
 Required changes:
@@ -30,6 +32,8 @@ Acceptance:
 - existing M2 tests stay green.
 
 ### H2 — lifecycle semantics and retry handoff
+
+Status: implemented on `m2-hardening/lifecycle`; verification/merge pending.
 
 Resolve the mismatch between raw evidence durability and later semantic/canonical acceptance.
 

@@ -666,6 +666,289 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             authorized);
     }
 
+    public Task<AttemptDeferralResult> DeferBeforeExchangeAsync(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken)
+    {
+        return DeferAttemptAsync(
+            AttemptDeferralKind.BeforeExchange,
+            attemptId,
+            workerId,
+            leaseGeneration,
+            retryAvailableAt,
+            errorClass,
+            errorCode,
+            cancellationToken);
+    }
+
+    public Task<AttemptDeferralResult> DeferUncertainExchangeAsync(
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken)
+    {
+        return DeferAttemptAsync(
+            AttemptDeferralKind.UncertainExchange,
+            attemptId,
+            workerId,
+            leaseGeneration,
+            retryAvailableAt,
+            errorClass,
+            errorCode,
+            cancellationToken);
+    }
+
+    private async Task<AttemptDeferralResult> DeferAttemptAsync(
+        AttemptDeferralKind kind,
+        IngestionAttemptId attemptId,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration,
+        DateTimeOffset retryAvailableAt,
+        string errorClass,
+        string errorCode,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            cancellationToken);
+
+        var attemptSnapshot = await GetAttemptAsync(
+            connection,
+            transaction,
+            attemptId,
+            forUpdate: false,
+            cancellationToken);
+
+        if (attemptSnapshot is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AttemptDeferralResult(
+                AttemptDeferralStatus.InvalidAttempt,
+                null,
+                null);
+        }
+
+        var job = await GetJobForUpdateAsync(
+            connection,
+            transaction,
+            attemptSnapshot.JobId,
+            cancellationToken);
+
+        if (job is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AttemptDeferralResult(
+                AttemptDeferralStatus.LeaseLost,
+                attemptSnapshot,
+                null);
+        }
+
+        var attempt = await GetAttemptAsync(
+            connection,
+            transaction,
+            attemptId,
+            forUpdate: true,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Attempt disappeared after its collection job was locked.");
+
+        if (IsAlreadyDeferred(kind, attempt))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new AttemptDeferralResult(
+                AttemptDeferralStatus.AlreadyDeferred,
+                attempt,
+                job);
+        }
+
+        if (!IsSameProcessingLeaseOwner(
+                job,
+                workerId,
+                leaseGeneration) ||
+            attempt.JobId != job.Id ||
+            attempt.LeaseGeneration != leaseGeneration)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AttemptDeferralResult(
+                AttemptDeferralStatus.LeaseLost,
+                attempt,
+                job);
+        }
+
+        if (!CanDefer(kind, attempt))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AttemptDeferralResult(
+                AttemptDeferralStatus.InvalidState,
+                attempt,
+                job);
+        }
+
+        if (attempt.FenceToken is not null)
+        {
+            _ = await GetEndpointStateForUpdateAsync(
+                    connection,
+                    transaction,
+                    job.EndpointId,
+                    cancellationToken)
+                ?? throw new InvalidOperationException(
+                    $"Endpoint state is missing for endpoint {job.EndpointId}.");
+        }
+
+        var outcomeCode = kind is AttemptDeferralKind.BeforeExchange
+            ? "abandoned_before_exchange"
+            : "uncertain_exchange";
+        var targetState = kind is AttemptDeferralKind.BeforeExchange
+            ? "failed"
+            : "uncertain";
+
+        await using (var updateAttempt = connection.CreateCommand())
+        {
+            updateAttempt.Transaction = transaction;
+            updateAttempt.CommandText =
+                $"""
+                UPDATE ingest.attempts
+                SET state = @state,
+                    outcome_code = @outcome_code,
+                    completed_at = COALESCE(completed_at, transaction_timestamp()),
+                    error_class = @error_class,
+                    error_code = @error_code,
+                    updated_at = transaction_timestamp()
+                WHERE id = @attempt_id;
+                """;
+            AddText(updateAttempt, "state", targetState);
+            AddText(updateAttempt, "outcome_code", outcomeCode);
+            AddText(updateAttempt, "error_class", errorClass);
+            AddText(updateAttempt, "error_code", errorCode);
+            AddUuid(updateAttempt, "attempt_id", attemptId.Value);
+
+            if (await updateAttempt.ExecuteNonQueryAsync(cancellationToken) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Attempt deferral did not affect exactly one attempt.");
+            }
+        }
+
+        CollectionJobDescriptor deferredJob;
+
+        await using (var updateJob = connection.CreateCommand())
+        {
+            updateJob.Transaction = transaction;
+            updateJob.CommandText =
+                $"""
+                UPDATE ingest.collection_jobs
+                SET state = 'pending',
+                    available_at = @retry_available_at,
+                    lease_owner_id = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = transaction_timestamp()
+                WHERE id = @job_id
+                  AND lease_owner_id = @worker_id
+                  AND lease_generation = @lease_generation
+                  AND state = 'processing'
+                RETURNING {JobColumns};
+                """;
+            AddTimestamp(updateJob, "retry_available_at", retryAvailableAt);
+            AddUuid(updateJob, "job_id", job.Id.Value);
+            AddUuid(updateJob, "worker_id", workerId.Value);
+            AddBigint(updateJob, "lease_generation", leaseGeneration.Value);
+
+            deferredJob = await ReadJobAsync(updateJob, cancellationToken)
+                ?? throw new InvalidOperationException(
+                    "Attempt deferral could not requeue its collection job.");
+        }
+
+        if (attempt.FenceToken is not null)
+        {
+            await using var endpoint = connection.CreateCommand();
+            endpoint.Transaction = transaction;
+            endpoint.CommandText =
+                """
+                UPDATE ingest.endpoint_state
+                SET active_attempt_id = NULL,
+                    updated_at = transaction_timestamp()
+                WHERE endpoint_id = @endpoint_id
+                  AND active_attempt_id = @attempt_id;
+                """;
+            AddUuid(endpoint, "endpoint_id", job.EndpointId.Value);
+            AddUuid(endpoint, "attempt_id", attemptId.Value);
+            await endpoint.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var deferredAttempt = await GetAttemptAsync(
+            connection,
+            transaction,
+            attemptId,
+            forUpdate: false,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Deferred attempt was not readable.");
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new AttemptDeferralResult(
+            AttemptDeferralStatus.DeferredNow,
+            deferredAttempt,
+            deferredJob);
+    }
+
+    private static bool IsAlreadyDeferred(
+        AttemptDeferralKind kind,
+        IngestionAttemptDescriptor attempt)
+    {
+        return kind switch
+        {
+            AttemptDeferralKind.BeforeExchange =>
+                attempt.State is IngestionAttemptState.Failed &&
+                string.Equals(
+                    attempt.OutcomeCode,
+                    "abandoned_before_exchange",
+                    StringComparison.Ordinal),
+            AttemptDeferralKind.UncertainExchange =>
+                attempt.State is IngestionAttemptState.Uncertain &&
+                string.Equals(
+                    attempt.OutcomeCode,
+                    "uncertain_exchange",
+                    StringComparison.Ordinal),
+            _ => false,
+        };
+    }
+
+    private static bool CanDefer(
+        AttemptDeferralKind kind,
+        IngestionAttemptDescriptor attempt)
+    {
+        return kind switch
+        {
+            AttemptDeferralKind.BeforeExchange =>
+                attempt.ExchangeAuthorizedAt is null &&
+                attempt.State is IngestionAttemptState.Created or IngestionAttemptState.Fenced,
+            AttemptDeferralKind.UncertainExchange =>
+                attempt.ExchangeAuthorizedAt is not null &&
+                attempt.State is IngestionAttemptState.ExchangeAuthorized,
+            _ => false,
+        };
+    }
+
+    private static bool IsSameProcessingLeaseOwner(
+        CollectionJobDescriptor job,
+        WorkerInstanceId workerId,
+        LeaseGeneration leaseGeneration)
+    {
+        return job.State is CollectionJobState.Processing &&
+               job.LeaseOwnerId == workerId &&
+               job.LeaseGeneration == leaseGeneration;
+    }
+
     public async Task<CollectionJobDescriptor?> GetJobAsync(
         CollectionJobId jobId,
         CancellationToken cancellationToken)
@@ -998,6 +1281,12 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
             columns
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(column => $"{alias}.{column}"));
+
+    private enum AttemptDeferralKind
+    {
+        BeforeExchange,
+        UncertainExchange,
+    }
 
     private sealed record EndpointState(
         FenceToken FenceToken,

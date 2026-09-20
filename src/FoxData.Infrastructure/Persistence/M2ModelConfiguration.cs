@@ -187,7 +187,7 @@ internal static class M2ModelConfiguration
         builder.Property(x => x.EndpointId).HasColumnName("endpoint_id").ValueGeneratedNever();
         builder.Property(x => x.FenceToken).HasColumnName("fence_token").HasDefaultValue(0L);
         builder.Property(x => x.ActiveAttemptId).HasColumnName("active_attempt_id");
-        builder.Property(x => x.LastAuthoritativeAttemptId).HasColumnName("last_authoritative_attempt_id");
+        builder.Property(x => x.LastCurrentCaptureAttemptId).HasColumnName("last_current_capture_attempt_id");
         builder.Property(x => x.UpdatedAt)
             .HasColumnName("updated_at")
             .HasDefaultValueSql("transaction_timestamp()")
@@ -205,7 +205,7 @@ internal static class M2ModelConfiguration
 
         builder.HasOne<IngestionAttemptRow>()
             .WithMany()
-            .HasForeignKey(x => x.LastAuthoritativeAttemptId)
+            .HasForeignKey(x => x.LastCurrentCaptureAttemptId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 

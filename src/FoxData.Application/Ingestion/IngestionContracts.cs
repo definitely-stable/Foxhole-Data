@@ -123,3 +123,22 @@ public sealed record ExchangeAuthorizationResult(
 {
     public bool MayPerformExchange => Status is ExchangeAuthorizationStatus.AuthorizedNow;
 }
+
+
+public enum AttemptDeferralStatus
+{
+    DeferredNow,
+    AlreadyDeferred,
+    LeaseLost,
+    InvalidAttempt,
+    InvalidState,
+}
+
+public sealed record AttemptDeferralResult(
+    AttemptDeferralStatus Status,
+    IngestionAttemptDescriptor? Attempt,
+    CollectionJobDescriptor? Job)
+{
+    public bool Deferred =>
+        Status is AttemptDeferralStatus.DeferredNow or AttemptDeferralStatus.AlreadyDeferred;
+}

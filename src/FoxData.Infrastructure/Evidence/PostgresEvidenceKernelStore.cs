@@ -482,7 +482,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             """
             UPDATE ingest.endpoint_state
             SET active_attempt_id = NULL,
-                last_authoritative_attempt_id = @attempt_id,
+                last_current_capture_attempt_id = @attempt_id,
                 updated_at = transaction_timestamp()
             WHERE endpoint_id = @endpoint_id
               AND active_attempt_id = @attempt_id;
