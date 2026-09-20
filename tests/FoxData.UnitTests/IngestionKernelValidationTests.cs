@@ -31,6 +31,17 @@ public sealed class IngestionKernelValidationTests
     }
 
     [Fact]
+    public async Task SourceClaimRejectsWhitespacePaddedSourceKey()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _kernel.ClaimNextForSourceAsync(
+                WorkerInstanceId.New(),
+                " official-war-api ",
+                TimeSpan.FromMinutes(1),
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task AttemptRequiresPositiveLeaseGeneration()
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
@@ -69,6 +80,12 @@ public sealed class IngestionKernelValidationTests
 
         public Task<JobClaimResult> ClaimNextAsync(
             WorkerInstanceId workerId,
+            TimeSpan leaseDuration,
+            CancellationToken cancellationToken) => throw new InvalidOperationException();
+
+        public Task<JobClaimResult> ClaimNextForSourceAsync(
+            WorkerInstanceId workerId,
+            string sourceKey,
             TimeSpan leaseDuration,
             CancellationToken cancellationToken) => throw new InvalidOperationException();
 

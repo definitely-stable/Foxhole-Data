@@ -113,6 +113,55 @@ public sealed class PostgresIngestionKernelStore(NpgsqlDataSource dataSource) : 
         return claimed is null ? JobClaimResult.None : new JobClaimResult(claimed);
     }
 
+    public async Task<JobClaimResult> ClaimNextForSourceAsync(
+        WorkerInstanceId workerId,
+        string sourceKey,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"""
+            WITH candidate AS (
+                SELECT job.id
+                FROM ingest.collection_jobs AS job
+                INNER JOIN sources.endpoints AS endpoint
+                    ON endpoint.id = job.endpoint_id
+                INNER JOIN sources.shards AS shard
+                    ON shard.id = endpoint.shard_id
+                INNER JOIN sources.sources AS source
+                    ON source.id = shard.source_id
+                WHERE job.state = 'pending'
+                  AND job.available_at <= clock_timestamp()
+                  AND source.key = @source_key
+                  AND source.enabled
+                  AND shard.enabled
+                  AND endpoint.enabled
+                ORDER BY job.available_at, job.priority DESC, job.id
+                FOR UPDATE OF job SKIP LOCKED
+                LIMIT 1
+            )
+            UPDATE ingest.collection_jobs AS job
+            SET state = 'leased',
+                lease_owner_id = @worker_id,
+                lease_generation = job.lease_generation + 1,
+                lease_expires_at = clock_timestamp() + @lease_duration,
+                updated_at = transaction_timestamp()
+            FROM candidate
+            WHERE job.id = candidate.id
+            RETURNING {PrefixColumns(JobColumns, "job")};
+            """;
+
+        AddUuid(command, "worker_id", workerId.Value);
+        AddText(command, "source_key", sourceKey);
+        AddInterval(command, "lease_duration", leaseDuration);
+
+        var claimed = await ReadJobAsync(command, cancellationToken);
+        return claimed is null ? JobClaimResult.None : new JobClaimResult(claimed);
+    }
+
     public async Task<LeaseRenewalResult> RenewLeaseAsync(
         CollectionJobId jobId,
         WorkerInstanceId workerId,

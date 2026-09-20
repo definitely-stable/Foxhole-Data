@@ -248,6 +248,9 @@ internal static class M2ModelConfiguration
                 table.HasCheckConstraint(
                     "ck_fetches_declared_length",
                     "declared_length IS NULL OR declared_length >= 0");
+                table.HasCheckConstraint(
+                    "ck_fetches_source_age_seconds",
+                    "source_age_seconds IS NULL OR source_age_seconds >= 0");
             });
 
         builder.HasKey(x => x.Id);
@@ -266,6 +269,10 @@ internal static class M2ModelConfiguration
         builder.Property(x => x.SourceEtag).HasColumnName("source_etag").HasMaxLength(1024);
         builder.Property(x => x.CacheControl).HasColumnName("cache_control").HasMaxLength(2048);
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+        builder.Property(x => x.SourceDate).HasColumnName("source_date");
+        builder.Property(x => x.SourceAgeSeconds).HasColumnName("source_age_seconds");
+        builder.Property(x => x.RetryAfter).HasColumnName("retry_after").HasMaxLength(1024);
+        builder.Property(x => x.BodyErrorCode).HasColumnName("body_error_code").HasMaxLength(128);
         builder.Property(x => x.PayloadId).HasColumnName("payload_id");
         builder.Property(x => x.PriorFetchId).HasColumnName("prior_fetch_id");
         builder.Property(x => x.DurationMs).HasColumnName("duration_ms");

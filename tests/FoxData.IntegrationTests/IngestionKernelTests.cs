@@ -132,6 +132,81 @@ public sealed class IngestionKernelTests(PostgresFixture postgres) : IClassFixtu
     }
 
     [Fact]
+    public async Task SourceFilteredClaimDoesNotStealAnotherSourceJob()
+    {
+        await MigrateAsync();
+        await ResetKernelDataAsync();
+
+        await using var dataSource = NpgsqlDataSource.Create(postgres.ConnectionString);
+        var registry = new SourceRegistry(new PostgresSourceRegistryStore(dataSource));
+        var kernel = new IngestionKernel(new PostgresIngestionKernelStore(dataSource));
+
+        var officialSource = await registry.RegisterSourceAsync(
+            "official-war-api",
+            "Official War API",
+            TestContext.Current.CancellationToken);
+        var otherSource = await registry.RegisterSourceAsync(
+            "other-source",
+            "Other Source",
+            TestContext.Current.CancellationToken);
+
+        var officialShard = await registry.RegisterShardAsync(
+            officialSource.Resource.Id,
+            "live-1",
+            "Live 1",
+            "live",
+            TestContext.Current.CancellationToken);
+        var otherShard = await registry.RegisterShardAsync(
+            otherSource.Resource.Id,
+            "other",
+            "Other",
+            "test",
+            TestContext.Current.CancellationToken);
+
+        var officialEndpoint = await registry.RegisterEndpointAsync(
+            officialShard.Resource.Id,
+            "runtime-war-state",
+            "war",
+            TestContext.Current.CancellationToken);
+        var otherEndpoint = await registry.RegisterEndpointAsync(
+            otherShard.Resource.Id,
+            "fixture",
+            "other",
+            TestContext.Current.CancellationToken);
+
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        _ = await kernel.EnqueueAsync(
+            otherEndpoint.Resource.Id,
+            "other-job",
+            now,
+            now,
+            cancellationToken: TestContext.Current.CancellationToken);
+        _ = await kernel.EnqueueAsync(
+            officialEndpoint.Resource.Id,
+            "official-job",
+            now,
+            now,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var claimed = await kernel.ClaimNextForSourceAsync(
+            WorkerInstanceId.New(),
+            "official-war-api",
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(claimed.Claimed);
+        Assert.Equal(officialEndpoint.Resource.Id, claimed.Job!.EndpointId);
+
+        var remaining = await kernel.ClaimNextAsync(
+            WorkerInstanceId.New(),
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(remaining.Claimed);
+        Assert.Equal(otherEndpoint.Resource.Id, remaining.Job!.EndpointId);
+    }
+
+    [Fact]
     public async Task StaleWorkerCannotRenewOrReleaseAndReclaimAdvancesGeneration()
     {
         await using var fixture = await CreateKernelFixtureAsync("lease");

@@ -583,6 +583,25 @@
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
+      "foxdata.sources.abstractions": {
+        "type": "Project"
+      },
+      "foxdata.sources.warapi": {
+        "type": "Project",
+        "dependencies": {
+          "FoxData.Sources.Abstractions": "[0.1.0, )"
+        }
+      },
+      "foxdata.worker": {
+        "type": "Project",
+        "dependencies": {
+          "FoxData.Application": "[0.1.0, )",
+          "FoxData.Hosting": "[0.1.0, )",
+          "FoxData.Infrastructure": "[0.1.0, )",
+          "FoxData.Sources.WarApi": "[0.1.0, )",
+          "Microsoft.Extensions.Hosting": "[10.0.12, )"
+        }
+      },
       "Microsoft.AspNetCore.OpenApi": {
         "type": "CentralTransitive",
         "requested": "[10.0.12, )",

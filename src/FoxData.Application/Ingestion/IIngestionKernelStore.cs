@@ -19,6 +19,12 @@ public interface IIngestionKernelStore
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);
 
+    Task<JobClaimResult> ClaimNextForSourceAsync(
+        WorkerInstanceId workerId,
+        string sourceKey,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken);
+
     Task<LeaseRenewalResult> RenewLeaseAsync(
         CollectionJobId jobId,
         WorkerInstanceId workerId,

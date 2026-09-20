@@ -40,6 +40,8 @@ endpoints:
 - sourcePath
 - policyId
 
+The implemented M2 registry intentionally stores only the stable subset currently required. Later columns are added only when a milestone owns their semantics.
+
 ## Ingestion
 
 jobs:
@@ -47,6 +49,8 @@ jobs:
 - id
 - endpointId
 - scheduledFor
+- availableAt
+- idempotencyKey
 - leaseGeneration
 - state
 
@@ -58,20 +62,38 @@ attempts:
 - startedAt
 - completedAt
 - outcome
-- httpStatus
-- exceptionClass
 - fenceToken
+- exchangeAuthorizedAt
+- rawDurableAt
+- errorClass
+- errorCode
 
-endpoint_poll_state:
+M2 endpoint_state owns source-collection correctness:
 
 - endpointId
-- etag
-- cacheEligibleAt
-- nextTargetAt
-- retryEligibleAt
-- lastSuccessAt
 - fenceToken
+- activeAttemptId
+- lastCurrentCaptureAttemptId
+
+M3 endpoint_poll_state is a separate rebuildable scheduling/validator projection:
+
+- endpointId
+- lastProcessedFetchId nullable
+- latestValidationFetchId nullable
+- representationFetchId nullable
+- validatorEtag nullable
+- sourceCacheEligibleAt nullable
+- nextTargetAt nullable
+- retryEligibleAt nullable
+- lastHttpResponseAt nullable
+- lastSuccessAt nullable
 - consecutiveFailures
+- policyVersion
+- updatedAt
+
+endpoint_poll_state MUST NOT duplicate fenceToken, leaseGeneration or active attempt ownership.
+
+representationFetchId identifies the body-bearing source representation used for conditional validation. It is not simply the latest Fetch.
 
 ## Evidence
 
@@ -80,30 +102,63 @@ fetches:
 - id
 - endpointId
 - attemptId
-- requestedAt
+- requestStartedAt
 - responseStartedAt
 - retrievedAt
-- status
+- transportKind
+- statusCode
+- mediaType
+- contentEncoding
+- declaredLength
 - sourceEtag
-- cache headers
+- cacheControl
+- expiresAt
 - payloadId
-- priorRepresentationId
+- priorFetchId
+- durationMs
+- createdAt
+
+M3 MAY extend immutable Fetch transport metadata with narrowly scoped cache/retry inputs required to reproduce source scheduling decisions, such as:
+
+- sourceDate
+- ageSeconds
+- retryAfterRaw
 
 payloads:
 
 - id
 - sha256
 - byteLength
-- mediaType
-- storageKind
-- storageKey
-- compression
+- body/storage
 - createdAt
 
-normalization_runs:
+source_parse_runs, introduced by M3:
 
 - id
-- payloadId
+- representationFetchId
+- capabilityKey
+- adapterVersion
+- parserVersion
+- fingerprintAlgorithm
+- structuralFingerprint
+- outcome
+- unknownPropertyCount
+- unknownCodeCount
+- errorCode
+- startedAt
+- completedAt
+- createdAt
+
+Recommended uniqueness:
+
+(representationFetchId, capabilityKey, parserVersion)
+
+A 304 validation of the same body-bearing representation does not require a new parse run.
+
+normalization_runs, owned by M5+:
+
+- id
+- payloadId/representation evidence
 - adapterVersion
 - parserVersion
 - normalizerVersion
@@ -111,6 +166,8 @@ normalization_runs:
 - startedAt
 - completedAt
 - outcome
+
+Source parsing and canonical normalization are intentionally separate stages.
 
 ## Runtime
 

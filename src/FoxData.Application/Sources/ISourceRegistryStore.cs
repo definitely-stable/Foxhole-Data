@@ -29,9 +29,21 @@ public interface ISourceRegistryStore
         string key,
         CancellationToken cancellationToken);
 
+    Task<SourceDescriptor?> GetSourceAsync(
+        SourceId sourceId,
+        CancellationToken cancellationToken);
+
     Task<ShardDescriptor?> GetShardByKeyAsync(
         SourceId sourceId,
         string key,
+        CancellationToken cancellationToken);
+
+    Task<ShardDescriptor?> GetShardAsync(
+        ShardId shardId,
+        CancellationToken cancellationToken);
+
+    Task<EndpointDescriptor?> GetEndpointAsync(
+        EndpointId endpointId,
         CancellationToken cancellationToken);
 
     Task<EndpointDescriptor?> GetEndpointBySemanticKeyAsync(

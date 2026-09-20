@@ -38,21 +38,49 @@ External object storage is deliberately deferred until M4 measurements justify i
 
 ## M3 — official War API adapter
 
-Status: next milestone.
+Status: completed 2026-09-20. Completion record: [M3_COMPLETION.md](M3_COMPLETION.md).
 
-Implement all documented endpoints:
+Detailed normative plan: [M3_OFFICIAL_WAR_API_ADAPTER.md](M3_OFFICIAL_WAR_API_ADAPTER.md).
 
-- war
-- maps
-- warReport
-- static
-- dynamic/public
+Implement all documented endpoint families:
 
-Add conditional GET, cache eligibility, tolerant DTOs, unknown field/code preservation and structural fingerprints.
+- war;
+- maps;
+- warReport;
+- static;
+- dynamic/public.
 
-No hidden retries.
+M3 additionally owns:
+
+- fixed shard-root request construction;
+- conditional GET and body-bearing representation lineage;
+- explicit HTTP cache/retry eligibility;
+- a poll-state projection separate from M2 fence authority;
+- bounded HTTP response streaming/decoding;
+- tolerant source DTOs and open upstream values;
+- structural fingerprinting;
+- versioned source parse runs;
+- map endpoint discovery;
+- crash-safe successor planning;
+- deterministic request spreading;
+- production Worker recovery/planner/executor orchestration.
+
+No hidden application retry, hedging or redirect is permitted.
+
+M3 still does not implement canonical war/map/objective state or quality acceptance.
+
+Implementation slices:
+
+- M3-A specification/contracts/fixtures;
+- M3-B poll-state and parse-run persistence;
+- M3-C parser and structural fingerprint;
+- M3-D HTTP transport/cache policy;
+- M3-E durable Worker orchestration;
+- M3-F controlled activation and completion.
 
 ## M4 — source measurement
+
+Status: next milestone.
 
 Run bounded 48–72 hour measurement.
 

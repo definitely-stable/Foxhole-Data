@@ -7,6 +7,12 @@ Test:
 - time semantics;
 - open enum/code handling;
 - taxonomy decoding;
+- source cache eligibility;
+- Retry-After parsing;
+- ETag syntax/weak validators;
+- map-name path safety;
+- structural fingerprints;
+- deterministic poll spreading;
 - quality rules;
 - objective matcher;
 - state interval transitions;
@@ -20,12 +26,25 @@ Test:
 Golden fixtures cover every documented official endpoint plus:
 
 - 304;
+- repeated 304 against the same body-bearing representation;
+- orphan 304;
 - duplicate 200;
+- strong/weak/invalid ETag;
 - unknown additive fields;
+- undocumented viewDirection;
+- iconType 97;
 - unknown icon;
 - unknown flag bits;
+- opaque map name MarbanHollow;
+- exact-case DeadLandsHex;
+- Home Region capability asymmetry;
 - malformed JSON;
+- duplicate JSON property;
 - incompatible field type;
+- missing/unexpected media type;
+- unsupported content encoding;
+- oversized wire body;
+- decompression expansion overflow;
 - version regression;
 - near-empty map;
 - mass disappearance;
@@ -33,7 +52,25 @@ Golden fixtures cover every documented official endpoint plus:
 - war transition;
 - pre-conquest/null time fields.
 
-Historical issue 92 fixture is mandatory.
+Historical issue 92/restart behavior fixture is mandatory.
+
+M3 source tests also prove that parser failure never destroys raw evidence and never triggers an immediate hidden source retry.
+
+## HTTP transport tests
+
+Prove:
+
+- one authorized AttemptId causes at most one FoxData application send;
+- redirects are returned, never automatically followed;
+- no standard retry/hedging handler is composed;
+- fixed source authority cannot be replaced by a user URI;
+- ResponseHeadersRead still has a full body deadline;
+- Content-Length is not trusted as the only size guard;
+- bounded streaming stops at limit + 1;
+- automatic decompression is disabled;
+- encoded bytes are captured before bounded decoding;
+- host cancellation after authorization cannot become a pre-exchange replay;
+- network timeout follows uncertain deferral/recovery semantics.
 
 ## Integration
 
@@ -46,6 +83,11 @@ Test:
 - leases;
 - endpoint fences;
 - transaction isolation;
+- poll-state separation from fence authority;
+- body-bearing representation lineage;
+- deterministic successor idempotency;
+- concurrent planner reconciliation;
+- source parse-run uniqueness/replay;
 - outbox;
 - concurrency;
 - recovery;
@@ -53,7 +95,7 @@ Test:
 
 ## Fault injection
 
-Kill/crash at each durable boundary described in INGESTION_AND_RECOVERY.md.
+Kill/crash at each durable boundary described in INGESTION_AND_RECOVERY.md, including M3 parse/successor boundaries.
 
 ## Public contract
 
@@ -75,8 +117,9 @@ For representative queries, verify HTTP and stdio adapters return semantically e
 
 Mandatory CI MUST NOT depend on the live War API.
 
-A scheduled non-blocking canary MAY detect upstream contract drift, cache behavior changes and new unknown codes.
+A scheduled non-blocking canary MAY detect upstream contract drift, cache behavior changes, new unknown codes/properties and source availability.
 
+Canary failure never changes the pass/fail result of deterministic mandatory CI.
 
 ## CI discovery floors
 

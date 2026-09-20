@@ -122,6 +122,81 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoxData.Infrastructure.Persistence.EndpointPollStateRow", b =>
+                {
+                    b.Property<Guid>("EndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("endpoint_id");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("consecutive_failures");
+
+                    b.Property<DateTimeOffset?>("LastHttpResponseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_http_response_at");
+
+                    b.Property<Guid?>("LastProcessedFetchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_processed_fetch_id");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<Guid?>("LatestValidationFetchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("latest_validation_fetch_id");
+
+                    b.Property<DateTimeOffset?>("NextTargetAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_target_at");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("policy_version");
+
+                    b.Property<Guid?>("RepresentationFetchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("representation_fetch_id");
+
+                    b.Property<DateTimeOffset?>("RetryEligibleAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retry_eligible_at");
+
+                    b.Property<DateTimeOffset?>("SourceCacheEligibleAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("source_cache_eligible_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("transaction_timestamp()");
+
+                    b.Property<string>("ValidatorEtag")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("validator_etag");
+
+                    b.HasKey("EndpointId");
+
+                    b.HasIndex("LastProcessedFetchId");
+
+                    b.HasIndex("LatestValidationFetchId");
+
+                    b.HasIndex("RepresentationFetchId");
+
+                    b.ToTable("endpoint_poll_state", "ingest", t =>
+                        {
+                            t.HasCheckConstraint("ck_endpoint_poll_state_consecutive_failures", "consecutive_failures >= 0");
+                        });
+                });
+
             modelBuilder.Entity("FoxData.Infrastructure.Persistence.EndpointRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -219,6 +294,11 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("attempt_id");
 
+                    b.Property<string>("BodyErrorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("body_error_code");
+
                     b.Property<string>("CacheControl")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
@@ -276,6 +356,19 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("retrieved_at");
 
+                    b.Property<string>("RetryAfter")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("retry_after");
+
+                    b.Property<long?>("SourceAgeSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_age_seconds");
+
+                    b.Property<DateTimeOffset?>("SourceDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("source_date");
+
                     b.Property<string>("SourceEtag")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
@@ -312,6 +405,8 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_fetches_declared_length", "declared_length IS NULL OR declared_length >= 0");
 
                             t.HasCheckConstraint("ck_fetches_duration_ms", "duration_ms >= 0");
+
+                            t.HasCheckConstraint("ck_fetches_source_age_seconds", "source_age_seconds IS NULL OR source_age_seconds >= 0");
                         });
                 });
 
@@ -512,6 +607,97 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                     b.ToTable("shards", "sources");
                 });
 
+            modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceParseRunRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AdapterVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("adapter_version");
+
+                    b.Property<string>("CapabilityKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("capability_key");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("transaction_timestamp()");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("FingerprintAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("fingerprint_algorithm");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("ParserVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("parser_version");
+
+                    b.Property<Guid>("RepresentationFetchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("representation_fetch_id");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("StructuralFingerprint")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("structural_fingerprint");
+
+                    b.Property<int>("UnknownCodeCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("unknown_code_count");
+
+                    b.Property<int>("UnknownPropertyCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("unknown_property_count");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Outcome", "CreatedAt")
+                        .HasDatabaseName("ix_source_parse_runs_outcome_created");
+
+                    b.HasIndex("RepresentationFetchId", "CapabilityKey", "ParserVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ux_source_parse_runs_representation_capability_parser");
+
+                    b.ToTable("source_parse_runs", "evidence", t =>
+                        {
+                            t.HasCheckConstraint("ck_source_parse_runs_completed_after_started", "completed_at >= started_at");
+
+                            t.HasCheckConstraint("ck_source_parse_runs_unknown_code_count", "unknown_code_count >= 0");
+
+                            t.HasCheckConstraint("ck_source_parse_runs_unknown_property_count", "unknown_property_count >= 0");
+                        });
+                });
+
             modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -564,6 +750,30 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasForeignKey("EndpointId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FoxData.Infrastructure.Persistence.EndpointPollStateRow", b =>
+                {
+                    b.HasOne("FoxData.Infrastructure.Persistence.EndpointRow", null)
+                        .WithOne()
+                        .HasForeignKey("FoxData.Infrastructure.Persistence.EndpointPollStateRow", "EndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoxData.Infrastructure.Persistence.FetchRow", null)
+                        .WithMany()
+                        .HasForeignKey("LastProcessedFetchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoxData.Infrastructure.Persistence.FetchRow", null)
+                        .WithMany()
+                        .HasForeignKey("LatestValidationFetchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoxData.Infrastructure.Persistence.FetchRow", null)
+                        .WithMany()
+                        .HasForeignKey("RepresentationFetchId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FoxData.Infrastructure.Persistence.EndpointRow", b =>
@@ -633,6 +843,15 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                     b.HasOne("FoxData.Infrastructure.Persistence.SourceRow", null)
                         .WithMany()
                         .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceParseRunRow", b =>
+                {
+                    b.HasOne("FoxData.Infrastructure.Persistence.FetchRow", null)
+                        .WithMany()
+                        .HasForeignKey("RepresentationFetchId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

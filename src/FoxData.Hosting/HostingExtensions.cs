@@ -27,11 +27,13 @@ public static class HostingExtensions
             .WithTracing(tracing =>
                 tracing
                     .AddSource("FoxData.EvidenceKernel")
+                    .AddSource("FoxData.WarApi")
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter())
             .WithMetrics(metrics =>
                 metrics
                     .AddMeter("FoxData.EvidenceKernel")
+                    .AddMeter("FoxData.WarApi")
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
                     .AddOtlpExporter());

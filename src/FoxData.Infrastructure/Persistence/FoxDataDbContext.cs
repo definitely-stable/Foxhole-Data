@@ -9,6 +9,7 @@ public sealed class FoxDataDbContext(DbContextOptions<FoxDataDbContext> options)
         ArgumentNullException.ThrowIfNull(modelBuilder);
 
         M2ModelConfiguration.Configure(modelBuilder);
+        M3ModelConfiguration.Configure(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
     }

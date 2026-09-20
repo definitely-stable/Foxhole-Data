@@ -49,6 +49,23 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
         return store.ClaimNextAsync(workerId, leaseDuration, cancellationToken);
     }
 
+    public Task<JobClaimResult> ClaimNextForSourceAsync(
+        WorkerInstanceId workerId,
+        string sourceKey,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNonEmpty(workerId.Value, nameof(workerId));
+        ValidateSourceKey(sourceKey);
+        ValidateLeaseDuration(leaseDuration);
+
+        return store.ClaimNextForSourceAsync(
+            workerId,
+            sourceKey,
+            leaseDuration,
+            cancellationToken);
+    }
+
     public Task<LeaseRenewalResult> RenewLeaseAsync(
         CollectionJobId jobId,
         WorkerInstanceId workerId,
@@ -215,6 +232,20 @@ public sealed class IngestionKernel(IIngestionKernelStore store)
         var normalizedTicks = utc.Ticks - (utc.Ticks % ticksPerMicrosecond);
 
         return new DateTimeOffset(normalizedTicks, TimeSpan.Zero);
+    }
+
+    private static void ValidateSourceKey(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > 128 ||
+            !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Source key must be non-empty, already trimmed, and at most 128 characters.",
+                nameof(value));
+        }
     }
 
     private static void ValidateIdempotencyKey(string value)

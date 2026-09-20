@@ -1,0 +1,87 @@
+name: War API Canary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  live-1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe bounded official endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          root="https://war-service-live.foxholeservices.com/api"
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          request() {
+            local name="$1"
+            local path="$2"
+
+            curl               --silent               --show-error               --proto '=https'               --max-time 10               --connect-timeout 5               --max-redirs 0               --retry 0               --dump-header "$work/$name.headers"               --output "$work/$name.json"               "$root$path"
+
+            size="$(wc -c < "$work/$name.json")"
+            if [ "$size" -gt 2097152 ]; then
+              echo "$name response exceeded 2 MiB canary bound" >&2
+              exit 1
+            fi
+          }
+
+          request war "/worldconquest/war"
+          request maps "/worldconquest/maps"
+
+          python3 - "$work" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+
+          war = json.loads((root / "war.json").read_text(encoding="utf-8"))
+          maps = json.loads((root / "maps.json").read_text(encoding="utf-8"))
+
+          if not isinstance(war, dict):
+              raise SystemExit("war endpoint did not return a JSON object")
+          if not isinstance(maps, list) or not all(isinstance(item, str) for item in maps):
+              raise SystemExit("maps endpoint did not return a string array")
+
+          required = {"warId", "warNumber", "winner"}
+          missing = required - set(war)
+          if missing:
+              raise SystemExit(f"war response missing required source fields: {sorted(missing)}")
+
+          if len(maps) == 0:
+              raise SystemExit("maps endpoint returned an empty list")
+
+          def selected_headers(name):
+              values = {}
+              for line in (root / f"{name}.headers").read_text(
+                  encoding="iso-8859-1"
+              ).splitlines():
+                  if ":" not in line:
+                      continue
+                  key, value = line.split(":", 1)
+                  key = key.strip().lower()
+                  if key in {"etag", "cache-control", "expires", "date", "age", "content-type"}:
+                      values[key] = value.strip()
+              return values
+
+          print(json.dumps(
+              {
+                  "war_fields": sorted(war.keys()),
+                  "map_count": len(maps),
+                  "war_headers": selected_headers("war"),
+                  "maps_headers": selected_headers("maps"),
+              },
+              indent=2,
+              sort_keys=True,
+          ))
+          PY
