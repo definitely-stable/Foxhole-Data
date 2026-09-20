@@ -92,7 +92,7 @@ public sealed class M4ProbeConfigurationTests
         var workerOptions =
             WarApiWorkerOptions.FromConfiguration(configuration);
 
-        Assert.Throws<ArgumentException>(
+        Assert.Throws<InvalidOperationException>(
             () =>
                 WarApiMeasurementProbeConfiguration.FromConfiguration(
                     configuration,
