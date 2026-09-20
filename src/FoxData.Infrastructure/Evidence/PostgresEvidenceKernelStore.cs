@@ -188,11 +188,16 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             ?? throw new EvidenceIntegrityException(
                 $"Endpoint state is missing for endpoint {endpointId}.");
 
+        var databaseNow = await GetDatabaseNowAsync(
+            connection,
+            transaction,
+            cancellationToken);
+
         var leaseCurrent =
             attempt.JobState is "processing" &&
             attempt.JobLeaseGeneration == expectedLeaseGeneration &&
             attempt.JobLeaseExpiresAt is not null &&
-            attempt.JobLeaseExpiresAt > endpointState.DatabaseNow;
+            attempt.JobLeaseExpiresAt > databaseNow;
 
         var fenceCurrent =
             endpointState.FenceToken == expectedFenceToken &&
@@ -655,8 +660,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             """
             SELECT
                 fence_token,
-                active_attempt_id,
-                clock_timestamp()
+                active_attempt_id
             FROM ingest.endpoint_state
             WHERE endpoint_id = @endpoint_id
             FOR UPDATE;
@@ -674,8 +678,24 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
 
         return new EndpointStateContext(
             new FenceToken(reader.GetInt64(0)),
-            reader.IsDBNull(1) ? null : new IngestionAttemptId(reader.GetGuid(1)),
-            reader.GetFieldValue<DateTimeOffset>(2));
+            reader.IsDBNull(1) ? null : new IngestionAttemptId(reader.GetGuid(1)));
+    }
+
+    private static async Task<DateTimeOffset> GetDatabaseNowAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT clock_timestamp();";
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+
+        return value is DateTimeOffset timestamp
+            ? timestamp
+            : throw new EvidenceIntegrityException(
+                "PostgreSQL did not return clock_timestamp() as timestamptz.");
     }
 
     private static async Task<FetchDescriptor?> GetFetchByAttemptAsync(
@@ -850,6 +870,5 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
 
     private sealed record EndpointStateContext(
         FenceToken FenceToken,
-        IngestionAttemptId? ActiveAttemptId,
-        DateTimeOffset DatabaseNow);
+        IngestionAttemptId? ActiveAttemptId);
 }
