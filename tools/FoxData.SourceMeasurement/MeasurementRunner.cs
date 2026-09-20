@@ -318,6 +318,9 @@ internal static class MeasurementRunner
             CountBy(
                 scheduleDecisions,
                 decision => decision.PolicyVersion),
+            BuildObservedPhases(
+                fetches,
+                scheduleDecisions),
             [
                 "Observations bound source state to retrieval times; they do not prove exact upstream event times.",
                 "Counterfactual cadence downsampling does not synthesize HTTP 200/304 validator behaviour.",
@@ -1296,6 +1299,73 @@ internal static class MeasurementRunner
             .ToArray();
     }
 
+    private static IReadOnlyList<MeasurementPhaseObservation>
+        BuildObservedPhases(
+            IReadOnlyCollection<SourceMeasurementFetch> fetches,
+            IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+    {
+        var observations =
+            new List<MeasurementPhaseObservation>();
+
+        observations.AddRange(
+            fetches
+                .GroupBy(
+                    fetch => fetch.ShardKey,
+                    StringComparer.Ordinal)
+                .Select(group =>
+                    new MeasurementPhaseObservation(
+                        "shard-traffic",
+                        group.Key,
+                        group.Min(
+                            fetch => fetch.RequestStartedAt),
+                        group.Max(
+                            fetch => fetch.RequestStartedAt),
+                        group.Count())));
+
+        var fetchById = fetches.ToDictionary(
+            fetch => fetch.FetchId.Value);
+
+        observations.AddRange(
+            decisions
+                .Where(
+                    decision =>
+                        decision.ProbeSelected &&
+                        fetchById.ContainsKey(
+                            decision.FetchId.Value))
+                .GroupBy(
+                    decision => decision.ShardKey,
+                    StringComparer.Ordinal)
+                .Select(group =>
+                {
+                    var timestamps = group
+                        .Select(
+                            decision =>
+                                fetchById[
+                                    decision.FetchId.Value]
+                                .RequestStartedAt)
+                        .ToArray();
+
+                    return new MeasurementPhaseObservation(
+                        "probe-policy",
+                        group.Key,
+                        timestamps.Min(),
+                        timestamps.Max(),
+                        timestamps.Length);
+                }));
+
+        return observations
+            .OrderBy(
+                observation =>
+                    observation.FirstObservedAt)
+            .ThenBy(
+                observation => observation.Kind,
+                StringComparer.Ordinal)
+            .ThenBy(
+                observation => observation.Scope,
+                StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private static MeasurementProbeManifest? BuildProbeManifest(
         AnalyzeOptions options,
         IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
@@ -1521,6 +1591,24 @@ internal static class MeasurementRunner
         builder.AppendLine(
             $"Observer region: {manifest.ObserverRegion}");
         builder.AppendLine();
+        if (manifest.ObservedPhases.Count > 0)
+        {
+            builder.AppendLine("## Observed campaign phases");
+            builder.AppendLine();
+            builder.AppendLine(
+                "| Kind | Scope | First observed | Last observed | Evidence |");
+            builder.AppendLine(
+                "| --- | --- | --- | --- | ---: |");
+
+            foreach (var phase in manifest.ObservedPhases)
+            {
+                builder.AppendLine(
+                    $"| {phase.Kind} | {phase.Scope} | {phase.FirstObservedAt:O} | {phase.LastObservedAt:O} | {phase.EvidenceCount} |");
+            }
+
+            builder.AppendLine();
+        }
+
         builder.AppendLine("## Corpus");
         builder.AppendLine();
         builder.AppendLine($"- Fetches: {summary.FetchCount}");
