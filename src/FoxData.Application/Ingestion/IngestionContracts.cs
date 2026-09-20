@@ -53,7 +53,7 @@ public sealed record JobClaimResult(CollectionJobDescriptor? Job)
 {
     public bool Claimed => Job is not null;
 
-    public static JobClaimResult None { get; } = new(null);
+    public static JobClaimResult None { get; } = new((CollectionJobDescriptor?)null);
 }
 
 public enum LeaseRenewalStatus
