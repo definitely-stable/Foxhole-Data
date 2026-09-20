@@ -1,0 +1,1060 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using FoxData.Application.Sources;
+using FoxData.Infrastructure.Sources;
+using FoxData.Sources.Abstractions;
+using FoxData.Sources.WarApi;
+using Npgsql;
+
+namespace FoxData.SourceMeasurement;
+
+internal static class MeasurementRunner
+{
+    private const string MeasurementVersion = "m4-measurement@1";
+
+    private static readonly JsonSerializerOptions JsonOptions =
+        new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true,
+        };
+
+    public static async Task<int> RunAsync(string[] args)
+    {
+        try
+        {
+            if (args.Length == 0 ||
+                args[0] is "--help" or "-h" or "help")
+            {
+                WriteHelp();
+                return 0;
+            }
+
+            return args[0] switch
+            {
+                "analyze" => await AnalyzeAsync(
+                    ParseAnalyzeOptions(args[1..]),
+                    CancellationToken.None),
+                "storage" => await CaptureStorageAsync(
+                    ParseStorageOptions(args[1..]),
+                    CancellationToken.None),
+                _ => Fail(
+                    $"Unknown command '{args[0]}'. Use --help for usage."),
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            Console.Error.WriteLine("Measurement operation was cancelled.");
+            return 2;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 1;
+        }
+    }
+
+    private static async Task<int> AnalyzeAsync(
+        AnalyzeOptions options,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = GetConnectionString();
+        await using var dataSource =
+            NpgsqlDataSource.Create(connectionString);
+
+        var reader = new PostgresSourceMeasurementReader(dataSource);
+
+        var fetches = new List<SourceMeasurementFetch>();
+        await foreach (var fetch in reader.ReadFetchesAsync(
+            WarApiCatalog.SourceKey,
+            options.StartInclusive,
+            options.EndExclusive,
+            cancellationToken))
+        {
+            fetches.Add(fetch);
+        }
+
+        if (fetches.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "The selected measurement window contains no official War API fetches.");
+        }
+
+        var attempts = new List<SourceMeasurementAttempt>();
+        await foreach (var attempt in reader.ReadAttemptsAsync(
+            WarApiCatalog.SourceKey,
+            options.StartInclusive,
+            options.EndExclusive,
+            cancellationToken))
+        {
+            attempts.Add(attempt);
+        }
+
+        var parseRuns = new List<SourceMeasurementParseRun>();
+        await foreach (var parseRun in reader.ReadParseRunsAsync(
+            WarApiCatalog.SourceKey,
+            options.StartInclusive,
+            options.EndExclusive,
+            cancellationToken))
+        {
+            if (string.Equals(
+                    parseRun.AdapterVersion,
+                    WarApiVersions.Adapter,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    parseRun.ParserVersion,
+                    WarApiVersions.Parser,
+                    StringComparison.Ordinal))
+            {
+                parseRuns.Add(parseRun);
+            }
+        }
+
+        var parseByFetch = parseRuns.ToDictionary(
+            parseRun => parseRun.RepresentationFetchId.Value);
+
+        var series = fetches
+            .GroupBy(
+                fetch => new
+                {
+                    fetch.ShardKey,
+                    fetch.SemanticKey,
+                    fetch.CapabilityKey,
+                })
+            .Select(group =>
+            {
+                var capability =
+                    CapabilityFromKey(group.Key.CapabilityKey);
+                var endpointFetches = group
+                    .OrderBy(fetch => fetch.RequestStartedAt)
+                    .ThenBy(fetch => fetch.FetchId.Value)
+                    .Select(fetch =>
+                    {
+                        _ = parseByFetch.TryGetValue(
+                            fetch.FetchId.Value,
+                            out var parseRun);
+
+                        return new WarApiMeasurementSample(
+                            group.Key.SemanticKey,
+                            capability,
+                            fetch.RequestStartedAt,
+                            fetch.StatusCode,
+                            fetch.PayloadSha256Hex,
+                            fetch.PayloadBytes,
+                            fetch.SourceEtag,
+                            fetch.DurationMs,
+                            parseRun?.SourceVersion);
+                    })
+                    .ToArray();
+
+                var endpointParseRuns = parseRuns
+                    .Where(
+                        parseRun =>
+                            string.Equals(
+                                parseRun.ShardKey,
+                                group.Key.ShardKey,
+                                StringComparison.Ordinal) &&
+                            string.Equals(
+                                parseRun.SemanticKey,
+                                group.Key.SemanticKey,
+                                StringComparison.Ordinal) &&
+                            string.Equals(
+                                parseRun.CapabilityKey,
+                                group.Key.CapabilityKey,
+                                StringComparison.Ordinal))
+                    .OrderBy(
+                        parseRun =>
+                            parseRun.RepresentationObservedAt)
+                    .ThenBy(parseRun => parseRun.ParseRunId.Value)
+                    .Select(
+                        parseRun =>
+                            new WarApiParseMeasurementSample(
+                                group.Key.SemanticKey,
+                                capability,
+                                parseRun.RepresentationObservedAt,
+                                parseRun.Outcome,
+                                parseRun.StructuralFingerprint,
+                                parseRun.UnknownPropertyCount,
+                                parseRun.UnknownCodeCount,
+                                parseRun.SourceVersion,
+                                parseRun.SourceLastUpdated))
+                    .ToArray();
+
+                return new WarApiMeasurementSeries(
+                    group.Key.ShardKey,
+                    group.Key.SemanticKey,
+                    capability,
+                    endpointFetches,
+                    endpointParseRuns);
+            })
+            .ToArray();
+
+        var warApiReport =
+            WarApiMeasurementReportBuilder.Build(series);
+
+        var storageGrowth = await TryReadStorageGrowthAsync(
+            options.OutputDirectory,
+            cancellationToken);
+
+        var summary = new MeasurementSummary(
+            options.RunId,
+            WarApiCatalog.SourceKey,
+            options.StartInclusive,
+            options.EndExclusive,
+            fetches.Count,
+            attempts.Count,
+            parseRuns.Count,
+            series.Length,
+            fetches.Count(fetch => fetch.PayloadSha256Hex is not null),
+            fetches
+                .Where(fetch => fetch.PayloadSha256Hex is not null)
+                .Select(fetch => fetch.PayloadSha256Hex!)
+                .Distinct(StringComparer.Ordinal)
+                .Count(),
+            PayloadDeduplicationRatio(fetches),
+            fetches.Count(
+                fetch =>
+                    fetch.DeclaredLength is { } declared &&
+                    fetch.PayloadBytes is { } captured &&
+                    declared != captured),
+            fetches.Count(
+                fetch =>
+                    !string.IsNullOrWhiteSpace(fetch.SourceEtag)),
+            CountBy(
+                fetches,
+                fetch =>
+                    fetch.StatusCode is { } status
+                        ? status.ToString(CultureInfo.InvariantCulture)
+                        : "transport-null"),
+            CountBy(
+                fetches,
+                fetch =>
+                    string.IsNullOrWhiteSpace(fetch.ContentEncoding)
+                        ? "identity"
+                        : fetch.ContentEncoding!),
+            AnalyzeCache(fetches),
+            AnalyzeAttempts(attempts),
+            storageGrowth,
+            warApiReport);
+
+        var generatedAt = DateTimeOffset.UtcNow;
+        var manifest = new MeasurementManifest(
+            MeasurementVersion,
+            options.RunId,
+            WarApiCatalog.SourceKey,
+            options.StartInclusive,
+            options.EndExclusive,
+            generatedAt,
+            options.RepositorySha,
+            options.ObserverRegion,
+            WarApiVersions.Adapter,
+            WarApiVersions.Parser,
+            WarApiVersions.CachePolicy,
+            WarApiVersions.BackoffPolicy,
+            WarApiVersions.PollPolicy,
+            options.CollectionProfileVersion,
+            fetches
+                .Select(fetch => fetch.ShardKey)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+            [
+                "Observations bound source state to retrieval times; they do not prove exact upstream event times.",
+                "Counterfactual cadence downsampling does not synthesize HTTP 200/304 validator behaviour.",
+                "ingest.collection_jobs.available_at is mutable across deferral/requeue and is not treated as immutable per-attempt history.",
+            ]);
+
+        Directory.CreateDirectory(options.OutputDirectory);
+
+        await WriteJsonAsync(
+            Path.Combine(
+                options.OutputDirectory,
+                "measurement-manifest.json"),
+            manifest,
+            cancellationToken);
+        await WriteJsonAsync(
+            Path.Combine(
+                options.OutputDirectory,
+                "measurement-summary.json"),
+            summary,
+            cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(
+                options.OutputDirectory,
+                "measurement-report.md"),
+            RenderMarkdown(manifest, summary),
+            Encoding.UTF8,
+            cancellationToken);
+
+        Console.WriteLine(
+            $"Wrote M4 measurement outputs to '{options.OutputDirectory}'.");
+        return 0;
+    }
+
+    private static async Task<int> CaptureStorageAsync(
+        StorageOptions options,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = GetConnectionString();
+        await using var dataSource =
+            NpgsqlDataSource.Create(connectionString);
+
+        var reader =
+            new PostgresSourceMeasurementStorageReader(dataSource);
+        var snapshot = await reader.ReadAsync(cancellationToken);
+
+        Directory.CreateDirectory(options.OutputDirectory);
+        var path = Path.Combine(
+            options.OutputDirectory,
+            $"storage-{options.Label}.json");
+
+        await WriteJsonAsync(
+            path,
+            snapshot,
+            cancellationToken);
+
+        Console.WriteLine($"Wrote PostgreSQL storage snapshot to '{path}'.");
+        return 0;
+    }
+
+    private static MeasurementCacheSummary AnalyzeCache(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches)
+    {
+        var policy = new WarApiCachePolicy();
+        var cacheControlPresent = 0;
+        var cacheControlMalformed = 0;
+        var noCache = 0;
+        var noStore = 0;
+        var expiresPresent = 0;
+        var retryAfterPresent = 0;
+        var retryAfterMalformed = 0;
+        var freshnessLifetimes = new List<double>();
+        var sourceCacheDelays = new List<double>();
+        var sourceAges = new List<double>();
+
+        foreach (var fetch in fetches)
+        {
+            CacheControlHeaderValue? parsedCacheControl = null;
+            if (!string.IsNullOrWhiteSpace(fetch.CacheControl))
+            {
+                cacheControlPresent++;
+
+                if (!CacheControlHeaderValue.TryParse(
+                        fetch.CacheControl,
+                        out parsedCacheControl))
+                {
+                    cacheControlMalformed++;
+                }
+                else
+                {
+                    if (parsedCacheControl.NoCache)
+                    {
+                        noCache++;
+                    }
+
+                    if (parsedCacheControl.NoStore)
+                    {
+                        noStore++;
+                    }
+                }
+            }
+
+            if (fetch.ExpiresAt is not null)
+            {
+                expiresPresent++;
+            }
+
+            if (!string.IsNullOrWhiteSpace(fetch.RetryAfter))
+            {
+                retryAfterPresent++;
+                if (!RetryConditionHeaderValue.TryParse(
+                        fetch.RetryAfter,
+                        out _))
+                {
+                    retryAfterMalformed++;
+                }
+            }
+
+            var explicitLifetime =
+                parsedCacheControl?.SharedMaxAge ??
+                parsedCacheControl?.MaxAge;
+
+            if (explicitLifetime is null &&
+                fetch.ExpiresAt is { } expiresAt)
+            {
+                var basis = fetch.SourceDate ?? fetch.RetrievedAt;
+                explicitLifetime = expiresAt > basis
+                    ? expiresAt - basis
+                    : TimeSpan.Zero;
+            }
+
+            if (explicitLifetime is { } lifetime)
+            {
+                freshnessLifetimes.Add(lifetime.TotalSeconds);
+            }
+
+            if (fetch.SourceAgeSeconds is { } sourceAge)
+            {
+                sourceAges.Add(sourceAge);
+            }
+
+            var statusCode = fetch.StatusCode is { } status
+                ? (HttpStatusCode)status
+                : 0;
+            var decision = policy.Evaluate(
+                new WarApiCacheMetadata(
+                    statusCode,
+                    fetch.CacheControl,
+                    fetch.ExpiresAt,
+                    fetch.SourceDate,
+                    fetch.SourceAgeSeconds,
+                    fetch.RetryAfter),
+                fetch.RetrievedAt,
+                TimeSpan.Zero);
+
+            sourceCacheDelays.Add(
+                Math.Max(
+                    0,
+                    (decision.SourceCacheEligibleAt - fetch.RetrievedAt)
+                        .TotalSeconds));
+        }
+
+        return new MeasurementCacheSummary(
+            cacheControlPresent,
+            cacheControlMalformed,
+            noCache,
+            noStore,
+            expiresPresent,
+            retryAfterPresent,
+            retryAfterMalformed,
+            Percentiles(freshnessLifetimes),
+            Percentiles(sourceCacheDelays),
+            Percentiles(sourceAges));
+    }
+
+    private static MeasurementAttemptSummary AnalyzeAttempts(
+        IReadOnlyCollection<SourceMeasurementAttempt> attempts)
+    {
+        var nonNegativeLag = new List<double>();
+        var negativeLagCount = 0;
+
+        foreach (var attempt in attempts)
+        {
+            var lag =
+                (attempt.StartedAt - attempt.ScheduledFor)
+                .TotalSeconds;
+
+            if (lag < 0)
+            {
+                negativeLagCount++;
+            }
+            else
+            {
+                nonNegativeLag.Add(lag);
+            }
+        }
+
+        return new MeasurementAttemptSummary(
+            attempts.Count,
+            attempts.Count(
+                attempt =>
+                    attempt.ExchangeAuthorizedAt is not null),
+            attempts.Count(
+                attempt =>
+                    attempt.ExchangeAuthorizedAt is null &&
+                    string.Equals(
+                        attempt.State,
+                        "failed",
+                        StringComparison.Ordinal)),
+            attempts.Count(
+                attempt =>
+                    string.Equals(
+                        attempt.State,
+                        "uncertain",
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        attempt.OutcomeCode,
+                        "uncertain_exchange",
+                        StringComparison.Ordinal)),
+            attempts.Count(
+                attempt =>
+                    string.Equals(
+                        attempt.State,
+                        "captured_late",
+                        StringComparison.Ordinal)),
+            negativeLagCount,
+            Percentiles(nonNegativeLag),
+            CountBy(attempts, attempt => attempt.State),
+            CountBy(
+                attempts,
+                attempt =>
+                    string.IsNullOrWhiteSpace(attempt.OutcomeCode)
+                        ? "<none>"
+                        : attempt.OutcomeCode!),
+            CountBy(
+                attempts,
+                attempt =>
+                    string.IsNullOrWhiteSpace(attempt.ErrorClass)
+                        ? "<none>"
+                        : attempt.ErrorClass!));
+    }
+
+    private static double? PayloadDeduplicationRatio(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches)
+    {
+        var bodyBearing = fetches
+            .Where(fetch => fetch.PayloadSha256Hex is not null)
+            .ToArray();
+
+        if (bodyBearing.Length == 0)
+        {
+            return null;
+        }
+
+        var unique = bodyBearing
+            .Select(fetch => fetch.PayloadSha256Hex!)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+
+        return 1d - ((double)unique / bodyBearing.Length);
+    }
+
+    private static async Task<MeasurementStorageGrowth?> TryReadStorageGrowthAsync(
+        string outputDirectory,
+        CancellationToken cancellationToken)
+    {
+        var beforePath =
+            Path.Combine(outputDirectory, "storage-before.json");
+        var afterPath =
+            Path.Combine(outputDirectory, "storage-after.json");
+
+        if (!File.Exists(beforePath) ||
+            !File.Exists(afterPath))
+        {
+            return null;
+        }
+
+        var before = JsonSerializer.Deserialize<
+            SourceMeasurementStorageSnapshot>(
+            await File.ReadAllTextAsync(
+                beforePath,
+                cancellationToken),
+            JsonOptions)
+            ?? throw new InvalidOperationException(
+                "storage-before.json could not be deserialized.");
+        var after = JsonSerializer.Deserialize<
+            SourceMeasurementStorageSnapshot>(
+            await File.ReadAllTextAsync(
+                afterPath,
+                cancellationToken),
+            JsonOptions)
+            ?? throw new InvalidOperationException(
+                "storage-after.json could not be deserialized.");
+
+        var elapsed = after.CapturedAt - before.CapturedAt;
+        if (elapsed <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                "Storage snapshots are not in chronological order.");
+        }
+
+        var beforeRelations = before.Relations.ToDictionary(
+            relation =>
+                $"{relation.SchemaName}.{relation.RelationName}",
+            StringComparer.Ordinal);
+        var afterRelations = after.Relations.ToDictionary(
+            relation =>
+                $"{relation.SchemaName}.{relation.RelationName}",
+            StringComparer.Ordinal);
+
+        if (!beforeRelations.Keys
+                .Order(StringComparer.Ordinal)
+                .SequenceEqual(
+                    afterRelations.Keys.Order(StringComparer.Ordinal),
+                    StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Storage snapshots do not contain the same measured relations.");
+        }
+
+        var days = elapsed.TotalDays;
+        var databaseDelta =
+            after.DatabaseBytes - before.DatabaseBytes;
+        var databasePerDay = databaseDelta / days;
+
+        var relations = beforeRelations.Keys
+            .Order(StringComparer.Ordinal)
+            .Select(key =>
+            {
+                var beforeRelation = beforeRelations[key];
+                var afterRelation = afterRelations[key];
+                var delta =
+                    afterRelation.TotalBytes -
+                    beforeRelation.TotalBytes;
+                var perDay = delta / days;
+
+                return new MeasurementStorageGrowthRelation(
+                    afterRelation.SchemaName,
+                    afterRelation.RelationName,
+                    delta,
+                    perDay,
+                    perDay * 30,
+                    perDay * 365);
+            })
+            .ToArray();
+
+        return new MeasurementStorageGrowth(
+            before.CapturedAt,
+            after.CapturedAt,
+            databaseDelta,
+            databasePerDay,
+            databasePerDay * 30,
+            databasePerDay * 365,
+            relations);
+    }
+
+    private static string RenderMarkdown(
+        MeasurementManifest manifest,
+        MeasurementSummary summary)
+    {
+        var builder = new StringBuilder();
+
+        builder.AppendLine("# M4 Source Measurement Report");
+        builder.AppendLine();
+        builder.AppendLine($"Run: {manifest.RunId}");
+        builder.AppendLine(
+            $"Window: {manifest.StartInclusive:O} to {manifest.EndExclusive:O}");
+        builder.AppendLine(
+            $"Repository: {manifest.RepositorySha}");
+        builder.AppendLine(
+            $"Collection profile: {manifest.CollectionProfileVersion}");
+        builder.AppendLine(
+            $"Observer region: {manifest.ObserverRegion}");
+        builder.AppendLine();
+        builder.AppendLine("## Corpus");
+        builder.AppendLine();
+        builder.AppendLine($"- Fetches: {summary.FetchCount}");
+        builder.AppendLine($"- Attempts: {summary.AttemptCount}");
+        builder.AppendLine($"- Parse runs: {summary.ParseRunCount}");
+        builder.AppendLine($"- Endpoints: {summary.EndpointCount}");
+        builder.AppendLine(
+            $"- Payload deduplication ratio: {FormatRatio(summary.PayloadDeduplicationRatio)}");
+        builder.AppendLine(
+            $"- Declared-length mismatches: {summary.DeclaredLengthMismatchCount}");
+        builder.AppendLine();
+
+        builder.AppendLine("## Shard / capability");
+        builder.AppendLine();
+        builder.AppendLine(
+            "| Shard | Capability | Endpoints | Fetches | 200 | 304 | Other | Duplicate 200 | Changes | Version gaps | Version regressions | lastUpdated regressions |");
+        builder.AppendLine(
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+
+        foreach (var group in summary.WarApi.Groups)
+        {
+            builder.AppendLine(
+                $"| {group.ShardKey} | {group.CapabilityKey} | {group.EndpointCount} | {group.FetchCount} | {group.OkCount} | {group.NotModifiedCount} | {group.OtherCount} | {group.DuplicateOkCount} | {group.RepresentationChangeCount} | {group.SourceVersionGapCount} | {group.SourceVersionRegressionCount} | {group.SourceLastUpdatedRegressionCount} |");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Burst shape");
+        builder.AppendLine();
+        builder.AppendLine(
+            "| Window | Requests | Buckets | Mean | p95 | p99 | Max |");
+        builder.AppendLine(
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+
+        foreach (var burst in summary.WarApi.BurstShape)
+        {
+            builder.AppendLine(
+                $"| {burst.Window.TotalSeconds:0}s | {burst.RequestCount} | {burst.BucketCount} | {burst.MeanRequestsPerBucket:0.###} | {FormatNumber(burst.P95RequestsPerBucket)} | {FormatNumber(burst.P99RequestsPerBucket)} | {burst.MaxRequestsPerBucket} |");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Attempts");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Exchange-authorized: {summary.Attempts.ExchangeAuthorizedCount}");
+        builder.AppendLine(
+            $"- Pre-exchange failures: {summary.Attempts.PreExchangeFailureCount}");
+        builder.AppendLine(
+            $"- Uncertain exchange: {summary.Attempts.UncertainExchangeCount}");
+        builder.AppendLine(
+            $"- Captured late: {summary.Attempts.CapturedLateCount}");
+        builder.AppendLine(
+            $"- Negative logical-start lag anomalies: {summary.Attempts.NegativeLogicalStartLagCount}");
+        builder.AppendLine(
+            $"- Logical-start lag p95: {FormatNumber(summary.Attempts.LogicalStartLagSeconds.P95)} s");
+        builder.AppendLine();
+
+        builder.AppendLine("## Cache");
+        builder.AppendLine();
+        builder.AppendLine(
+            $"- Cache-Control present: {summary.Cache.CacheControlPresentCount}");
+        builder.AppendLine(
+            $"- Cache-Control malformed: {summary.Cache.CacheControlMalformedCount}");
+        builder.AppendLine(
+            $"- no-cache: {summary.Cache.NoCacheCount}");
+        builder.AppendLine(
+            $"- no-store: {summary.Cache.NoStoreCount}");
+        builder.AppendLine(
+            $"- Retry-After present: {summary.Cache.RetryAfterPresentCount}");
+        builder.AppendLine(
+            $"- Retry-After malformed: {summary.Cache.RetryAfterMalformedCount}");
+        builder.AppendLine(
+            $"- Source cache delay p95: {FormatNumber(summary.Cache.SourceCacheDelaySeconds.P95)} s");
+        builder.AppendLine();
+
+        if (summary.StorageGrowth is { } storage)
+        {
+            builder.AppendLine("## Storage growth");
+            builder.AppendLine();
+            builder.AppendLine(
+                $"- Database delta: {storage.DatabaseDeltaBytes} bytes");
+            builder.AppendLine(
+                $"- Database growth/day: {storage.DatabaseBytesPerDay:0.##} bytes");
+            builder.AppendLine(
+                $"- Projected 30-day growth: {storage.Projected30DayBytes:0.##} bytes");
+            builder.AppendLine(
+                $"- Projected 365-day growth: {storage.Projected365DayBytes:0.##} bytes");
+            builder.AppendLine();
+        }
+
+        builder.AppendLine("## Limitations");
+        builder.AppendLine();
+        foreach (var limitation in manifest.Limitations)
+        {
+            builder.AppendLine($"- {limitation}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static MeasurementPercentiles Percentiles(
+        IEnumerable<double> values)
+    {
+        var ordered = values
+            .Where(double.IsFinite)
+            .Order()
+            .ToArray();
+
+        return new MeasurementPercentiles(
+            PercentileCont(ordered, 0.50),
+            PercentileCont(ordered, 0.90),
+            PercentileCont(ordered, 0.95),
+            PercentileCont(ordered, 0.99),
+            ordered.Length == 0 ? null : ordered[^1]);
+    }
+
+    private static double? PercentileCont(
+        IReadOnlyList<double> ordered,
+        double percentile)
+    {
+        if (ordered.Count == 0)
+        {
+            return null;
+        }
+
+        if (ordered.Count == 1)
+        {
+            return ordered[0];
+        }
+
+        var position = (ordered.Count - 1) * percentile;
+        var lowerIndex = (int)Math.Floor(position);
+        var upperIndex = (int)Math.Ceiling(position);
+
+        if (lowerIndex == upperIndex)
+        {
+            return ordered[lowerIndex];
+        }
+
+        var fraction = position - lowerIndex;
+        return ordered[lowerIndex] +
+            ((ordered[upperIndex] - ordered[lowerIndex]) * fraction);
+    }
+
+    private static IReadOnlyDictionary<string, int> CountBy<T>(
+        IEnumerable<T> items,
+        Func<T, string> selector) =>
+        new SortedDictionary<string, int>(
+            items
+                .GroupBy(selector, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Count(),
+                    StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+    private static SourceCapability CapabilityFromKey(string capabilityKey) =>
+        capabilityKey switch
+        {
+            "runtime-war-state" => WarApiCapabilities.RuntimeWarState,
+            "active-map-list" => WarApiCapabilities.ActiveMapList,
+            "region-war-report" => WarApiCapabilities.RegionWarReport,
+            "static-map-state" => WarApiCapabilities.StaticMapState,
+            "dynamic-map-state" => WarApiCapabilities.DynamicMapState,
+            _ => throw new InvalidOperationException(
+                $"Unsupported War API capability '{capabilityKey}' in measurement evidence."),
+        };
+
+    private static AnalyzeOptions ParseAnalyzeOptions(string[] args)
+    {
+        var values = ParseNamedOptions(args);
+        RejectUnknown(
+            values,
+            "run-id",
+            "start",
+            "end",
+            "output",
+            "repository-sha",
+            "observer-region",
+            "profile-version");
+
+        var runId = Required(values, "run-id");
+        ValidateIdentifier(runId, "run-id");
+
+        var start = ParseTimestamp(
+            Required(values, "start"),
+            "start");
+        var end = ParseTimestamp(
+            Required(values, "end"),
+            "end");
+
+        if (start >= end)
+        {
+            throw new ArgumentException(
+                "--start must be earlier than --end.");
+        }
+
+        var repositorySha = values.TryGetValue(
+            "repository-sha",
+            out var configuredSha)
+            ? configuredSha
+            : Environment.GetEnvironmentVariable("GITHUB_SHA") ??
+              Environment.GetEnvironmentVariable(
+                  "FOXDATA_REPOSITORY_SHA") ??
+              throw new ArgumentException(
+                  "--repository-sha is required when no GITHUB_SHA or FOXDATA_REPOSITORY_SHA environment variable is set.");
+
+        ValidateIdentifier(repositorySha, "repository-sha");
+
+        var observerRegion = Required(
+            values,
+            "observer-region");
+        ValidateIdentifier(observerRegion, "observer-region");
+
+        var profileVersion = values.TryGetValue(
+            "profile-version",
+            out var configuredProfile)
+            ? configuredProfile
+            : WarApiCollectionProfile.Bootstrap.Version;
+        ValidateIdentifier(profileVersion, "profile-version");
+
+        return new AnalyzeOptions(
+            runId,
+            start,
+            end,
+            Path.GetFullPath(Required(values, "output")),
+            repositorySha,
+            observerRegion,
+            profileVersion);
+    }
+
+    private static StorageOptions ParseStorageOptions(string[] args)
+    {
+        var values = ParseNamedOptions(args);
+        RejectUnknown(values, "label", "output");
+
+        var label = Required(values, "label");
+        if (label is not ("before" or "after"))
+        {
+            throw new ArgumentException(
+                "--label must be 'before' or 'after'.");
+        }
+
+        return new StorageOptions(
+            label,
+            Path.GetFullPath(Required(values, "output")));
+    }
+
+    private static Dictionary<string, string> ParseNamedOptions(
+        string[] args)
+    {
+        var values = new Dictionary<string, string>(
+            StringComparer.Ordinal);
+
+        for (var index = 0; index < args.Length; index += 2)
+        {
+            var name = args[index];
+            if (!name.StartsWith("--", StringComparison.Ordinal) ||
+                name.Length <= 2)
+            {
+                throw new ArgumentException(
+                    $"Expected an option name but found '{name}'.");
+            }
+
+            if (index + 1 >= args.Length)
+            {
+                throw new ArgumentException(
+                    $"Option '{name}' requires a value.");
+            }
+
+            var key = name[2..];
+            if (!values.TryAdd(key, args[index + 1]))
+            {
+                throw new ArgumentException(
+                    $"Option '{name}' was supplied more than once.");
+            }
+        }
+
+        return values;
+    }
+
+    private static void RejectUnknown(
+        IReadOnlyDictionary<string, string> values,
+        params string[] allowed)
+    {
+        var allowedSet = new HashSet<string>(
+            allowed,
+            StringComparer.Ordinal);
+
+        var unknown = values.Keys
+            .Where(key => !allowedSet.Contains(key))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        if (unknown.Length != 0)
+        {
+            throw new ArgumentException(
+                $"Unknown option(s): {string.Join(", ", unknown.Select(key => $"--{key}"))}.");
+        }
+    }
+
+    private static string Required(
+        IReadOnlyDictionary<string, string> values,
+        string key)
+    {
+        if (!values.TryGetValue(key, out var value) ||
+            string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException(
+                $"--{key} is required.");
+        }
+
+        return value;
+    }
+
+    private static DateTimeOffset ParseTimestamp(
+        string value,
+        string option)
+    {
+        if (!DateTimeOffset.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var parsed))
+        {
+            throw new ArgumentException(
+                $"--{option} must be an ISO-8601 timestamp with an offset.");
+        }
+
+        return parsed;
+    }
+
+    private static void ValidateIdentifier(
+        string value,
+        string option)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Length > 256 ||
+            !string.Equals(
+                value,
+                value.Trim(),
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"--{option} must be non-empty, already trimmed, and at most 256 characters.");
+        }
+    }
+
+    private static string GetConnectionString()
+    {
+        var connectionString =
+            Environment.GetEnvironmentVariable(
+                "ConnectionStrings__FoxData") ??
+            Environment.GetEnvironmentVariable(
+                "FOXDATA_CONNECTION_STRING");
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "Set ConnectionStrings__FoxData or FOXDATA_CONNECTION_STRING before running the measurement tool.");
+        }
+
+        return connectionString;
+    }
+
+    private static async Task WriteJsonAsync<T>(
+        string path,
+        T value,
+        CancellationToken cancellationToken)
+    {
+        var json = JsonSerializer.Serialize(
+            value,
+            JsonOptions);
+
+        await File.WriteAllTextAsync(
+            path,
+            json + Environment.NewLine,
+            Encoding.UTF8,
+            cancellationToken);
+    }
+
+    private static string FormatRatio(double? value) =>
+        value is null
+            ? "n/a"
+            : value.Value.ToString("P2", CultureInfo.InvariantCulture);
+
+    private static string FormatNumber(double? value) =>
+        value is null
+            ? "n/a"
+            : value.Value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static int Fail(string message)
+    {
+        Console.Error.WriteLine(message);
+        return 1;
+    }
+
+    private static void WriteHelp()
+    {
+        Console.WriteLine(
+            """
+            FoxData M4 source measurement tool
+
+            Commands:
+              analyze
+                --run-id <id>
+                --start <ISO-8601>
+                --end <ISO-8601>
+                --output <directory>
+                --observer-region <coarse-region>
+                [--repository-sha <sha>]
+                [--profile-version <version>]
+
+              storage
+                --label <before|after>
+                --output <directory>
+
+            Connection string:
+              Set ConnectionStrings__FoxData or FOXDATA_CONNECTION_STRING.
+              The connection string is never accepted as a command-line argument
+              and is never written to measurement artifacts.
+            """);
+    }
+}
