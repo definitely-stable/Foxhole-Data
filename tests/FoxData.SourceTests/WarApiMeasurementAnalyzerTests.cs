@@ -77,6 +77,77 @@ public sealed class WarApiMeasurementAnalyzerTests
     }
 
     [Fact]
+    public void DownsamplingCountsRepresentationEpisodesNotUniqueHashes()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var samples = new[]
+        {
+            Sample(start, 200, "A", 100, "etag-a", 10),
+            Sample(start.AddSeconds(15), 200, "B", 100, "etag-b", 10),
+            Sample(start.AddSeconds(30), 200, "A", 100, "etag-c", 10),
+        };
+
+        var summary = WarApiMeasurementAnalyzer.SimulateCadence(
+            samples,
+            TimeSpan.FromSeconds(30));
+
+        Assert.Equal(3, summary.BaselineEpisodeCount);
+        Assert.Equal(2, summary.CapturedEpisodeCount);
+        Assert.Equal(1, summary.MissedEpisodeCount);
+        Assert.Equal(2, summary.SimulatedRequestCount);
+        Assert.InRange(summary.CaptureRatio, 0.666666, 0.666667);
+        Assert.Equal(0d, summary.ObservationDelayP50Seconds!.Value);
+        Assert.Equal(0d, summary.ObservationDelayP95Seconds!.Value);
+        Assert.Equal(0d, summary.ObservationDelayP99Seconds!.Value);
+    }
+
+    [Fact]
+    public void DownsamplingUsesFirstProbeAtOrAfterCandidateTarget()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var samples = new[]
+        {
+            Sample(start, 200, "A", 100, "etag-a", 10),
+            Sample(start.AddSeconds(15), 304, null, null, "etag-a", 10),
+            Sample(start.AddSeconds(30), 200, "B", 100, "etag-b", 10),
+            Sample(start.AddSeconds(45), 200, "C", 100, "etag-c", 10),
+            Sample(start.AddSeconds(60), 304, null, null, "etag-c", 10),
+            Sample(start.AddSeconds(75), 200, "D", 100, "etag-d", 10),
+        };
+
+        var summary = WarApiMeasurementAnalyzer.SimulateCadence(
+            samples,
+            TimeSpan.FromSeconds(30));
+
+        Assert.Equal(4, summary.BaselineEpisodeCount);
+        Assert.Equal(3, summary.CapturedEpisodeCount);
+        Assert.Equal(1, summary.MissedEpisodeCount);
+        Assert.Equal(3, summary.SimulatedRequestCount);
+        Assert.Equal(0.75d, summary.CaptureRatio);
+        Assert.Equal(0d, summary.ObservationDelayP50Seconds!.Value);
+        Assert.Equal(13.5d, summary.ObservationDelayP95Seconds!.Value);
+        Assert.Equal(14.7d, summary.ObservationDelayP99Seconds!.Value);
+    }
+
+    [Fact]
+    public void DownsamplingRejectsNonPositiveCadenceAndMissingRepresentations()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => WarApiMeasurementAnalyzer.SimulateCadence(
+                [Sample(start, 200, "A", 100, "etag-a", 10)],
+                TimeSpan.Zero));
+
+        Assert.Throws<ArgumentException>(
+            () => WarApiMeasurementAnalyzer.SimulateCadence(
+                [Sample(start, 500, null, null, null, 10)],
+                TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact]
     public void AnalyzerRejectsMixedEndpoints()
     {
         var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
