@@ -42,6 +42,9 @@ internal static class MeasurementRunner
                 "storage" => await CaptureStorageAsync(
                     ParseStorageOptions(args[1..]),
                     CancellationToken.None),
+                "validate" => await ValidateAsync(
+                    ParseValidationOptions(args[1..]),
+                    CancellationToken.None),
                 _ => Fail(
                     $"Unknown command '{args[0]}'. Use --help for usage."),
             };
@@ -611,6 +614,207 @@ internal static class MeasurementRunner
             >= 500 and < 600 => "5xx",
             _ => "other",
         };
+
+    private static async Task<int> ValidateAsync(
+        ValidationOptions options,
+        CancellationToken cancellationToken)
+    {
+        var manifestPath = Path.Combine(
+            options.OutputDirectory,
+            "measurement-manifest.json");
+        var summaryPath = Path.Combine(
+            options.OutputDirectory,
+            "measurement-summary.json");
+
+        if (!File.Exists(manifestPath) ||
+            !File.Exists(summaryPath))
+        {
+            throw new InvalidOperationException(
+                "measurement-manifest.json and measurement-summary.json must both exist before validation.");
+        }
+
+        var manifest = JsonSerializer.Deserialize<MeasurementManifest>(
+            await File.ReadAllTextAsync(
+                manifestPath,
+                cancellationToken),
+            JsonOptions)
+            ?? throw new InvalidOperationException(
+                "measurement-manifest.json could not be deserialized.");
+        var summary = JsonSerializer.Deserialize<MeasurementSummary>(
+            await File.ReadAllTextAsync(
+                summaryPath,
+                cancellationToken),
+            JsonOptions)
+            ?? throw new InvalidOperationException(
+                "measurement-summary.json could not be deserialized.");
+
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        if (!string.Equals(
+                manifest.RunId,
+                summary.RunId,
+                StringComparison.Ordinal) ||
+            manifest.StartInclusive != summary.StartInclusive ||
+            manifest.EndExclusive != summary.EndExclusive ||
+            !string.Equals(
+                manifest.SourceKey,
+                summary.SourceKey,
+                StringComparison.Ordinal))
+        {
+            errors.Add(
+                "Manifest and summary identity/window do not match.");
+        }
+
+        var duration =
+            manifest.EndExclusive -
+            manifest.StartInclusive;
+        if (duration < TimeSpan.FromHours(48))
+        {
+            errors.Add(
+                $"Measurement window is {duration.TotalHours:0.##} hours; M4 requires at least 48 hours.");
+        }
+
+        if (summary.FetchCount == 0)
+        {
+            errors.Add("Measurement contains no Fetch evidence.");
+        }
+
+        if (summary.ParseRunCount == 0)
+        {
+            errors.Add("Measurement contains no source parse-run evidence.");
+        }
+
+        if (summary.Scheduling.WindowDecisionCount == 0)
+        {
+            errors.Add(
+                "Measurement contains no immutable scheduling-decision evidence.");
+        }
+
+        if (summary.Scheduling.MissingWindowDecisionCount != 0)
+        {
+            errors.Add(
+                $"{summary.Scheduling.MissingWindowDecisionCount} Fetches in the measurement window have no scheduling decision.");
+        }
+
+        if (summary.StorageGrowth is null)
+        {
+            errors.Add(
+                "Storage growth is unavailable; storage-before.json and storage-after.json are required for M4 publication evidence.");
+        }
+
+        if (summary.ExecutorCapacity.ModeledEndpointCount == 0)
+        {
+            errors.Add(
+                "Executor capacity could not be modeled from active scheduling decisions.");
+        }
+
+        if (manifest.Probe is not null)
+        {
+            if (summary.Scheduling.ProbeSelectedDecisionCount == 0)
+            {
+                errors.Add(
+                    "Manifest declares a bounded probe but no probe-selected scheduling decisions were measured.");
+            }
+
+            if (summary.Scheduling.ProbeAttributedFetchCount == 0)
+            {
+                errors.Add(
+                    "Manifest declares a bounded probe but no Fetches were attributable to probe-created successor jobs.");
+            }
+
+            if (summary.Downsampling.Count == 0)
+            {
+                errors.Add(
+                    "Manifest declares a bounded probe but no downsampling series were produced.");
+            }
+        }
+        else if (summary.Scheduling.ProbeSelectedDecisionCount != 0)
+        {
+            errors.Add(
+                "Probe-selected decisions exist but the manifest has no probe configuration.");
+        }
+
+        if (summary.ExecutorCapacity.RemainingSerialHeadroom <= 0)
+        {
+            warnings.Add(
+                $"Modeled serial service load is {summary.ExecutorCapacity.RequiredSerialServiceLoad:0.####}; executor-concurrency decision must address insufficient serial headroom.");
+        }
+
+        if (summary.Etag.SameEtagDifferentPayloadCount > 0)
+        {
+            warnings.Add(
+                $"{summary.Etag.SameEtagDifferentPayloadCount} same-ETag/different-payload anomalies were observed.");
+        }
+
+        if (summary.Etag.UnusableCount > 0)
+        {
+            warnings.Add(
+                $"{summary.Etag.UnusableCount} source ETag values were syntactically unusable as HTTP validators.");
+        }
+
+        var versionRegressions = summary.WarApi.Groups.Sum(
+            group => group.SourceVersionRegressionCount);
+        if (versionRegressions > 0)
+        {
+            warnings.Add(
+                $"{versionRegressions} source version regressions were observed.");
+        }
+
+        var lastUpdatedRegressions = summary.WarApi.Groups.Sum(
+            group => group.SourceLastUpdatedRegressionCount);
+        if (lastUpdatedRegressions > 0)
+        {
+            warnings.Add(
+                $"{lastUpdatedRegressions} source lastUpdated regressions were observed.");
+        }
+
+        if (summary.Attempts.UncertainExchangeCount > 0)
+        {
+            warnings.Add(
+                $"{summary.Attempts.UncertainExchangeCount} uncertain exchanges were observed.");
+        }
+
+        if (summary.PayloadDecode.MissingDecodedLengthCount > 0)
+        {
+            warnings.Add(
+                $"{summary.PayloadDecode.MissingDecodedLengthCount} parse runs have no decoded byte length; inspect decode failures and pre-M4 evidence.");
+        }
+
+        var result = new MeasurementValidationResult(
+            errors.Count == 0,
+            errors,
+            warnings);
+
+        var validationPath = Path.Combine(
+            options.OutputDirectory,
+            "measurement-validation.json");
+        await WriteJsonAsync(
+            validationPath,
+            result,
+            cancellationToken);
+
+        foreach (var warning in warnings)
+        {
+            Console.WriteLine($"WARNING: {warning}");
+        }
+
+        if (errors.Count == 0)
+        {
+            Console.WriteLine(
+                $"M4 publication evidence is structurally complete. Wrote '{validationPath}'.");
+            return 0;
+        }
+
+        foreach (var error in errors)
+        {
+            Console.Error.WriteLine($"ERROR: {error}");
+        }
+
+        Console.Error.WriteLine(
+            $"M4 publication evidence is incomplete. Wrote '{validationPath}'.");
+        return 3;
+    }
 
     private static MeasurementCacheSummary AnalyzeCache(
         IReadOnlyCollection<SourceMeasurementFetch> fetches)
@@ -1649,6 +1853,16 @@ internal static class MeasurementRunner
             probeTargetSeconds);
     }
 
+    private static ValidationOptions ParseValidationOptions(
+        string[] args)
+    {
+        var values = ParseNamedOptions(args);
+        RejectUnknown(values, "output");
+
+        return new ValidationOptions(
+            Path.GetFullPath(Required(values, "output")));
+    }
+
     private static StorageOptions ParseStorageOptions(string[] args)
     {
         var values = ParseNamedOptions(args);
@@ -1853,6 +2067,9 @@ internal static class MeasurementRunner
 
               storage
                 --label <before|after>
+                --output <directory>
+
+              validate
                 --output <directory>
 
             Connection string:
