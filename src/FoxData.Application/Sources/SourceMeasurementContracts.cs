@@ -73,7 +73,8 @@ public sealed record SourceMeasurementParseRun(
     DateTimeOffset StartedAt,
     DateTimeOffset CompletedAt,
     long? SourceVersion,
-    long? SourceLastUpdated);
+    long? SourceLastUpdated,
+    long? DecodedByteLength);
 
 public sealed record SourceMeasurementScheduleDecision(
     FetchId FetchId,
