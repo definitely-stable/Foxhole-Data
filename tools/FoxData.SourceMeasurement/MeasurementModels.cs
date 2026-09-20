@@ -168,6 +168,7 @@ internal sealed record MeasurementSummary(
     IReadOnlyDictionary<string, int> BodyErrorCounts,
     MeasurementEtagSummary Etag,
     MeasurementPayloadDecodeSummary PayloadDecode,
+    IReadOnlyDictionary<string, MeasurementPercentiles> ParseDurationByCapabilityMs,
     IReadOnlyDictionary<string, MeasurementPercentiles> LatencyByResponseClassMs,
     MeasurementVolumeSummary Volume,
     MeasurementExecutorCapacitySummary ExecutorCapacity,
