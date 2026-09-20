@@ -107,6 +107,8 @@ M2 uses PostgreSQL 18 as the only authoritative durable store.
 
 No additional coordination system is introduced.
 
+Workflow timestamps that define ownership/state transitions use database transaction time. Source-observation timestamps remain explicit evidence supplied by the caller and are never silently replaced by database time.
+
 Leases, fencing, jobs, attempts, raw payloads and fetch evidence all live in the same database, which gives M2 one transactional authority.
 
 ### 4.2 Raw payload storage is PostgreSQL-inline in M2
@@ -296,6 +298,8 @@ unique(shard_id, semantic_key)
 
 M2 endpoint records do NOT contain official URLs. M3 owns mapping semantic endpoints to source request details.
 
+RegisterEndpoint creates its ingest.endpoint_state row in the same transaction so fencing never depends on a later lazy bootstrap.
+
 ## 8. Collection job model
 
 Table:
@@ -314,7 +318,7 @@ scheduled_for         timestamptz not null
 available_at          timestamptz not null
 priority              smallint not null default 0
 state                 text not null
-lease_owner           text null
+lease_owner_id        uuid null
 lease_generation      bigint not null default 0
 lease_expires_at      timestamptz null
 attempt_count         integer not null default 0
@@ -327,7 +331,7 @@ Constraints:
 
 ~~~text
 foreign key endpoint_id -> sources.endpoints(id)
-unique(idempotency_key)
+unique(endpoint_id, idempotency_key)
 lease_generation >= 0
 attempt_count >= 0
 ~~~
@@ -343,7 +347,7 @@ failed
 cancelled
 ~~~
 
-State is an internal stable token stored as text rather than PostgreSQL enum.
+State is an internal stable token stored as text rather than PostgreSQL enum. The M2 migration adds a CHECK constraint for the states known to M2; extending the state machine therefore remains an explicit reviewed migration rather than an implicit arbitrary string.
 
 ## 9. Atomic job claim
 
@@ -357,13 +361,13 @@ WITH candidate AS (
     FROM ingest.collection_jobs
     WHERE state = 'pending'
       AND available_at <= transaction_timestamp()
-    ORDER BY priority DESC, available_at, id
+    ORDER BY available_at, priority DESC, id
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
 UPDATE ingest.collection_jobs AS job
 SET state = 'leased',
-    lease_owner = @worker_id,
+    lease_owner_id = @worker_id,
     lease_generation = job.lease_generation + 1,
     lease_expires_at = transaction_timestamp() + @lease_duration,
     updated_at = transaction_timestamp()
@@ -388,13 +392,13 @@ A lease is valid only when all match:
 
 ~~~text
 jobId
-leaseOwner
+leaseOwnerId
 leaseGeneration
 state in {leased, processing}
 leaseExpiresAt > database now
 ~~~
 
-Renewal and completion use conditional UPDATE predicates that include owner + generation.
+Renewal and completion use conditional UPDATE predicates that include owner UUID + generation. Worker instance IDs are application-generated UUIDv7 values, not hostnames or process IDs.
 
 If zero rows update, ownership is lost.
 
@@ -449,7 +453,7 @@ superseded
 captured_late
 ~~~
 
-Transition rules are centralized and tested. Random call sites do not assign arbitrary state strings.
+Transition rules are centralized and tested. The M2 migration adds a CHECK constraint for the M2 attempt states. Random call sites do not assign arbitrary state strings.
 
 ## 12. Beginning an attempt
 
@@ -487,7 +491,14 @@ updated_at             timestamptz not null
 
 M3 adds ETag/cache eligibility fields; M2 does not create speculative cache columns.
 
-Acquire fence conceptually performs:
+Acquire fence is one short transaction:
+
+1. lock/validate the attempt and its job;
+2. verify lease_owner_id, lease_generation and non-expired lease;
+3. verify the attempt belongs to the endpoint being fenced;
+4. increment the endpoint fence and attach the attempt.
+
+The endpoint update is conceptually:
 
 ~~~sql
 UPDATE ingest.endpoint_state
@@ -582,6 +593,7 @@ foreign key payload_id -> evidence.payloads(id)
 foreign key prior_fetch_id -> evidence.fetches(id)
 unique(attempt_id)
 duration_ms >= 0
+declared_length is null or declared_length >= 0
 ~~~
 
 The one-fetch-per-attempt unique constraint is part of the audited one-exchange model.
@@ -603,7 +615,6 @@ id               uuid primary key
 sha256           bytea not null
 byte_length      bigint not null
 body             bytea not null
-media_type       text null
 created_at       timestamptz not null
 
 unique(sha256)
@@ -642,7 +653,7 @@ Steps:
 5. set raw_durable_at;
 6. determine whether fence remains current;
 7. classify current vs captured_late/superseded;
-8. advance endpoint operational state only under valid fence;
+8. set endpoint_state.last_authoritative_attempt_id only when the expected fence is still current;
 9. COMMIT.
 
 No canonical Foxhole interpretation occurs.
@@ -773,7 +784,7 @@ Initial indexes beyond primary/unique constraints:
 ### collection_jobs
 
 ~~~text
-(state, available_at, priority DESC, id)
+(available_at, priority DESC, id)
 WHERE state = 'pending'
 
 (lease_expires_at, id)
@@ -815,7 +826,7 @@ Registry records are disabled, not physically deleted, when provenance exists.
 
 Each Worker process has a runtime instance UUIDv7.
 
-lease_owner stores that bounded identifier.
+lease_owner_id stores that UUID directly.
 
 Hostname/process ID may be logged but is not the uniqueness authority.
 
