@@ -1,6 +1,6 @@
 # M2 hardening plan
 
-Status: completed 2026-09-20. Implemented by PRs #9, #10 and the H3 ops/integrity PR.
+Status: completed 2026-09-20. Implemented by PRs #9, #10 and #12.
 Baseline: main @ 26b8932325f64942a91bab295627cd19ff80ce60.
 Purpose: close only the concrete failure modes confirmed by the post-M2 critical audit before activating real source ingestion.
 
@@ -58,7 +58,7 @@ Acceptance:
 
 ### H3 — deployment, CI and evidence integrity
 
-Status: implemented on `m2-hardening/ops-integrity`; verification/merge pending.
+Status: completed in PR #12.
 
 Close operational blind spots before M3.
 

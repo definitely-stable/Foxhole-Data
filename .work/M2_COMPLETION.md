@@ -143,7 +143,7 @@ PR #10:
 
 ### H3 — operations and integrity
 
-The final hardening slice:
+PR #12:
 
 - deploys migrations through a one-shot EF migration bundle;
 - makes readiness unhealthy when the compiled service has pending database migrations;
@@ -152,3 +152,25 @@ The final hardening slice:
 - documents separate production schema/deployment and runtime database identities.
 
 Real War API ingestion remains outside M2 and begins in M3.
+
+
+## Post-hardening verification
+
+The final H3 gate verified the hardened M2 baseline before M3 activation:
+
+~~~text
+Release build:                    success
+Unit suite discovery/execution:   success
+Integration suite:                success
+Recovery suite:                   success
+Source suite:                     success
+Contract test suite:              success
+Contracts workflow:               success
+Dependency Review:                success
+Migration bundle build:           success
+Clean PostgreSQL migration job:   exit 0
+Schema-aware API readiness:       success
+Docker Compose smoke:             success
+~~~
+
+No real War API traffic is enabled by the hardening work.
