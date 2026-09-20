@@ -109,15 +109,17 @@ M3 may add source-specific behavior around this sequence:
 
 ~~~text
 semantic endpoint
-    -> BuildRequest
     -> Claim / BeginAttempt / Fence
+    -> BuildRequest
     -> AuthorizeExchange
-    -> exactly one source exchange
+    -> exactly one FoxData application-issued source exchange
     -> opaque response metadata + bytes
     -> CaptureSourceResponse
 ~~~
 
-M3 must reuse the M2 queue, lease, attempt, fence, authorization, evidence and recovery semantics rather than introducing parallel source-specific correctness mechanisms.
+Building the final request after the durable attempt/fence exists allows deterministic request/configuration failures to use the H2 DeferBeforeExchange transition without authorizing network I/O.
+
+M3 must reuse the M2 queue, lease, attempt, fence, authorization, evidence and recovery semantics rather than introducing parallel source-specific correctness mechanisms. ADR-0015 defines the application-level HTTP send boundary; ADR-0016 keeps validator/scheduling state separate from M2 fence authority.
 
 
 ## Post-completion hardening audit
