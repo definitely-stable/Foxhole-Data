@@ -11,6 +11,7 @@ var warApiOptions = WarApiWorkerOptions.FromConfiguration(
     builder.Configuration);
 
 builder.Services.AddSingleton(warApiOptions);
+builder.Services.AddSingleton(WarApiCollectionProfile.Bootstrap);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WarApiTransport>();
 builder.Services.AddSingleton<IWarApiTransport>(
