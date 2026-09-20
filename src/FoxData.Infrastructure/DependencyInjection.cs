@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<IEndpointPollStateStore, PostgresEndpointPollStateStore>();
         services.AddScoped<ISourceParseRunStore, PostgresSourceParseRunStore>();
         services.AddScoped<ISourcePlanningReader, PostgresSourcePlanningReader>();
+        services.AddScoped<ISourceMeasurementReader, PostgresSourceMeasurementReader>();
 
         services.AddSingleton<PostgresHealthCheck>();
 
