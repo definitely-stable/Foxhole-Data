@@ -690,12 +690,17 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         command.Transaction = transaction;
         command.CommandText = "SELECT clock_timestamp();";
 
-        var value = await command.ExecuteScalarAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SingleRow,
+            cancellationToken);
 
-        return value is DateTimeOffset timestamp
-            ? timestamp
-            : throw new EvidenceIntegrityException(
-                "PostgreSQL did not return clock_timestamp() as timestamptz.");
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new EvidenceIntegrityException(
+                "PostgreSQL did not return clock_timestamp().");
+        }
+
+        return reader.GetFieldValue<DateTimeOffset>(0);
     }
 
     private static async Task<FetchDescriptor?> GetFetchByAttemptAsync(
