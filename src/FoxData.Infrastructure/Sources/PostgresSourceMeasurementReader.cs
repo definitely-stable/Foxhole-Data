@@ -330,8 +330,19 @@ public sealed class PostgresSourceMeasurementReader(NpgsqlDataSource dataSource)
             INNER JOIN sources.sources AS source
                 ON source.id = shard.source_id
             WHERE source.key = @source_key
-              AND captured_fetch.request_started_at >= @start_inclusive
-              AND captured_fetch.request_started_at < @end_exclusive
+              AND (
+                    (
+                        captured_fetch.request_started_at >= @start_inclusive
+                        AND captured_fetch.request_started_at < @end_exclusive
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM ingest.attempts AS successor_attempt
+                        WHERE successor_attempt.job_id = decision.successor_job_id
+                          AND successor_attempt.started_at >= @start_inclusive
+                          AND successor_attempt.started_at < @end_exclusive
+                    )
+              )
             ORDER BY
                 endpoint.id,
                 captured_fetch.request_started_at,
