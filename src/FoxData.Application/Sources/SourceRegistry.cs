@@ -72,6 +72,22 @@ public sealed class SourceRegistry(ISourceRegistryStore store)
             cancellationToken);
     }
 
+    public Task<ShardDescriptor?> GetShardAsync(
+        ShardId shardId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNonEmpty(shardId.Value, nameof(shardId));
+        return store.GetShardAsync(shardId, cancellationToken);
+    }
+
+    public Task<EndpointDescriptor?> GetEndpointAsync(
+        EndpointId endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureNonEmpty(endpointId.Value, nameof(endpointId));
+        return store.GetEndpointAsync(endpointId, cancellationToken);
+    }
+
     public Task<EndpointDescriptor?> GetEndpointBySemanticKeyAsync(
         ShardId shardId,
         string semanticKey,
