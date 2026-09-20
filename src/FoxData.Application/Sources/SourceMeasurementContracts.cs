@@ -6,6 +6,7 @@ namespace FoxData.Application.Sources;
 
 public sealed record SourceMeasurementFetch(
     FetchId FetchId,
+    FetchId? PriorFetchId,
     IngestionAttemptId AttemptId,
     EndpointId EndpointId,
     string SourceKey,
