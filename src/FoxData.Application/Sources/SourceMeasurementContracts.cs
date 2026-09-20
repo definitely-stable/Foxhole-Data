@@ -17,6 +17,8 @@ public sealed record SourceMeasurementFetch(
     DateTimeOffset RetrievedAt,
     int? StatusCode,
     long DurationMs,
+    PayloadId? PayloadId,
+    DateTimeOffset? PayloadCreatedAt,
     string? PayloadSha256Hex,
     long? PayloadBytes,
     string? SourceEtag,
