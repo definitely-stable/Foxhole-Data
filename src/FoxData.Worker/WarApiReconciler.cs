@@ -46,6 +46,11 @@ public sealed class WarApiReconciler(
             return;
         }
 
+        var durableDecision =
+            await scheduleDecisionStore.GetAsync(
+                snapshot.CurrentFetch.Id,
+                cancellationToken);
+
         WarApiParseResult? parsed = null;
         if (snapshot.CurrentFetch.StatusCode == (int)HttpStatusCode.OK &&
             snapshot.CurrentFetch.PayloadId is not null &&
@@ -67,6 +72,17 @@ public sealed class WarApiReconciler(
                     maps,
                     cancellationToken);
             }
+        }
+
+        if (durableDecision is not null)
+        {
+            await ReplayDurableDecisionAsync(
+                context,
+                snapshot,
+                previousPoll,
+                durableDecision,
+                cancellationToken);
+            return;
         }
 
         var activity = await ResolveEndpointActivityAsync(
@@ -151,6 +167,64 @@ public sealed class WarApiReconciler(
                 transition.SuccessorAvailableAt is null
                     ? "no_successor"
                     : "successor_scheduled"));
+    }
+
+    private async Task ReplayDurableDecisionAsync(
+        WarApiRegistryContext context,
+        EndpointEvidenceSnapshot snapshot,
+        EndpointPollStateDescriptor? previousPoll,
+        SourceScheduleDecisionDescriptor decision,
+        CancellationToken cancellationToken)
+    {
+        if (decision.FetchId != snapshot.CurrentFetch.Id ||
+            decision.EndpointId != context.Endpoint.Id)
+        {
+            throw new SourceStateIntegrityException(
+                "Durable scheduling decision does not belong to the current Fetch/endpoint.");
+        }
+
+        var cadence =
+            TimeSpan.FromMilliseconds(
+                decision.EffectiveCadenceMs);
+
+        var rebuilt = BuildPollTransition(
+            context,
+            snapshot,
+            previousPoll,
+            decision.EndpointActive,
+            cadence,
+            decision.PolicyVersion);
+
+        var replayState = rebuilt.State with
+        {
+            SourceCacheEligibleAt =
+                decision.SourceCacheEligibleAt,
+            NextTargetAt =
+                decision.NextTargetAt,
+            RetryEligibleAt =
+                decision.RetryEligibleAt,
+            PolicyVersion =
+                decision.PolicyVersion,
+        };
+
+        if ((decision.SuccessorJobId is null) !=
+            (decision.SuccessorAvailableAt is null))
+        {
+            throw new SourceStateIntegrityException(
+                "Durable scheduling decision has inconsistent successor identity/timing.");
+        }
+
+        await pollStateStore.PutAsync(
+            replayState,
+            cancellationToken);
+
+        WarApiTelemetry.Reconciliations.Add(
+            1,
+            SourceTags(
+                context,
+                decision.SuccessorJobId is null
+                    ? "decision_replayed_no_successor"
+                    : "decision_replayed"));
     }
 
     private async Task<WarApiParseResult?> ParseAndRecordAsync(
