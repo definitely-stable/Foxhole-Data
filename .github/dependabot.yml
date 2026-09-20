@@ -22,6 +22,8 @@ updates:
       interval: weekly
 
   - package-ecosystem: docker
-    directory: /
+    directories:
+      - /deploy/docker/api
+      - /deploy/docker/worker
     schedule:
       interval: weekly
