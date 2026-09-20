@@ -232,7 +232,7 @@ runs:
             set -e
             echo "Worker exited before the segment completed (status=$worker_status)." >&2
             tail -n 200 "$worker_log" >&2 || true
-            exit "$worker_status"
+            exit 1
           fi
           sleep 30
         done
