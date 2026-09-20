@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace FoxData.ContractTests;
@@ -52,10 +53,62 @@ public sealed class RepositoryArchitectureTests
 
         Assert.True(File.Exists(Path.Combine(root, "AGENTS.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M2_EVIDENCE_KERNEL.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M4_SOURCE_MEASUREMENT.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M4_RUNBOOK.md")));
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    root,
+                    ".github",
+                    "workflows",
+                    "m4-live-campaign.yml")));
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    root,
+                    ".github",
+                    "actions",
+                    "m4-segment",
+                    "action.yml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "public-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "openapi", "compat-warapi-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "asyncapi", "events-v1.yaml")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "contracts", "jsonrpc", "stdio-v1.md")));
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    root,
+                    ".work",
+                    "contracts",
+                    "internal",
+                    "source",
+                    "collection-profile.schema.json")));
+    }
+
+    [Fact]
+    public void MeasuredCollectionProfileContractRequiresProvenance()
+    {
+        var root = FindRepositoryRoot();
+        var schemaPath = Path.Combine(
+            root,
+            ".work",
+            "contracts",
+            "internal",
+            "source",
+            "collection-profile.schema.json");
+
+        using var document = JsonDocument.Parse(
+            File.ReadAllText(schemaPath));
+
+        var required = document.RootElement
+            .GetProperty("required")
+            .EnumerateArray()
+            .Select(element => element.GetString())
+            .Where(value => value is not null)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains("measurementReference", required);
+        Assert.Contains("limitations", required);
     }
 
     private static string FindRepositoryRoot()

@@ -75,6 +75,6 @@ public sealed class WarApiResponsePolicyTests
 
         Assert.Equal(
             TimeSpan.FromSeconds(expectedSeconds),
-            WarApiResponsePolicy.Cadence(value));
+            WarApiCollectionProfile.Bootstrap.TargetCadence(value));
     }
 }

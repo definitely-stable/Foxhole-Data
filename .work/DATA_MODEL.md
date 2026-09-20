@@ -91,6 +91,8 @@ M3 endpoint_poll_state is a separate rebuildable scheduling/validator projection
 - policyVersion
 - updatedAt
 
+From M4 onward, policyVersion is a composite scheduling identity containing both the poll algorithm and collection profile version, for example `warapi-poll@1/collection-profile@1`.
+
 endpoint_poll_state MUST NOT duplicate fenceToken, leaseGeneration or active attempt ownership.
 
 representationFetchId identifies the body-bearing source representation used for conditional validation. It is not simply the latest Fetch.
@@ -168,6 +170,25 @@ normalization_runs, owned by M5+:
 - outcome
 
 Source parsing and canonical normalization are intentionally separate stages.
+
+M4 adds append-only derived scheduling evidence:
+
+source_schedule_decisions:
+
+- fetchId primary key
+- endpointId
+- policyVersion
+- effectiveCadenceMs
+- endpointActive
+- probeSelected
+- sourceCacheEligibleAt nullable
+- nextTargetAt nullable
+- retryEligibleAt nullable
+- successorJobId nullable, unique when present
+- successorAvailableAt nullable
+- createdAt
+
+This ledger records the decision produced while reconciling one immutable Fetch. It is not scheduler authority and never owns leases/fences. The optional successorJobId provides an exact lineage from Fetch N and its scheduling policy to the job that can produce Fetch N+1.
 
 ## Runtime
 

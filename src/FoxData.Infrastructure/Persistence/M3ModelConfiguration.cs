@@ -94,6 +94,9 @@ internal static class M3ModelConfiguration
                 table.HasCheckConstraint(
                     "ck_source_parse_runs_completed_after_started",
                     "completed_at >= started_at");
+                table.HasCheckConstraint(
+                    "ck_source_parse_runs_decoded_byte_length",
+                    "decoded_byte_length IS NULL OR decoded_byte_length >= 0");
             });
 
         builder.HasKey(x => x.Id);
@@ -136,6 +139,12 @@ internal static class M3ModelConfiguration
             .HasColumnName("created_at")
             .HasDefaultValueSql("transaction_timestamp()")
             .ValueGeneratedOnAdd();
+        builder.Property(x => x.SourceVersion)
+            .HasColumnName("source_version");
+        builder.Property(x => x.SourceLastUpdated)
+            .HasColumnName("source_last_updated");
+        builder.Property(x => x.DecodedByteLength)
+            .HasColumnName("decoded_byte_length");
 
         builder.HasIndex(
                 x => new

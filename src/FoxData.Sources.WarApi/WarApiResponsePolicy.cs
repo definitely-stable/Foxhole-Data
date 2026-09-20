@@ -108,40 +108,6 @@ public static class WarApiResponsePolicy
         return TimeSpan.FromSeconds(Math.Min(300, baseSeconds * jitter));
     }
 
-    public static TimeSpan Cadence(SourceCapability capability)
-    {
-        if (capability == WarApiCapabilities.RuntimeWarState ||
-            capability == WarApiCapabilities.RegionWarReport ||
-            capability == WarApiCapabilities.DynamicMapState)
-        {
-            return TimeSpan.FromMinutes(1);
-        }
-
-        if (capability == WarApiCapabilities.ActiveMapList)
-        {
-            return TimeSpan.FromMinutes(5);
-        }
-
-        if (capability == WarApiCapabilities.StaticMapState)
-        {
-            return TimeSpan.FromHours(6);
-        }
-
-        throw new ArgumentException(
-            $"Unsupported War API capability '{capability.Key}'.",
-            nameof(capability));
-    }
-
-    public static TimeSpan DiscoveryWindow(SourceCapability capability)
-    {
-        if (capability == WarApiCapabilities.StaticMapState)
-        {
-            return TimeSpan.FromMinutes(5);
-        }
-
-        return Cadence(capability);
-    }
-
     public static TimeSpan Spread(
         string shardKey,
         string semanticKey,

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:foxdata:contract:source:collection-profile",
+  "title": "Foxhole-Data source collection profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "source",
+    "executorConcurrency",
+    "measurementReference",
+    "limitations",
+    "capabilities"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^collection-profile@[1-9][0-9]*$"
+    },
+    "source": {
+      "const": "official-war-api"
+    },
+    "executorConcurrency": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "measurementReference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime-war-state",
+        "active-map-list",
+        "region-war-report",
+        "static-map-state",
+        "dynamic-map-state"
+      ],
+      "properties": {
+        "runtime-war-state": {
+          "$ref": "#/$defs/capability"
+        },
+        "active-map-list": {
+          "$ref": "#/$defs/capability"
+        },
+        "region-war-report": {
+          "$ref": "#/$defs/capability"
+        },
+        "static-map-state": {
+          "$ref": "#/$defs/capability"
+        },
+        "dynamic-map-state": {
+          "$ref": "#/$defs/capability"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetCadenceSeconds",
+        "discoveryWindowSeconds"
+      ],
+      "properties": {
+        "targetCadenceSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "discoveryWindowSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "measurementNotes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

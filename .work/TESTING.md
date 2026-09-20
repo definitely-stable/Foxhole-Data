@@ -56,6 +56,20 @@ Historical issue 92/restart behavior fixture is mandatory.
 
 M3 source tests also prove that parser failure never destroys raw evidence and never triggers an immediate hidden source retry.
 
+## M4 source measurement
+
+M4 tests additionally prove:
+
+- the bootstrap collection profile preserves the M3 cadence/discovery values exactly;
+- every documented War API capability has an explicit profile entry;
+- profile cadence/discovery values are positive and versioned;
+- a faster profile target cannot bypass source cache eligibility or Retry-After;
+- measurement calculations are deterministic over a fixed evidence window;
+- duplicate 200, 200/304, ETag anomaly and representation-change calculations are endpoint-local;
+- bounded probe selection is deterministic and capped before any live probe is enabled.
+
+Live measurement remains non-blocking and MUST NOT make mandatory CI depend on the public War API.
+
 ## HTTP transport tests
 
 Prove:

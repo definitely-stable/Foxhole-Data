@@ -51,6 +51,15 @@ It may contain:
 - policy_version;
 - updated_at.
 
+Beginning with M4, policy_version identifies both the polling algorithm and the active collection profile, for example:
+
+~~~text
+warapi-poll@1/warapi-bootstrap-profile@1
+warapi-poll@1/collection-profile@1
+~~~
+
+This keeps successor timing reproducible without adding scheduling ownership to M2 endpoint_state.
+
 The table MUST NOT duplicate:
 
 - fence token;

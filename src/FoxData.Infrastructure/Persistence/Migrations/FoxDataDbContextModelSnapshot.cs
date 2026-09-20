@@ -607,6 +607,75 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                     b.ToTable("shards", "sources");
                 });
 
+            modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceScheduleDecisionRow", b =>
+                {
+                    b.Property<Guid>("FetchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("fetch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("transaction_timestamp()");
+
+                    b.Property<long>("EffectiveCadenceMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("effective_cadence_ms");
+
+                    b.Property<Guid>("EndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("endpoint_id");
+
+                    b.Property<bool>("EndpointActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("endpoint_active");
+
+                    b.Property<DateTimeOffset?>("NextTargetAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_target_at");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("policy_version");
+
+                    b.Property<bool>("ProbeSelected")
+                        .HasColumnType("boolean")
+                        .HasColumnName("probe_selected");
+
+                    b.Property<DateTimeOffset?>("RetryEligibleAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retry_eligible_at");
+
+                    b.Property<DateTimeOffset?>("SourceCacheEligibleAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("source_cache_eligible_at");
+
+                    b.Property<DateTimeOffset?>("SuccessorAvailableAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("successor_available_at");
+
+                    b.Property<Guid?>("SuccessorJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("successor_job_id");
+
+                    b.HasKey("FetchId");
+
+                    b.HasIndex("EndpointId")
+                        .HasDatabaseName("ix_source_schedule_decisions_endpoint");
+
+                    b.HasIndex("SuccessorJobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_source_schedule_decisions_successor_job");
+
+                    b.ToTable("source_schedule_decisions", "evidence", t =>
+                        {
+                            t.HasCheckConstraint("ck_source_schedule_decisions_effective_cadence_ms", "effective_cadence_ms > 0");
+                        });
+                });
+
             modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceParseRunRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -635,6 +704,10 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("transaction_timestamp()");
 
+                    b.Property<long?>("DecodedByteLength")
+                        .HasColumnType("bigint")
+                        .HasColumnName("decoded_byte_length");
+
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -661,6 +734,14 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RepresentationFetchId")
                         .HasColumnType("uuid")
                         .HasColumnName("representation_fetch_id");
+
+                    b.Property<long?>("SourceLastUpdated")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_last_updated");
+
+                    b.Property<long?>("SourceVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_version");
 
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone")
@@ -691,6 +772,8 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                     b.ToTable("source_parse_runs", "evidence", t =>
                         {
                             t.HasCheckConstraint("ck_source_parse_runs_completed_after_started", "completed_at >= started_at");
+
+                            t.HasCheckConstraint("ck_source_parse_runs_decoded_byte_length", "decoded_byte_length IS NULL OR decoded_byte_length >= 0");
 
                             t.HasCheckConstraint("ck_source_parse_runs_unknown_code_count", "unknown_code_count >= 0");
 
@@ -845,6 +928,26 @@ namespace FoxData.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SourceId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceScheduleDecisionRow", b =>
+                {
+                    b.HasOne("FoxData.Infrastructure.Persistence.EndpointRow", null)
+                        .WithMany()
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoxData.Infrastructure.Persistence.FetchRow", null)
+                        .WithOne()
+                        .HasForeignKey("FoxData.Infrastructure.Persistence.SourceScheduleDecisionRow", "FetchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoxData.Infrastructure.Persistence.CollectionJobRow", null)
+                        .WithMany()
+                        .HasForeignKey("SuccessorJobId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FoxData.Infrastructure.Persistence.SourceParseRunRow", b =>

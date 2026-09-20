@@ -1,5 +1,6 @@
 using FoxData.Hosting;
 using FoxData.Infrastructure;
+using FoxData.Sources.WarApi;
 using FoxData.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -11,6 +12,11 @@ var warApiOptions = WarApiWorkerOptions.FromConfiguration(
     builder.Configuration);
 
 builder.Services.AddSingleton(warApiOptions);
+builder.Services.AddSingleton(
+    WarApiMeasurementProbeConfiguration.FromConfiguration(
+        builder.Configuration,
+        warApiOptions));
+builder.Services.AddSingleton(WarApiCollectionProfile.Bootstrap);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WarApiTransport>();
 builder.Services.AddSingleton<IWarApiTransport>(

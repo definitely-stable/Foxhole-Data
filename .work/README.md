@@ -51,6 +51,7 @@ Primary documents:
 - M3_OFFICIAL_WAR_API_ADAPTER.md
 - M3_ACTIVATION.md
 - M3_COMPLETION.md
+- M4_SOURCE_MEASUREMENT.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
@@ -59,6 +60,7 @@ Contract sources:
 - contracts/openapi/compat-warapi-v1.yaml
 - contracts/asyncapi/events-v1.yaml
 - contracts/jsonrpc/stdio-v1.md
+- contracts/internal/source/collection-profile.schema.json
 
 Research snapshots:
 

@@ -1,0 +1,499 @@
+name: M4 live measurement segment
+description: Runs one bounded Official War API measurement segment with a durable PostgreSQL checkpoint.
+
+inputs:
+  segment_id:
+    description: Stable segment identifier, for example s01.
+    required: true
+  phase:
+    description: baseline-live1, probe-live1, live2, or live3.
+    required: true
+  duration_minutes:
+    description: Active Worker runtime for this segment.
+    required: true
+  previous_cache_key:
+    description: Exact cache key of the preceding PostgreSQL checkpoint.
+    required: false
+    default: ""
+  checkpoint_cache_key:
+    description: Exact cache key to save after this segment.
+    required: true
+  run_id:
+    description: Stable M4 campaign run id.
+    required: true
+  observer_region:
+    description: Coarse non-secret observer region label.
+    required: true
+  final_segment:
+    description: true only for the last full-campaign segment.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/packages.lock.json"
+
+    - name: Restore previous campaign checkpoint
+      if: ${{ inputs.previous_cache_key != '' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: m4-ci/checkpoint
+        key: ${{ inputs.previous_cache_key }}
+        fail-on-cache-miss: true
+
+    - name: Start PostgreSQL 18
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+        docker run \
+          --detach \
+          --name foxdata-m4-postgres \
+          --publish 127.0.0.1:5432:5432 \
+          --env POSTGRES_DB=foxdata \
+          --env POSTGRES_USER=foxdata \
+          --env POSTGRES_PASSWORD=foxdata_m4 \
+          postgres:18.6-bookworm >/dev/null
+
+        for attempt in $(seq 1 60); do
+          if docker exec foxdata-m4-postgres \
+              pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
+            exit 0
+          fi
+          sleep 1
+        done
+
+        docker logs foxdata-m4-postgres
+        exit 1
+
+    - name: Restore PostgreSQL checkpoint
+      if: ${{ inputs.previous_cache_key != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        test -f m4-ci/checkpoint/checkpoint.dump
+        docker cp \
+          m4-ci/checkpoint/checkpoint.dump \
+          foxdata-m4-postgres:/tmp/checkpoint.dump
+
+        docker exec \
+          --env PGPASSWORD=foxdata_m4 \
+          foxdata-m4-postgres \
+          pg_restore \
+            --clean \
+            --if-exists \
+            --no-owner \
+            --no-privileges \
+            --username foxdata \
+            --dbname foxdata \
+            /tmp/checkpoint.dump
+
+    - name: Restore and build exact campaign SHA
+      shell: bash
+      run: |
+        set -euo pipefail
+        dotnet tool restore
+        dotnet restore FoxData.slnx --locked-mode
+        dotnet build FoxData.slnx -c Release --no-restore
+
+    - name: Apply exact migrations
+      shell: bash
+      env:
+        FOXDATA_DESIGN_CONNECTION: Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4
+        ASPNETCORE_ENVIRONMENT: Production
+      run: |
+        set -euo pipefail
+        dotnet ef database update \
+          --no-build \
+          --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj \
+          --startup-project src/FoxData.Api/FoxData.Api.csproj \
+          --context FoxDataDbContext \
+          --configuration Release
+
+    - name: Initialize or verify campaign identity
+      shell: bash
+      env:
+        M4_RUN_ID: ${{ inputs.run_id }}
+        M4_OBSERVER_REGION: ${{ inputs.observer_region }}
+      run: |
+        set -euo pipefail
+        mkdir -p m4-ci/checkpoint/measurement
+
+        if [[ ! -f m4-ci/checkpoint/campaign.json ]]; then
+          ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4" \
+            dotnet run \
+              --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj \
+              -c Release \
+              --no-build \
+              -- \
+              storage \
+              --label before \
+              --output m4-ci/checkpoint/measurement
+
+          start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          jq -n \
+            --arg runId "$M4_RUN_ID" \
+            --arg startInclusive "$start" \
+            --arg repositorySha "$GITHUB_SHA" \
+            --arg observerRegion "$M4_OBSERVER_REGION" \
+            '{
+              runId: $runId,
+              startInclusive: $startInclusive,
+              repositorySha: $repositorySha,
+              observerRegion: $observerRegion
+            }' > m4-ci/checkpoint/campaign.json
+        fi
+
+        test "$(jq -r '.runId' m4-ci/checkpoint/campaign.json)" = "$M4_RUN_ID"
+        test "$(jq -r '.repositorySha' m4-ci/checkpoint/campaign.json)" = "$GITHUB_SHA"
+        test "$(jq -r '.observerRegion' m4-ci/checkpoint/campaign.json)" = "$M4_OBSERVER_REGION"
+
+    - name: Check runner disk headroom
+      shell: bash
+      run: |
+        set -euo pipefail
+        available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')"
+        if (( available_kb < 2097152 )); then
+          echo "Less than 2 GiB of runner disk is available before the M4 segment." >&2
+          exit 1
+        fi
+
+    - name: Run bounded War API collection segment
+      id: run_segment
+      shell: bash
+      env:
+        M4_SEGMENT_ID: ${{ inputs.segment_id }}
+        M4_PHASE: ${{ inputs.phase }}
+        M4_DURATION_MINUTES: ${{ inputs.duration_minutes }}
+        M4_RUN_ID: ${{ inputs.run_id }}
+      run: |
+        set -euo pipefail
+
+        mkdir -p m4-ci/diagnostics
+        segment_start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "segment_start=$segment_start" >> "$GITHUB_OUTPUT"
+
+        export DOTNET_ENVIRONMENT=Production
+        export ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4"
+        export WarApi__Enabled=true
+        export WarApi__EnableDev=false
+        export WarApi__EnabledShards__0=live-1
+        unset WarApi__EnabledShards__1 || true
+        unset WarApi__EnabledShards__2 || true
+
+        export WarApi__MeasurementProbe__RunId="$M4_RUN_ID"
+        export WarApi__MeasurementProbe__EnabledShards__0=live-1
+        export WarApi__MeasurementProbe__MaxMapsPerShard=3
+        export WarApi__MeasurementProbe__TargetCadenceSeconds=15
+
+        case "$M4_PHASE" in
+          baseline-live1)
+            export WarApi__MeasurementProbe__Enabled=false
+            ;;
+          probe-live1)
+            export WarApi__MeasurementProbe__Enabled=true
+            ;;
+          live2)
+            export WarApi__EnabledShards__1=live-2
+            export WarApi__MeasurementProbe__Enabled=true
+            ;;
+          live3)
+            export WarApi__EnabledShards__1=live-2
+            export WarApi__EnabledShards__2=live-3
+            export WarApi__MeasurementProbe__Enabled=true
+            ;;
+          *)
+            echo "Unsupported M4 phase '$M4_PHASE'." >&2
+            exit 64
+            ;;
+        esac
+
+        worker_log="m4-ci/diagnostics/worker-${M4_SEGMENT_ID}.log"
+        dotnet src/FoxData.Worker/bin/Release/net10.0/FoxData.Worker.dll \
+          >"$worker_log" 2>&1 &
+        worker_pid=$!
+
+        duration_seconds=$(( M4_DURATION_MINUTES * 60 ))
+        deadline=$(( SECONDS + duration_seconds ))
+
+        while (( SECONDS < deadline )); do
+          if ! kill -0 "$worker_pid" >/dev/null 2>&1; then
+            set +e
+            wait "$worker_pid"
+            worker_status=$?
+            set -e
+            echo "Worker exited before the segment completed (status=$worker_status)." >&2
+            tail -n 200 "$worker_log" >&2 || true
+            exit 1
+          fi
+          sleep 30
+        done
+
+        kill -INT "$worker_pid" >/dev/null 2>&1 || true
+
+        for attempt in $(seq 1 45); do
+          if ! kill -0 "$worker_pid" >/dev/null 2>&1; then
+            break
+          fi
+          sleep 1
+        done
+
+        if kill -0 "$worker_pid" >/dev/null 2>&1; then
+          kill -TERM "$worker_pid" >/dev/null 2>&1 || true
+        fi
+
+        set +e
+        wait "$worker_pid"
+        worker_status=$?
+        set -e
+
+        if [[ "$worker_status" -ne 0 && "$worker_status" -ne 130 && "$worker_status" -ne 143 ]]; then
+          echo "Worker stopped with unexpected status $worker_status." >&2
+          tail -n 200 "$worker_log" >&2 || true
+          exit "$worker_status"
+        fi
+
+        segment_end="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "segment_end=$segment_end" >> "$GITHUB_OUTPUT"
+
+        jq -nc \
+          --arg segment "$M4_SEGMENT_ID" \
+          --arg phase "$M4_PHASE" \
+          --arg start "$segment_start" \
+          --arg end "$segment_end" \
+          '{
+            segment: $segment,
+            phase: $phase,
+            startInclusive: $start,
+            endExclusive: $end
+          }' >> m4-ci/checkpoint/segments.ndjson
+
+    - name: Capture final storage snapshot and analysis boundary
+      if: ${{ inputs.final_segment == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        analysis_end="$(date -u --date='2 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+        jq \
+          --arg endExclusive "$analysis_end" \
+          '. + {endExclusive: $endExclusive}' \
+          m4-ci/checkpoint/campaign.json \
+          > m4-ci/checkpoint/campaign.json.tmp
+        mv \
+          m4-ci/checkpoint/campaign.json.tmp \
+          m4-ci/checkpoint/campaign.json
+
+        ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4" \
+          dotnet run \
+            --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj \
+            -c Release \
+            --no-build \
+            -- \
+            storage \
+            --label after \
+            --output m4-ci/checkpoint/measurement
+
+    - name: Analyze segment evidence
+      shell: bash
+      env:
+        M4_PHASE: ${{ inputs.phase }}
+        M4_RUN_ID: ${{ inputs.run_id }}
+        M4_OBSERVER_REGION: ${{ inputs.observer_region }}
+        SEGMENT_START: ${{ steps.run_segment.outputs.segment_start }}
+        SEGMENT_END: ${{ steps.run_segment.outputs.segment_end }}
+      run: |
+        set -euo pipefail
+        rm -rf m4-ci/segment-report
+        mkdir -p m4-ci/segment-report
+
+        args=(
+          analyze
+          --run-id "$M4_RUN_ID"
+          --start "$SEGMENT_START"
+          --end "$SEGMENT_END"
+          --output m4-ci/segment-report
+          --observer-region "$M4_OBSERVER_REGION"
+          --repository-sha "$GITHUB_SHA"
+          --profile-version warapi-bootstrap-profile@1
+        )
+
+        if [[ "$M4_PHASE" != "baseline-live1" ]]; then
+          args+=(
+            --probe-shards live-1
+            --probe-max-maps 3
+            --probe-target-seconds 15
+          )
+        fi
+
+        ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4" \
+          dotnet run \
+            --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj \
+            -c Release \
+            --no-build \
+            -- "${args[@]}"
+
+    - name: Create PostgreSQL checkpoint
+      shell: bash
+      run: |
+        set -euo pipefail
+        rm -f m4-ci/checkpoint/checkpoint.dump
+
+        docker exec \
+          --env PGPASSWORD=foxdata_m4 \
+          foxdata-m4-postgres \
+          pg_dump \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --username foxdata \
+            --dbname foxdata \
+            --file /tmp/checkpoint.dump
+
+        docker cp \
+          foxdata-m4-postgres:/tmp/checkpoint.dump \
+          m4-ci/checkpoint/checkpoint.dump
+
+        test -s m4-ci/checkpoint/checkpoint.dump
+
+    - name: Save campaign checkpoint
+      uses: actions/cache/save@v6
+      with:
+        path: m4-ci/checkpoint
+        key: ${{ inputs.checkpoint_cache_key }}
+
+    - name: Enforce per-segment safety guard
+      shell: bash
+      env:
+        SEGMENT_START: ${{ steps.run_segment.outputs.segment_start }}
+        SEGMENT_END: ${{ steps.run_segment.outputs.segment_end }}
+      run: |
+        set -euo pipefail
+
+        summary="m4-ci/segment-report/measurement-summary.json"
+        fetch_count="$(jq -r '.fetchCount' "$summary")"
+        unauthorized="$(jq -r '(.statusCounts["401"] // 0) + (.statusCounts["403"] // 0)' "$summary")"
+        rate_limited="$(jq -r '.statusCounts["429"] // 0' "$summary")"
+        server_errors="$(jq -r '[.statusCounts | to_entries[] | select(.key | test("^5[0-9][0-9]$")) | .value] | add // 0' "$summary")"
+        uncertain="$(jq -r '.attempts.uncertainExchangeCount' "$summary")"
+        body_errors="$(jq -r '[.bodyErrorCounts[]?] | add // 0' "$summary")"
+        parse_failures="$(jq -r '[.warApi.groups[].parseFailureCount] | add // 0' "$summary")"
+
+        root_404="$(
+          docker exec \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            psql \
+              --tuples-only \
+              --no-align \
+              --username foxdata \
+              --dbname foxdata \
+              --command "
+                SELECT COUNT(*)
+                FROM evidence.fetches AS captured_fetch
+                INNER JOIN sources.endpoints AS endpoint
+                  ON endpoint.id = captured_fetch.endpoint_id
+                INNER JOIN sources.shards AS shard
+                  ON shard.id = endpoint.shard_id
+                INNER JOIN sources.sources AS source
+                  ON source.id = shard.source_id
+                WHERE source.key = 'official-war-api'
+                  AND captured_fetch.request_started_at >= TIMESTAMPTZ '$SEGMENT_START'
+                  AND captured_fetch.request_started_at < TIMESTAMPTZ '$SEGMENT_END'
+                  AND captured_fetch.status_code = 404
+                  AND endpoint.semantic_key IN ('war', 'maps');
+              " \
+          | tr -d '[:space:]'
+        )"
+
+        {
+          echo "### M4-E segment ${{ inputs.segment_id }}"
+          echo
+          echo "- Phase: ${{ inputs.phase }}"
+          echo "- Fetches: $fetch_count"
+          echo "- 401/403: $unauthorized"
+          echo "- root 404: $root_404"
+          echo "- 429: $rate_limited"
+          echo "- 5xx: $server_errors"
+          echo "- uncertain exchanges: $uncertain"
+          echo "- body errors: $body_errors"
+          echo "- parse failures: $parse_failures"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if (( unauthorized > 0 )); then
+          echo "M4-E stop condition: 401/403 observed." >&2
+          exit 1
+        fi
+
+        if (( root_404 > 0 )); then
+          echo "M4-E stop condition: root War API 404 observed." >&2
+          exit 1
+        fi
+
+        if (( rate_limited >= 3 )); then
+          echo "M4-E stop condition: sustained 429 observed." >&2
+          exit 1
+        fi
+
+        if (( body_errors > 0 )); then
+          echo "M4-E stop condition: body read/limit error observed." >&2
+          exit 1
+        fi
+
+        if (( uncertain >= 3 )); then
+          echo "M4-E stop condition: uncertain-exchange burst observed." >&2
+          exit 1
+        fi
+
+        if (( fetch_count > 0 && server_errors >= 5 && server_errors * 20 >= fetch_count )); then
+          echo "M4-E stop condition: sustained 5xx rate reached at least 5% with >=5 responses." >&2
+          exit 1
+        fi
+
+        if (( parse_failures > 0 )); then
+          echo "WARNING: parse failures were measured; inspect the segment report before M4-F." >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')"
+        if (( available_kb < 1048576 )); then
+          echo "M4-E stop condition: less than 1 GiB runner disk remains." >&2
+          exit 1
+        fi
+
+    - name: Upload segment diagnostics
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: m4-e-${{ inputs.run_id }}-${{ inputs.segment_id }}-diagnostics
+        path: |
+          m4-ci/diagnostics
+          m4-ci/segment-report
+        if-no-files-found: ignore
+        retention-days: 14
+        compression-level: 9
+
+    - name: Delete preceding checkpoint cache
+      if: ${{ inputs.previous_cache_key != '' && success() }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREVIOUS_CACHE_KEY: ${{ inputs.previous_cache_key }}
+      run: |
+        set -euo pipefail
+        gh api \
+          --method DELETE \
+          "/repos/$GITHUB_REPOSITORY/actions/caches?key=$PREVIOUS_CACHE_KEY" \
+          >/dev/null 2>&1 || true
+
+    - name: Stop PostgreSQL
+      if: ${{ always() }}
+      shell: bash
+      run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true

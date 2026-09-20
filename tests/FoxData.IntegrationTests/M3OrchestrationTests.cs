@@ -95,6 +95,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         Assert.NotNull(parseRun);
         Assert.Equal("parsed", parseRun.Outcome);
         Assert.Equal(JsonStructuralFingerprinter.Algorithm, parseRun.FingerprintAlgorithm);
+        Assert.Equal(body.LongLength, parseRun.DecodedByteLength);
 
         await fixture.MakeSuccessorAvailableAsync(firstFetchId);
 
@@ -497,7 +498,352 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 "discover@1:map-dynamic/DeadLandsHex"));
     }
 
-    private async Task<Fixture> CreateFixtureAsync(string scenario)
+    [Fact]
+    public async Task M4ProbeAcceleratesSelectedMapButCacheStillControlsSuccessor()
+    {
+        var probe = new WarApiMeasurementProbeProfile(
+            Enabled: true,
+            RunId: "m4-probe-integration",
+            ShardKeys: ["live-1"],
+            MaxMapsPerShard: 1,
+            TargetCadence: TimeSpan.FromSeconds(15));
+        await using var fixture = await CreateFixtureAsync(
+            "m4-probe",
+            probe);
+
+        var activeMaps = new[]
+        {
+            "DeadLandsHex",
+            "MarbanHollow",
+        };
+        var selectedMap = Assert.Single(
+            WarApiMeasurementProbePolicy.SelectMaps(
+                probe,
+                fixture.Shard.Key,
+                activeMaps));
+        var otherMap = activeMaps.Single(
+            mapName => !string.Equals(
+                mapName,
+                selectedMap,
+                StringComparison.Ordinal));
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """["DeadLandsHex","MarbanHollow"]"""),
+                "etag-maps-probe",
+                "max-age=300"));
+
+        var mapsJob = await fixture.EnqueueAndClaimAsync(
+            fixture.MapsEndpoint.Id,
+            "test:m4-probe-maps");
+        await fixture.Executor.ExecuteAsync(
+            mapsJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var selectedEndpoint =
+            await fixture.Registry.GetEndpointBySemanticKeyAsync(
+                fixture.Shard.Id,
+                $"map-dynamic/{selectedMap}",
+                TestContext.Current.CancellationToken);
+        var otherEndpoint =
+            await fixture.Registry.GetEndpointBySemanticKeyAsync(
+                fixture.Shard.Id,
+                $"map-dynamic/{otherMap}",
+                TestContext.Current.CancellationToken);
+
+        Assert.NotNull(selectedEndpoint);
+        Assert.NotNull(otherEndpoint);
+
+        var selectedBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":1000,
+              "version":10
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                selectedBody,
+                "etag-selected-v10",
+                "max-age=60"));
+
+        var selectedJob = await fixture.EnqueueAndClaimAsync(
+            selectedEndpoint.Id,
+            "test:m4-probe-selected");
+        await fixture.Executor.ExecuteAsync(
+            selectedJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+
+        var selectedSnapshot =
+            await fixture.EvidenceReader.GetCurrentAsync(
+                selectedEndpoint.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedSnapshot);
+
+        await fixture.Reconciler.ReconcileAsync(
+            selectedEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var selectedPoll = await fixture.PollState.GetAsync(
+            selectedEndpoint.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedPoll);
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(15),
+            selectedPoll.NextTargetAt);
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(60),
+            selectedPoll.SourceCacheEligibleAt);
+        Assert.Contains(
+            "m4-probe@1-",
+            selectedPoll.PolicyVersion,
+            StringComparison.Ordinal);
+
+        var successorAvailableAt =
+            await fixture.ReadJobAvailableAtByKeyAsync(
+                $"after-fetch:{selectedSnapshot.CurrentFetch.Id}");
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.RetrievedAt.AddSeconds(60),
+            successorAvailableAt);
+
+        var selectedDecision =
+            await fixture.ScheduleDecisions.GetAsync(
+                selectedSnapshot.CurrentFetch.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedDecision);
+        Assert.True(selectedDecision.ProbeSelected);
+        Assert.Equal(15_000, selectedDecision.EffectiveCadenceMs);
+        Assert.Equal(selectedPoll.PolicyVersion, selectedDecision.PolicyVersion);
+        Assert.NotNull(selectedDecision.SuccessorJobId);
+        Assert.Equal(successorAvailableAt, selectedDecision.SuccessorAvailableAt);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                selectedBody,
+                "etag-other-v10",
+                "max-age=0"));
+
+        var otherJob = await fixture.EnqueueAndClaimAsync(
+            otherEndpoint.Id,
+            "test:m4-probe-other");
+        await fixture.Executor.ExecuteAsync(
+            otherJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            otherEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var otherPoll = await fixture.PollState.GetAsync(
+            otherEndpoint.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(otherPoll);
+        Assert.Equal(
+            fixture.Now.AddMinutes(1),
+            otherPoll.NextTargetAt);
+        Assert.Equal(
+            "warapi-poll@1/warapi-bootstrap-profile@1",
+            otherPoll.PolicyVersion);
+
+        var otherSnapshot =
+            await fixture.EvidenceReader.GetCurrentAsync(
+                otherEndpoint.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(otherSnapshot);
+
+        var otherDecision =
+            await fixture.ScheduleDecisions.GetAsync(
+                otherSnapshot.CurrentFetch.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(otherDecision);
+        Assert.False(otherDecision.ProbeSelected);
+        Assert.Equal(60_000, otherDecision.EffectiveCadenceMs);
+        Assert.Equal(otherPoll.PolicyVersion, otherDecision.PolicyVersion);
+    }
+
+    [Fact]
+    public async Task M4ReplayUsesDurableDecisionAfterMapListChanges()
+    {
+        var probe = new WarApiMeasurementProbeProfile(
+            Enabled: true,
+            RunId: "m4-replay-integration",
+            ShardKeys: ["live-1"],
+            MaxMapsPerShard: 1,
+            TargetCadence: TimeSpan.FromSeconds(15));
+        await using var fixture = await CreateFixtureAsync(
+            "m4-replay",
+            probe);
+
+        var activeMaps = new[]
+        {
+            "DeadLandsHex",
+            "MarbanHollow",
+        };
+        var selectedMap = Assert.Single(
+            WarApiMeasurementProbePolicy.SelectMaps(
+                probe,
+                fixture.Shard.Key,
+                activeMaps));
+        var otherMap = activeMaps.Single(
+            mapName =>
+                !string.Equals(
+                    mapName,
+                    selectedMap,
+                    StringComparison.Ordinal));
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """["DeadLandsHex","MarbanHollow"]"""),
+                "etag-maps-replay-a",
+                "max-age=0"));
+
+        var firstMapsJob =
+            await fixture.EnqueueAndClaimAsync(
+                fixture.MapsEndpoint.Id,
+                "test:m4-replay-maps-a");
+        await fixture.Executor.ExecuteAsync(
+            firstMapsJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var selectedEndpoint =
+            await fixture.Registry.GetEndpointBySemanticKeyAsync(
+                fixture.Shard.Id,
+                $"map-dynamic/{selectedMap}",
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedEndpoint);
+
+        var selectedBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":1000,
+              "version":10
+            }
+            """);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                selectedBody,
+                "etag-selected-replay",
+                "max-age=60"));
+
+        var selectedJob =
+            await fixture.EnqueueAndClaimAsync(
+                selectedEndpoint.Id,
+                "test:m4-replay-selected");
+        await fixture.Executor.ExecuteAsync(
+            selectedJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            selectedEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var selectedSnapshot =
+            await fixture.EvidenceReader.GetCurrentAsync(
+                selectedEndpoint.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(selectedSnapshot);
+
+        var durableDecision =
+            await fixture.ScheduleDecisions.GetAsync(
+                selectedSnapshot.CurrentFetch.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(durableDecision);
+        Assert.True(durableDecision.ProbeSelected);
+        Assert.True(durableDecision.EndpointActive);
+        Assert.Equal(
+            15_000,
+            durableDecision.EffectiveCadenceMs);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    $"[\"{otherMap}\"]"),
+                "etag-maps-replay-b",
+                "max-age=0"));
+
+        var secondMapsJob =
+            await fixture.EnqueueAndClaimAsync(
+                fixture.MapsEndpoint.Id,
+                "test:m4-replay-maps-b");
+        await fixture.Executor.ExecuteAsync(
+            secondMapsJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            fixture.MapsEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        await fixture.DeletePollStateAsync(
+            selectedEndpoint.Id);
+
+        await fixture.Reconciler.ReconcileAsync(
+            selectedEndpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        var replayedPoll =
+            await fixture.PollState.GetAsync(
+                selectedEndpoint.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(replayedPoll);
+        Assert.Equal(
+            selectedSnapshot.CurrentFetch.Id,
+            replayedPoll.LastProcessedFetchId);
+        Assert.Equal(
+            durableDecision.PolicyVersion,
+            replayedPoll.PolicyVersion);
+        Assert.Equal(
+            durableDecision.NextTargetAt,
+            replayedPoll.NextTargetAt);
+        Assert.Equal(
+            durableDecision.SourceCacheEligibleAt,
+            replayedPoll.SourceCacheEligibleAt);
+
+        var replayedDecision =
+            await fixture.ScheduleDecisions.GetAsync(
+                selectedSnapshot.CurrentFetch.Id,
+                TestContext.Current.CancellationToken);
+        Assert.Equal(
+            durableDecision,
+            replayedDecision);
+        Assert.Equal(
+            1L,
+            await fixture.CountJobsByKeyAsync(
+                $"after-fetch:{selectedSnapshot.CurrentFetch.Id}"));
+    }
+
+    private async Task<Fixture> CreateFixtureAsync(
+        string scenario,
+        WarApiMeasurementProbeProfile? measurementProbe = null)
     {
         await MigrateAsync();
         await ResetAsync();
@@ -509,6 +855,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var evidenceReader = new PostgresEndpointEvidenceReader(dataSource);
         var pollState = new PostgresEndpointPollStateStore(dataSource);
         var parseRuns = new PostgresSourceParseRunStore(dataSource);
+        var scheduleDecisions =
+            new PostgresSourceScheduleDecisionStore(dataSource);
 
         var source = await registry.RegisterSourceAsync(
             WarApiCatalog.SourceKey,
@@ -558,9 +906,12 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             evidenceReader,
             pollState,
             parseRuns,
+            scheduleDecisions,
             registry,
             ingestion,
             options,
+            WarApiCollectionProfile.Bootstrap,
+            measurementProbe ?? WarApiMeasurementProbeProfile.Disabled,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
@@ -571,6 +922,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             evidenceReader,
             pollState,
             parseRuns,
+            scheduleDecisions,
             executor,
             reconciler,
             transport,
@@ -705,6 +1057,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         IEndpointEvidenceReader evidenceReader,
         IEndpointPollStateStore pollState,
         ISourceParseRunStore parseRuns,
+        ISourceScheduleDecisionStore scheduleDecisions,
         WarApiAttemptExecutor executor,
         WarApiReconciler reconciler,
         QueueTransport transport,
@@ -720,6 +1073,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         public IEndpointEvidenceReader EvidenceReader { get; } = evidenceReader;
         public IEndpointPollStateStore PollState { get; } = pollState;
         public ISourceParseRunStore ParseRuns { get; } = parseRuns;
+        public ISourceScheduleDecisionStore ScheduleDecisions { get; } =
+            scheduleDecisions;
         public WarApiAttemptExecutor Executor { get; } = executor;
         public WarApiReconciler Reconciler { get; } = reconciler;
         public QueueTransport Transport { get; } = transport;
@@ -754,6 +1109,25 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             return claim.Job;
         }
 
+        public async Task DeletePollStateAsync(
+            FoxData.Core.Sources.EndpointId endpointId)
+        {
+            await using var command =
+                DataSource.CreateCommand(
+                    """
+                    DELETE FROM ingest.endpoint_poll_state
+                    WHERE endpoint_id = @endpoint_id;
+                    """);
+            command.Parameters.AddWithValue(
+                "endpoint_id",
+                endpointId.Value);
+
+            Assert.Equal(
+                1,
+                await command.ExecuteNonQueryAsync(
+                    TestContext.Current.CancellationToken));
+        }
+
         public async Task MakeSuccessorAvailableAsync(
             FoxData.Core.Evidence.FetchId fetchId)
         {
@@ -771,6 +1145,30 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             Assert.Equal(
                 1,
                 await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        }
+
+        public async Task<DateTimeOffset> ReadJobAvailableAtByKeyAsync(
+            string key)
+        {
+            await using var command = DataSource.CreateCommand(
+                """
+                SELECT available_at
+                FROM ingest.collection_jobs
+                WHERE idempotency_key = @key;
+                """);
+            command.Parameters.AddWithValue("key", key);
+
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+
+            if (!await reader.ReadAsync(
+                    TestContext.Current.CancellationToken))
+            {
+                throw new InvalidOperationException(
+                    $"Collection job '{key}' was not found.");
+            }
+
+            return reader.GetFieldValue<DateTimeOffset>(0);
         }
 
         public async Task<long> CountJobsByKeyAsync(string key)

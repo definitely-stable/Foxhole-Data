@@ -4,6 +4,8 @@ Do not lock polling, retention or infrastructure decisions from intuition.
 
 ## 48–72 hour source measurement
 
+The normative campaign, metric definitions and acceptance gates are defined in [M4_SOURCE_MEASUREMENT.md](M4_SOURCE_MEASUREMENT.md).
+
 Capture:
 
 - active region count per shard;
@@ -12,10 +14,10 @@ Capture:
 - ETag 200/304 ratio;
 - payload p50/p95/p99;
 - encoded and decoded size where relevant;
-- semantic change frequency;
+- exact representation-change frequency;
 - source latency/error rates;
 - DB write/index growth;
-- source parsing/fingerprint CPU;
+- source decode + parsing/fingerprint wall-clock duration; CPU cost only if separately instrumented and attributable;
 - normalization CPU;
 - quality anomaly rate.
 

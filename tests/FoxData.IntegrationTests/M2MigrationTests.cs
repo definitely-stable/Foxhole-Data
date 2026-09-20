@@ -34,6 +34,7 @@ public sealed class M2MigrationTests(PostgresFixture postgres) : IClassFixture<P
                 "evidence.fetches",
                 "evidence.payloads",
                 "evidence.source_parse_runs",
+                "evidence.source_schedule_decisions",
                 "ingest.attempts",
                 "ingest.collection_jobs",
                 "ingest.endpoint_poll_state",
