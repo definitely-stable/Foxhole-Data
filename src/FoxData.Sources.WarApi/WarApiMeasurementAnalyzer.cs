@@ -28,14 +28,20 @@ public sealed record WarApiEndpointMeasurementSummary(
     int VersionRegressionCount,
     double? ValidationRatio,
     double? PayloadP50Bytes,
+    double? PayloadP90Bytes,
     double? PayloadP95Bytes,
     double? PayloadP99Bytes,
+    double? PayloadMaxBytes,
     double? DurationP50Ms,
+    double? DurationP90Ms,
     double? DurationP95Ms,
     double? DurationP99Ms,
+    double? DurationMaxMs,
     double? PollIntervalP50Seconds,
+    double? PollIntervalP90Seconds,
     double? PollIntervalP95Seconds,
-    double? PollIntervalP99Seconds);
+    double? PollIntervalP99Seconds,
+    double? PollIntervalMaxSeconds);
 
 public sealed record WarApiDownsampleSummary(
     string EndpointKey,
@@ -189,14 +195,20 @@ public static class WarApiMeasurementAnalyzer
                 ? null
                 : (double)notModifiedCount / validationDenominator,
             PercentileCont(payloadSizes, 0.50),
+            PercentileCont(payloadSizes, 0.90),
             PercentileCont(payloadSizes, 0.95),
             PercentileCont(payloadSizes, 0.99),
+            MaxOrNull(payloadSizes),
             PercentileCont(durations, 0.50),
+            PercentileCont(durations, 0.90),
             PercentileCont(durations, 0.95),
             PercentileCont(durations, 0.99),
+            MaxOrNull(durations),
             PercentileCont(pollIntervals, 0.50),
+            PercentileCont(pollIntervals, 0.90),
             PercentileCont(pollIntervals, 0.95),
-            PercentileCont(pollIntervals, 0.99));
+            PercentileCont(pollIntervals, 0.99),
+            MaxOrNull(pollIntervals));
     }
 
     public static WarApiDownsampleSummary SimulateCadence(
@@ -360,6 +372,24 @@ public static class WarApiMeasurementAnalyzer
 
     private sealed record RepresentationEpisode(
         DateTimeOffset StartedAt);
+
+    private static double? MaxOrNull(
+        IEnumerable<long> values)
+    {
+        var materialized = values.ToArray();
+        return materialized.Length == 0
+            ? null
+            : materialized.Max();
+    }
+
+    private static double? MaxOrNull(
+        IEnumerable<double> values)
+    {
+        var materialized = values.ToArray();
+        return materialized.Length == 0
+            ? null
+            : materialized.Max();
+    }
 
     internal static double? PercentileCont(
         IEnumerable<long> values,
