@@ -5,6 +5,18 @@ namespace FoxData.Sources.WarApi;
 
 public sealed class WarApiRequestBuilder
 {
+    public static string? UsableValidator(string? etag)
+    {
+        if (etag is null)
+        {
+            return null;
+        }
+
+        return EntityTagHeaderValue.TryParse(etag, out var parsed)
+            ? parsed.ToString()
+            : null;
+    }
+
     public HttpRequestMessage Build(
         WarApiShard shard,
         SourceEndpoint endpoint,
@@ -16,7 +28,9 @@ public sealed class WarApiRequestBuilder
 
         if (etag is not null)
         {
-            if (!EntityTagHeaderValue.TryParse(etag, out var parsed))
+            var usable = UsableValidator(etag);
+            if (usable is null ||
+                !EntityTagHeaderValue.TryParse(usable, out var parsed))
             {
                 request.Dispose();
                 throw new ArgumentException(
