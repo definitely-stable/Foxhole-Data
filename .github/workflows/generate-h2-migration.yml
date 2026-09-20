@@ -35,7 +35,6 @@ jobs:
           --startup-project src/FoxData.Api/FoxData.Api.csproj
           --context FoxDataDbContext
           --output-dir Persistence/Migrations
-          --no-build
 
       - name: Commit generated migration
         shell: bash
