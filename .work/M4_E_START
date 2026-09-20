@@ -1,0 +1,16 @@
+# M4-E one-shot CI campaign trigger
+
+This file exists only to trigger the first automated M4-E campaign when it is
+introduced on `main`.
+
+The `M4 Live Campaign` workflow listens for a push to `main` that changes
+this exact path. Ordinary future pushes do not start another campaign.
+
+The triggered run performs:
+
+1. an eight-minute Live-1 smoke segment;
+2. only if smoke succeeds, the full 72-hour segmented M4-E campaign;
+3. final evidence analysis and publication validation.
+
+Do not modify this file merely to rerun the campaign. Use the workflow's manual
+`workflow_dispatch` input instead.
