@@ -134,7 +134,7 @@ public sealed class WarApiHttpExchange
                 ? checked((int)declaredLength.Value)
                 : 0);
 
-        var chunk = new byte[Math.Min(81920, maximumBodyBytes + 1)];
+        var chunk = new byte[Math.Min(81920, maximumBodyBytes)];
 
         while (true)
         {
