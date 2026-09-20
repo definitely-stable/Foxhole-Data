@@ -23,3 +23,8 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+[src/FoxData.Infrastructure/Persistence/Migrations/*.cs]
+charset = utf-8-bom
+csharp_style_namespace_declarations = block_scoped:none
+dotnet_diagnostic.IDE0161.severity = none
