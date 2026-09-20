@@ -260,6 +260,18 @@ internal static class MeasurementRunner
                     string.IsNullOrWhiteSpace(fetch.ContentEncoding)
                         ? "identity"
                         : fetch.ContentEncoding!),
+            AnalyzeEtags(
+                fetches,
+                warApiReport),
+            AnalyzeLatencyByResponseClass(fetches),
+            AnalyzeVolume(
+                options,
+                fetches,
+                parseRuns,
+                scheduleDecisions),
+            AnalyzeExecutorCapacity(
+                fetches,
+                scheduleDecisions),
             AnalyzeCache(fetches),
             AnalyzeAttempts(attempts),
             scheduling,
@@ -350,6 +362,210 @@ internal static class MeasurementRunner
         Console.WriteLine($"Wrote PostgreSQL storage snapshot to '{path}'.");
         return 0;
     }
+
+    private static MeasurementEtagSummary AnalyzeEtags(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches,
+        WarApiMeasurementReport report)
+    {
+        var present = 0;
+        var strong = 0;
+        var weak = 0;
+        var unusable = 0;
+
+        foreach (var fetch in fetches)
+        {
+            if (string.IsNullOrWhiteSpace(fetch.SourceEtag))
+            {
+                continue;
+            }
+
+            present++;
+            var usable =
+                WarApiRequestBuilder.UsableValidator(
+                    fetch.SourceEtag);
+
+            if (usable is null)
+            {
+                unusable++;
+            }
+            else if (usable.StartsWith(
+                         "W/",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                weak++;
+            }
+            else
+            {
+                strong++;
+            }
+        }
+
+        return new MeasurementEtagSummary(
+            present,
+            strong,
+            weak,
+            unusable,
+            report.Endpoints.Sum(
+                endpoint =>
+                    endpoint.Fetches
+                        .SameEtagDifferentPayloadCount),
+            report.Endpoints.Sum(
+                endpoint =>
+                    endpoint.Fetches
+                        .DifferentEtagSamePayloadCount));
+    }
+
+    private static IReadOnlyDictionary<string, MeasurementPercentiles>
+        AnalyzeLatencyByResponseClass(
+            IReadOnlyCollection<SourceMeasurementFetch> fetches)
+    {
+        var result =
+            new SortedDictionary<string, MeasurementPercentiles>(
+                StringComparer.Ordinal);
+
+        foreach (var group in fetches.GroupBy(
+                     fetch => ResponseClass(fetch.StatusCode),
+                     StringComparer.Ordinal))
+        {
+            result[group.Key] = Percentiles(
+                group.Select(fetch => (double)fetch.DurationMs));
+        }
+
+        return result;
+    }
+
+    private static MeasurementVolumeSummary AnalyzeVolume(
+        AnalyzeOptions options,
+        IReadOnlyCollection<SourceMeasurementFetch> fetches,
+        IReadOnlyCollection<SourceMeasurementParseRun> parseRuns,
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+    {
+        var days =
+            (options.EndExclusive - options.StartInclusive)
+            .TotalDays;
+
+        if (days <= 0)
+        {
+            throw new InvalidOperationException(
+                "Measurement window duration must be positive.");
+        }
+
+        var createdPayloadRows = fetches
+            .Where(
+                fetch =>
+                    fetch.PayloadId is not null &&
+                    fetch.PayloadCreatedAt is { } createdAt &&
+                    createdAt >= options.StartInclusive &&
+                    createdAt < options.EndExclusive)
+            .Select(fetch => fetch.PayloadId!.Value.Value)
+            .Distinct()
+            .Count();
+
+        var scheduleRows = decisions.Count(
+            decision =>
+                decision.CreatedAt >= options.StartInclusive &&
+                decision.CreatedAt < options.EndExclusive);
+
+        return new MeasurementVolumeSummary(
+            days,
+            fetches.Count / days,
+            createdPayloadRows / days,
+            parseRuns.Count / days,
+            scheduleRows / days);
+    }
+
+    private static MeasurementExecutorCapacitySummary AnalyzeExecutorCapacity(
+        IReadOnlyCollection<SourceMeasurementFetch> fetches,
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+    {
+        var windowFetchIds = new HashSet<Guid>(
+            fetches.Select(fetch => fetch.FetchId.Value));
+
+        var cadenceByEndpoint = decisions
+            .Where(
+                decision =>
+                    decision.EndpointActive &&
+                    windowFetchIds.Contains(
+                        decision.FetchId.Value))
+            .GroupBy(decision => decision.EndpointId.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Min(
+                    decision =>
+                        decision.EffectiveCadenceMs));
+
+        var endpointLoads = fetches
+            .GroupBy(fetch => fetch.EndpointId.Value)
+            .Select(group =>
+            {
+                if (!cadenceByEndpoint.TryGetValue(
+                        group.Key,
+                        out var cadenceMs))
+                {
+                    return null;
+                }
+
+                var first = group.First();
+                var p95DurationMs = Percentiles(
+                    group.Select(
+                        fetch => (double)fetch.DurationMs))
+                    .P95 ?? 0;
+
+                return new
+                {
+                    first.ShardKey,
+                    first.CapabilityKey,
+                    Load = p95DurationMs / cadenceMs,
+                };
+            })
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .ToArray();
+
+        var groups = endpointLoads
+            .GroupBy(
+                value =>
+                    (value.ShardKey, value.CapabilityKey))
+            .Select(
+                group =>
+                    new MeasurementExecutorCapabilityLoad(
+                        group.Key.ShardKey,
+                        group.Key.CapabilityKey,
+                        group.Count(),
+                        group.Sum(value => value.Load)))
+            .OrderBy(
+                group => group.ShardKey,
+                StringComparer.Ordinal)
+            .ThenBy(
+                group => group.CapabilityKey,
+                StringComparer.Ordinal)
+            .ToArray();
+
+        var totalLoad =
+            groups.Sum(group => group.RequiredSerialServiceLoad);
+
+        return new MeasurementExecutorCapacitySummary(
+            ExecutorConcurrency: 1,
+            ModeledEndpointCount: endpointLoads.Length,
+            RequiredSerialServiceLoad: totalLoad,
+            RemainingSerialHeadroom: 1d - totalLoad,
+            MinimumModeledConcurrency: Math.Max(
+                1,
+                checked((int)Math.Ceiling(totalLoad))),
+            Groups: groups);
+    }
+
+    private static string ResponseClass(int? statusCode) =>
+        statusCode switch
+        {
+            null => "transport-null",
+            >= 100 and < 200 => "1xx",
+            >= 200 and < 300 => "2xx",
+            >= 300 and < 400 => "3xx",
+            >= 400 and < 500 => "4xx",
+            >= 500 and < 600 => "5xx",
+            _ => "other",
+        };
 
     private static MeasurementCacheSummary AnalyzeCache(
         IReadOnlyCollection<SourceMeasurementFetch> fetches)
