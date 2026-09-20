@@ -24,7 +24,9 @@ public sealed class WarApiCollectionProfile
     public WarApiCollectionProfile(
         string version,
         int executorConcurrency,
-        IReadOnlyDictionary<string, WarApiCapabilityCollectionProfile> capabilities)
+        IReadOnlyDictionary<string, WarApiCapabilityCollectionProfile> capabilities,
+        string? measurementReference = null,
+        IReadOnlyList<string>? limitations = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
         ArgumentNullException.ThrowIfNull(capabilities);
@@ -42,6 +44,44 @@ public sealed class WarApiCollectionProfile
                 nameof(executorConcurrency),
                 executorConcurrency,
                 "Executor concurrency must be positive.");
+        }
+
+        if (measurementReference is not null &&
+            (string.IsNullOrWhiteSpace(measurementReference) ||
+             !string.Equals(
+                 measurementReference,
+                 measurementReference.Trim(),
+                 StringComparison.Ordinal)))
+        {
+            throw new ArgumentException(
+                "Measurement reference must be non-empty and already trimmed when supplied.",
+                nameof(measurementReference));
+        }
+
+        var limitationCopy =
+            (limitations ?? Array.Empty<string>())
+            .ToArray();
+
+        if (limitationCopy.Any(
+                limitation =>
+                    string.IsNullOrWhiteSpace(limitation) ||
+                    !string.Equals(
+                        limitation,
+                        limitation.Trim(),
+                        StringComparison.Ordinal)))
+        {
+            throw new ArgumentException(
+                "Collection profile limitations must be non-empty and already trimmed.",
+                nameof(limitations));
+        }
+
+        if (limitationCopy.Distinct(
+                StringComparer.Ordinal).Count() !=
+            limitationCopy.Length)
+        {
+            throw new ArgumentException(
+                "Collection profile limitations must be unique.",
+                nameof(limitations));
         }
 
         var copy = new Dictionary<string, WarApiCapabilityCollectionProfile>(
@@ -86,12 +126,18 @@ public sealed class WarApiCollectionProfile
 
         Version = version;
         ExecutorConcurrency = executorConcurrency;
+        MeasurementReference = measurementReference;
+        Limitations = limitationCopy;
         _capabilities = copy;
     }
 
     public string Version { get; }
 
     public int ExecutorConcurrency { get; }
+
+    public string? MeasurementReference { get; }
+
+    public IReadOnlyList<string> Limitations { get; }
 
     public static WarApiCollectionProfile Bootstrap { get; } =
         new(
