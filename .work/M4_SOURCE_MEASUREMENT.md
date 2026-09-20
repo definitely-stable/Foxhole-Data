@@ -44,6 +44,7 @@ sources registry
 + immutable evidence.payloads
 + evidence.source_parse_runs
 + ingest.endpoint_poll_state
++ evidence.source_schedule_decisions
 ~~~
 
 OpenTelemetry is operational telemetry and a cross-check. It is not the sole source of truth for the final M4 report.
@@ -85,6 +86,14 @@ M3 already persists the primary fields required for M4:
 - endpoint poll-state timing and failure streak.
 
 M4 MUST prefer deriving metrics from these durable values instead of duplicating them into a second measurement database.
+
+Because `ingest.endpoint_poll_state` is a current rebuildable projection, M4 additionally persists an append-only scheduling-decision ledger keyed by Fetch:
+
+~~~text
+evidence.source_schedule_decisions
+~~~
+
+Each row records the policy identity, effective cadence, active/probe flags, cache/retry timing bounds, and the exact successor job when one exists. This is derived measurement evidence, not a second scheduling authority. M2 jobs/attempts/fences remain authoritative for execution ownership.
 
 ## 5. Measurement definitions
 
@@ -222,6 +231,7 @@ Measure before/after the live campaign:
 - evidence.fetches total/table/index/TOAST size;
 - evidence.payloads total/table/index/TOAST size;
 - evidence.source_parse_runs size;
+- evidence.source_schedule_decisions size;
 - ingestion jobs/attempts size;
 - Fetch rows/day;
 - unique Payload rows/day;
