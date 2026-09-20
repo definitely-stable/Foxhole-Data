@@ -17,6 +17,7 @@ builder.Services.AddSingleton<IWarApiTransport>(
     serviceProvider => serviceProvider.GetRequiredService<WarApiTransport>());
 builder.Services.AddScoped<WarApiRegistryResolver>();
 builder.Services.AddScoped<WarApiAttemptExecutor>();
+builder.Services.AddScoped<WarApiReconciler>();
 
 builder.Services.AddHostedService<BootstrapWorker>();
 builder.Services.AddHostedService<IngestionRecoveryWorker>();
