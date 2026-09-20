@@ -8,6 +8,8 @@
     "version",
     "source",
     "executorConcurrency",
+    "measurementReference",
+    "limitations",
     "capabilities"
   ],
   "properties": {
@@ -45,11 +47,21 @@
         "dynamic-map-state"
       ],
       "properties": {
-        "runtime-war-state": { "$ref": "#/$defs/capability" },
-        "active-map-list": { "$ref": "#/$defs/capability" },
-        "region-war-report": { "$ref": "#/$defs/capability" },
-        "static-map-state": { "$ref": "#/$defs/capability" },
-        "dynamic-map-state": { "$ref": "#/$defs/capability" }
+        "runtime-war-state": {
+          "$ref": "#/$defs/capability"
+        },
+        "active-map-list": {
+          "$ref": "#/$defs/capability"
+        },
+        "region-war-report": {
+          "$ref": "#/$defs/capability"
+        },
+        "static-map-state": {
+          "$ref": "#/$defs/capability"
+        },
+        "dynamic-map-state": {
+          "$ref": "#/$defs/capability"
+        }
       }
     }
   },
