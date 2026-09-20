@@ -134,6 +134,13 @@ public static class WarApiCatalog
             throw new ArgumentException("Map name must already be trimmed.", nameof(value));
         }
 
+        if (value is "." or "..")
+        {
+            throw new ArgumentException(
+                "Map name must not be a relative URI dot-segment.",
+                nameof(value));
+        }
+
         foreach (var character in value)
         {
             if (character is '/' or '\\' || char.IsControl(character))
