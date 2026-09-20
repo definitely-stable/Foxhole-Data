@@ -1,4 +1,6 @@
+using FoxData.Sources.WarApi;
 using FoxData.Worker;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoxData.RecoveryTests;
@@ -6,9 +8,31 @@ namespace FoxData.RecoveryTests;
 public sealed class WorkerCancellationTests
 {
     [Fact]
-    public async Task BootstrapWorkerStopsWhenCancelled()
+    public async Task DisabledBootstrapWorkerStopsCleanly()
     {
-        var worker = new BootstrapWorker(NullLogger<BootstrapWorker>.Instance);
+        await using var services = new ServiceCollection().BuildServiceProvider();
+
+        var options = new WarApiWorkerOptions(
+            Enabled: false,
+            Shards: new[] { WarApiShard.Live1 },
+            LeaseDuration: TimeSpan.FromMinutes(2),
+            IdleDelay: TimeSpan.FromMilliseconds(100),
+            RecoveryInterval: TimeSpan.FromSeconds(1),
+            PlannerInterval: TimeSpan.FromSeconds(1),
+            PlannerBatchSize: 32,
+            ConnectTimeout: TimeSpan.FromSeconds(5),
+            ExchangeTimeout: TimeSpan.FromSeconds(10),
+            MaxConnectionsPerServer: 4,
+            MaxResponseHeadersLengthKiB: 16,
+            MaxWireBytes: 1024 * 1024,
+            MaxDecodedBytes: 2 * 1024 * 1024,
+            MaxExpansionRatio: 20);
+
+        var worker = new BootstrapWorker(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            options,
+            TimeProvider.System,
+            NullLogger<BootstrapWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
 
