@@ -80,11 +80,35 @@ Implementation slices:
 
 ## M4 — source measurement
 
-Status: next milestone.
+Status: in progress.
 
-Run bounded 48–72 hour measurement.
+Detailed normative plan: [M4_SOURCE_MEASUREMENT.md](M4_SOURCE_MEASUREMENT.md).
 
-Publish measured collection-profile@1.
+Convert the conservative M3 bootstrap polling assumptions into a measured, versioned source collection profile.
+
+M4 owns:
+
+- reproducible analysis over M2/M3 durable evidence;
+- cache/ETag/200-vs-304 measurement;
+- source representation-change and map-version-gap measurement;
+- payload/latency/error distributions;
+- request burst and scheduler/executor capacity measurement;
+- PostgreSQL evidence-growth measurement;
+- a bounded deterministic high-resolution probe only after the analyzer/profile abstraction exists;
+- a controlled 48–72 hour live campaign;
+- publication of measured collection-profile@1;
+- an explicit decision whether ADR-0010 inline PostgreSQL evidence remains appropriate.
+
+M4 does not implement canonical Foxhole state or quality acceptance.
+
+Implementation slices:
+
+- M4-A specification/contracts;
+- M4-B collection-profile abstraction with behaviour-preserving bootstrap values;
+- M4-C reproducible measurement analyzer;
+- M4-D bounded probe mode;
+- M4-E controlled live campaign;
+- M4-F measured collection-profile@1 and completion.
 
 ## M5 — canonical war/region/report model
 
