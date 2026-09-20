@@ -53,17 +53,34 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             IsolationLevel.ReadCommitted,
             cancellationToken);
 
-        var attempt = await GetAttemptContextForUpdateAsync(
+        var jobId = await GetAttemptJobIdAsync(
             connection,
             transaction,
             attemptId,
             cancellationToken);
 
-        if (attempt is null)
+        if (jobId is null)
         {
             await transaction.RollbackAsync(cancellationToken);
             return new CaptureResult(CaptureStatus.InvalidAttempt, null, null);
         }
+
+        var job = await GetJobContextForUpdateAsync(
+            connection,
+            transaction,
+            jobId.Value,
+            cancellationToken)
+            ?? throw new EvidenceIntegrityException(
+                $"Collection job {jobId.Value} disappeared while capturing attempt {attemptId}.");
+
+        var attempt = await GetAttemptContextForUpdateAsync(
+            connection,
+            transaction,
+            attemptId,
+            job,
+            cancellationToken)
+            ?? throw new EvidenceIntegrityException(
+                $"Attempt {attemptId} disappeared after its collection job was locked.");
 
         existing = await GetFetchByAttemptAsync(
             connection,
@@ -520,7 +537,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             WHERE id = @job_id
               AND lease_generation = @lease_generation
               AND state = 'processing'
-              AND lease_expires_at > transaction_timestamp();
+              AND lease_expires_at > clock_timestamp();
             """;
         AddUuid(job, "job_id", jobId.Value);
         AddBigint(job, "lease_generation", leaseGeneration.Value);
@@ -528,7 +545,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         await job.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task<AttemptContext?> GetAttemptContextForUpdateAsync(
+    private static async Task<CollectionJobId?> GetAttemptJobIdAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IngestionAttemptId attemptId,
@@ -538,22 +555,72 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         command.Transaction = transaction;
         command.CommandText =
             """
-            SELECT
-                attempt.job_id,
-                attempt.lease_generation,
-                attempt.fence_token,
-                attempt.state,
-                attempt.exchange_authorized_at,
-                job.endpoint_id,
-                job.state,
-                job.lease_generation,
-                job.lease_expires_at
-            FROM ingest.attempts AS attempt
-            JOIN ingest.collection_jobs AS job ON job.id = attempt.job_id
-            WHERE attempt.id = @attempt_id
-            FOR UPDATE OF attempt, job;
+            SELECT job_id
+            FROM ingest.attempts
+            WHERE id = @attempt_id;
             """;
         AddUuid(command, "attempt_id", attemptId.Value);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+
+        return value is Guid jobId
+            ? new CollectionJobId(jobId)
+            : null;
+    }
+
+    private static async Task<JobContext?> GetJobContextForUpdateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CollectionJobId jobId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT endpoint_id, state, lease_generation, lease_expires_at
+            FROM ingest.collection_jobs
+            WHERE id = @job_id
+            FOR UPDATE;
+            """;
+        AddUuid(command, "job_id", jobId.Value);
+
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SingleRow,
+            cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new JobContext(
+            jobId,
+            new EndpointId(reader.GetGuid(0)),
+            reader.GetString(1),
+            new LeaseGeneration(reader.GetInt64(2)),
+            reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3));
+    }
+
+    private static async Task<AttemptContext?> GetAttemptContextForUpdateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IngestionAttemptId attemptId,
+        JobContext job,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT lease_generation, fence_token, state, exchange_authorized_at
+            FROM ingest.attempts
+            WHERE id = @attempt_id
+              AND job_id = @job_id
+            FOR UPDATE;
+            """;
+        AddUuid(command, "attempt_id", attemptId.Value);
+        AddUuid(command, "job_id", job.JobId.Value);
 
         await using var reader = await command.ExecuteReaderAsync(
             CommandBehavior.SingleRow,
@@ -565,15 +632,15 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
         }
 
         return new AttemptContext(
-            new CollectionJobId(reader.GetGuid(0)),
-            new LeaseGeneration(reader.GetInt64(1)),
-            reader.IsDBNull(2) ? null : new FenceToken(reader.GetInt64(2)),
-            reader.GetString(3),
-            reader.IsDBNull(4) ? null : reader.GetFieldValue<DateTimeOffset>(4),
-            new EndpointId(reader.GetGuid(5)),
-            reader.GetString(6),
-            new LeaseGeneration(reader.GetInt64(7)),
-            reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8));
+            job.JobId,
+            new LeaseGeneration(reader.GetInt64(0)),
+            reader.IsDBNull(1) ? null : new FenceToken(reader.GetInt64(1)),
+            reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
+            job.EndpointId,
+            job.State,
+            job.LeaseGeneration,
+            job.LeaseExpiresAt);
     }
 
     private static async Task<EndpointStateContext?> GetEndpointStateForUpdateAsync(
@@ -589,7 +656,7 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
             SELECT
                 fence_token,
                 active_attempt_id,
-                transaction_timestamp()
+                clock_timestamp()
             FROM ingest.endpoint_state
             WHERE endpoint_id = @endpoint_id
             FOR UPDATE;
@@ -762,6 +829,13 @@ public sealed class PostgresEvidenceKernelStore(NpgsqlDataSource dataSource) : I
     private sealed record PayloadWriteResult(
         PayloadDescriptor Payload,
         bool Deduplicated);
+
+    private sealed record JobContext(
+        CollectionJobId JobId,
+        EndpointId EndpointId,
+        string State,
+        LeaseGeneration LeaseGeneration,
+        DateTimeOffset? LeaseExpiresAt);
 
     private sealed record AttemptContext(
         CollectionJobId JobId,
