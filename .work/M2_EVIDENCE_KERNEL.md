@@ -1226,23 +1226,29 @@ M2 contains no official War API client/parser, ETag scheduler, canonical Foxhole
 
 ## 46. Handoff to M3
 
-M3 should be able to add:
+M3 should be able to add source-specific behavior around the completed M2 lifecycle:
 
 ~~~text
 semantic endpoint
+      |
+Claim / BeginAttempt / AcquireFence
       |
 BuildRequest
       |
 AuthorizeExchange
       |
-exactly one HttpClient.SendAsync
+exactly one FoxData application-issued HttpClient.SendAsync
       |
 response metadata + opaque bytes
       |
 CaptureSourceResponse
 ~~~
 
-M3 may add source registration, request builders, response limits, conditional headers, ETag/cache semantics, source DTOs, parsing and structural fingerprints.
+Building the final request after a durable attempt/fence exists lets deterministic source request/configuration failures use DeferBeforeExchange without authorizing network I/O.
+
+The phrase "exactly one" is the FoxData application-level send invariant defined by ADR-0015. Supported .NET transport-internal connection recovery does not grant application code permission to call SendAsync again for the same AttemptId.
+
+M3 may add source registration, request builders, response limits, conditional headers, ETag/cache semantics, source DTOs, parsing, structural fingerprints and the separate poll-state projection defined by ADR-0016.
 
 M3 MUST NOT need to redesign job claiming, leases, attempt identity, endpoint fencing, exchange authorization, payload hashing, fetch identity or raw-capture recovery.
 
