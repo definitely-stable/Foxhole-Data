@@ -53,9 +53,21 @@ public sealed class SourceRegistryValidationTests
             string key,
             CancellationToken cancellationToken) => throw new InvalidOperationException();
 
+        public Task<SourceDescriptor?> GetSourceAsync(
+            SourceId sourceId,
+            CancellationToken cancellationToken) => throw new InvalidOperationException();
+
         public Task<ShardDescriptor?> GetShardByKeyAsync(
             SourceId sourceId,
             string key,
+            CancellationToken cancellationToken) => throw new InvalidOperationException();
+
+        public Task<ShardDescriptor?> GetShardAsync(
+            ShardId shardId,
+            CancellationToken cancellationToken) => throw new InvalidOperationException();
+
+        public Task<EndpointDescriptor?> GetEndpointAsync(
+            EndpointId endpointId,
             CancellationToken cancellationToken) => throw new InvalidOperationException();
 
         public Task<EndpointDescriptor?> GetEndpointBySemanticKeyAsync(
