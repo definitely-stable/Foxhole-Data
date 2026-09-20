@@ -49,7 +49,68 @@ artifacts/m4/m4-2026-09-live/
 The `artifacts/` tree is gitignored. Do not commit raw measurement artifacts or
 source payloads.
 
-## 3. Preflight
+## 3. GitHub Actions campaign
+
+The repository contains a manual workflow:
+
+~~~text
+.github/workflows/m4-live-campaign.yml
+~~~
+
+It has two modes:
+
+- `smoke` — one two-minute Live-1 baseline segment to verify runner, PostgreSQL,
+  migration, Worker, analyzer, checkpoint and safety-guard plumbing;
+- `full` — the controlled M4-E campaign.
+
+The full hosted-runner preset records 72 hours of active Worker runtime as
+18 sequential four-hour jobs:
+
+~~~text
+segments 01-02   8 h   Live-1 baseline
+segments 03-04   8 h   Live-1 bounded probe
+segments 05-06   8 h   Live-1 + Live-2, probe remains Live-1 only
+segments 07-18  48 h   Live-1 + Live-2 + Live-3, probe remains Live-1 only
+~~~
+
+Four-hour segments stay below the hosted-runner job execution limit while the
+workflow remains far below the workflow-level execution limit. Every job checks
+out the same workflow-dispatch SHA.
+
+PostgreSQL is checkpointed with exact-key GitHub Actions caches between jobs.
+The preceding checkpoint is deleted only after the next segment passes its
+safety guard, so a failed segment leaves the last known-good checkpoint
+available. Raw evidence is not committed to git.
+
+The hosted-runner observer label is
+`github-actions-hosted-variable`. Because GitHub-hosted jobs are not guaranteed
+to originate from one stable network location, source latency and derived
+executor-capacity results from this mode must retain that limitation. A
+stable-region self-hosted campaign may later be used if latency precision proves
+decision-critical.
+
+The per-segment guard stops expansion for:
+
+- any 401/403;
+- any 404 on root `war` or `maps`;
+- at least three 429 responses in a segment;
+- any body read/limit error;
+- at least three uncertain exchanges in a segment;
+- at least five 5xx responses when they are also at least 5% of segment Fetches;
+- less than 1 GiB runner disk after collection.
+
+Parse failures are surfaced as warnings for evidence review rather than silently
+converted into a source-health conclusion.
+
+The final job requires the exact 18-segment sequence and at least 259,200
+recorded active Worker seconds, generates the complete report, runs
+`validate`, uploads the report artifact and fails if publication evidence is
+structurally incomplete.
+
+The manual workflow can only be dispatched after the workflow file exists on
+the default branch. Run `smoke` first, then `full`.
+
+## 4. Preflight
 
 Required repository gates:
 
@@ -75,7 +136,7 @@ Take the physical storage baseline:
 dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   storage   --label before   --output artifacts/m4/m4-2026-09-live
 ~~~
 
-## 4. Phase 1 — Live-1 baseline
+## 5. Phase 1 — Live-1 baseline
 
 Target window: approximately 6 hours.
 
@@ -101,7 +162,7 @@ static-map-state    6 h
 
 Do not add Live-2/Live-3 and do not enable the probe during this phase.
 
-## 5. Phase 2 — bounded Live-1 probe
+## 6. Phase 2 — bounded Live-1 probe
 
 Target window: approximately 6 hours.
 
@@ -128,7 +189,7 @@ Fetch decision was probe-selected. A probe-selected 15-second local target may
 still create a successor later than 15 seconds when source cache or Retry-After
 requires it.
 
-## 6. Phase 3 — add Live-2
+## 7. Phase 3 — add Live-2
 
 Target window: approximately hour 12 through hour 24.
 
@@ -149,7 +210,7 @@ WarApi__MeasurementProbe__EnabledShards__0=live-1
 Do not add Live-2 to the probe cohort in the same deployment that first enables
 the shard. Separate shard expansion from cadence expansion.
 
-## 7. Phase 4 — add Live-3
+## 8. Phase 4 — add Live-3
 
 Target window: approximately hour 24 through hour 72.
 
@@ -170,7 +231,7 @@ WarApi__EnableDev=false
 Do not increase executor concurrency during the campaign unless a separate,
 reviewed change is justified by measured queue/scheduling lag.
 
-## 8. Stop / hold conditions
+## 9. Stop / hold conditions
 
 Stop expansion and normally disable ingestion when any of these becomes
 credible and persistent:
@@ -201,7 +262,7 @@ A rollback must not delete or rewrite:
 - scheduling decisions;
 - poll state.
 
-## 9. End-of-run freeze
+## 10. End-of-run freeze
 
 Record the exact analysis window as offset-aware timestamps:
 
@@ -242,7 +303,7 @@ storage-before.json
 storage-after.json
 ~~~
 
-## 10. Report acceptance checks
+## 11. Report acceptance checks
 
 Before using the report to publish `collection-profile@1`, verify:
 
@@ -259,7 +320,7 @@ Before using the report to publish `collection-profile@1`, verify:
 - storage projections state their measurement duration and limitations;
 - no secret, connection string or raw payload is present in generated outputs.
 
-## 11. Publication gate
+## 12. Publication gate
 
 M4-F may begin only after at least 48 hours of controlled live evidence are
 frozen and analyzed.
