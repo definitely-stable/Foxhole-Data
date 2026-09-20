@@ -19,7 +19,7 @@ public static class JsonStructuralFingerprinter
         }
 
         using var document = JsonDocument.Parse(
-            utf8Json,
+            utf8Json.ToArray(),
             new JsonDocumentOptions
             {
                 MaxDepth = maximumDepth,
