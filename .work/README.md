@@ -60,6 +60,7 @@ Contract sources:
 - contracts/openapi/compat-warapi-v1.yaml
 - contracts/asyncapi/events-v1.yaml
 - contracts/jsonrpc/stdio-v1.md
+- contracts/internal/source/collection-profile.schema.json
 
 Research snapshots:
 
