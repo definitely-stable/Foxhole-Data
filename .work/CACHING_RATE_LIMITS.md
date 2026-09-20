@@ -57,6 +57,8 @@ Bound Worker concurrency and per-server HTTP connections independently from cade
 
 M4 measures actual cache lifetime, 200/304 ratio and safe cadence before a faster collection profile is accepted.
 
+The local target cadence is owned by a versioned collection profile. M4 starts with `warapi-bootstrap-profile@1`, which preserves the M3 target values exactly. A later measured `collection-profile@1` may change local targets, but it never overrides a later valid source-cache or Retry-After eligibility bound.
+
 ## Public GET caching
 
 Current mutable resources:
