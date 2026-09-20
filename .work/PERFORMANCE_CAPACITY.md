@@ -14,10 +14,10 @@ Capture:
 - ETag 200/304 ratio;
 - payload p50/p95/p99;
 - encoded and decoded size where relevant;
-- semantic change frequency;
+- exact representation-change frequency;
 - source latency/error rates;
 - DB write/index growth;
-- source parsing/fingerprint CPU;
+- source parsing/fingerprint wall-clock duration; CPU cost only if separately instrumented and attributable;
 - normalization CPU;
 - quality anomaly rate.
 
