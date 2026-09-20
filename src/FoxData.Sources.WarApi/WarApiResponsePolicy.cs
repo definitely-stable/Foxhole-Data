@@ -132,6 +132,16 @@ public static class WarApiResponsePolicy
             nameof(capability));
     }
 
+    public static TimeSpan DiscoveryWindow(SourceCapability capability)
+    {
+        if (capability == WarApiCapabilities.StaticMapState)
+        {
+            return TimeSpan.FromMinutes(5);
+        }
+
+        return Cadence(capability);
+    }
+
     public static TimeSpan Spread(
         string shardKey,
         string semanticKey,
