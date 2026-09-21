@@ -18,6 +18,16 @@ builder.Services.AddSingleton(
         warApiOptions));
 builder.Services.AddSingleton(WarApiCollectionProfile.Bootstrap);
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(
+    serviceProvider =>
+    {
+        var options = serviceProvider.GetRequiredService<WarApiWorkerOptions>();
+        var timeProvider = serviceProvider.GetRequiredService<TimeProvider>();
+        return new WarApiOutboundRateGovernor(
+            timeProvider,
+            options.OutboundGlobalMinimumInterval,
+            options.OutboundPerHostMinimumInterval);
+    });
 builder.Services.AddSingleton<WarApiTransport>();
 builder.Services.AddSingleton<IWarApiTransport>(
     serviceProvider => serviceProvider.GetRequiredService<WarApiTransport>());
