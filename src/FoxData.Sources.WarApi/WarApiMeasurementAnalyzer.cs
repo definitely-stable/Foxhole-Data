@@ -12,7 +12,8 @@ public sealed record WarApiMeasurementSample(
     string? SourceEtag,
     long DurationMs,
     long? SourceVersion = null,
-    bool ValidationHit = false);
+    bool ValidationHit = false,
+    int? ContinuityGroup = null);
 
 public sealed record WarApiEndpointMeasurementSummary(
     string EndpointKey,
@@ -106,10 +107,21 @@ public static class WarApiMeasurementAnalyzer
 
             if (index > 0)
             {
-                var pollInterval =
-                    sample.RequestStartedAt -
-                    ordered[index - 1].RequestStartedAt;
-                pollIntervals.Add(pollInterval.TotalSeconds);
+                var previousSample = ordered[index - 1];
+                if (SameContinuityGroup(previousSample, sample))
+                {
+                    var pollInterval =
+                        sample.RequestStartedAt -
+                        previousSample.RequestStartedAt;
+                    pollIntervals.Add(pollInterval.TotalSeconds);
+                }
+                else
+                {
+                    previousPayloadHash = null;
+                    effectiveValidatorEtag = null;
+                    previousVersion = null;
+                    previousRepresentationChangeAt = null;
+                }
             }
 
             if (sample.StatusCode == 200)
@@ -280,12 +292,53 @@ public static class WarApiMeasurementAnalyzer
         }
 
         var ordered = OrderAndValidate(samples);
+        var episodeCount = 0;
+        var capturedCount = 0;
+        var simulatedRequestCount = 0;
+        var observationDelays = new List<double>();
+
+        foreach (var window in SplitContinuityWindows(ordered))
+        {
+            var result = SimulateCadenceWindow(
+                window,
+                candidateCadence);
+            episodeCount += result.EpisodeCount;
+            capturedCount += result.CapturedCount;
+            simulatedRequestCount += result.SimulatedRequestCount;
+            observationDelays.AddRange(result.ObservationDelays);
+        }
+
+        if (episodeCount == 0)
+        {
+            throw new ArgumentException(
+                "Downsampling requires at least one body-bearing representation.",
+                nameof(samples));
+        }
+
+        return new WarApiDownsampleSummary(
+            ordered[0].EndpointKey,
+            ordered[0].Capability.Key,
+            candidateCadence,
+            episodeCount,
+            capturedCount,
+            episodeCount - capturedCount,
+            simulatedRequestCount,
+            (double)capturedCount / episodeCount,
+            PercentileCont(observationDelays, 0.50),
+            PercentileCont(observationDelays, 0.95),
+            PercentileCont(observationDelays, 0.99));
+    }
+
+    private static DownsampleWindowResult SimulateCadenceWindow(
+        IReadOnlyList<WarApiMeasurementSample> ordered,
+        TimeSpan candidateCadence)
+    {
         var episodes = new List<RepresentationEpisode>();
         string? effectivePayloadHash = null;
         var currentEpisodeIndex = -1;
-        var sampleEpisodeIndexes = new int?[ordered.Length];
+        var sampleEpisodeIndexes = new int?[ordered.Count];
 
-        for (var index = 0; index < ordered.Length; index++)
+        for (var index = 0; index < ordered.Count; index++)
         {
             var sample = ordered[index];
 
@@ -312,9 +365,11 @@ public static class WarApiMeasurementAnalyzer
 
         if (episodes.Count == 0)
         {
-            throw new ArgumentException(
-                "Downsampling requires at least one body-bearing representation.",
-                nameof(samples));
+            return new DownsampleWindowResult(
+                0,
+                0,
+                0,
+                Array.Empty<double>());
         }
 
         var capturedEpisodes = new HashSet<int>();
@@ -322,15 +377,15 @@ public static class WarApiMeasurementAnalyzer
         var simulatedRequestCount = 0;
         var nextTarget = ordered[0].RequestStartedAt;
 
-        for (var index = 0; index < ordered.Length;)
+        for (var index = 0; index < ordered.Count;)
         {
-            while (index < ordered.Length &&
+            while (index < ordered.Count &&
                    ordered[index].RequestStartedAt < nextTarget)
             {
                 index++;
             }
 
-            if (index >= ordered.Length)
+            if (index >= ordered.Count)
             {
                 break;
             }
@@ -342,30 +397,53 @@ public static class WarApiMeasurementAnalyzer
                 capturedEpisodes.Add(episodeIndex))
             {
                 var episode = episodes[episodeIndex];
-                var observationDelay =
-                    selected.RequestStartedAt - episode.StartedAt;
                 observationDelays.Add(
-                    observationDelay.TotalSeconds);
+                    (selected.RequestStartedAt - episode.StartedAt)
+                    .TotalSeconds);
             }
 
-            nextTarget = selected.RequestStartedAt + candidateCadence;
+            nextTarget =
+                selected.RequestStartedAt + candidateCadence;
             index++;
         }
 
-        var capturedCount = capturedEpisodes.Count;
-        return new WarApiDownsampleSummary(
-            ordered[0].EndpointKey,
-            ordered[0].Capability.Key,
-            candidateCadence,
+        return new DownsampleWindowResult(
             episodes.Count,
-            capturedCount,
-            episodes.Count - capturedCount,
+            capturedEpisodes.Count,
             simulatedRequestCount,
-            (double)capturedCount / episodes.Count,
-            PercentileCont(observationDelays, 0.50),
-            PercentileCont(observationDelays, 0.95),
-            PercentileCont(observationDelays, 0.99));
+            observationDelays);
     }
+
+    private static IReadOnlyList<WarApiMeasurementSample[]> SplitContinuityWindows(
+        IReadOnlyList<WarApiMeasurementSample> ordered)
+    {
+        var result = new List<WarApiMeasurementSample[]>();
+        var current = new List<WarApiMeasurementSample>();
+
+        foreach (var sample in ordered)
+        {
+            if (current.Count > 0 &&
+                !SameContinuityGroup(current[^1], sample))
+            {
+                result.Add(current.ToArray());
+                current.Clear();
+            }
+
+            current.Add(sample);
+        }
+
+        if (current.Count > 0)
+        {
+            result.Add(current.ToArray());
+        }
+
+        return result;
+    }
+
+    private static bool SameContinuityGroup(
+        WarApiMeasurementSample first,
+        WarApiMeasurementSample second) =>
+        first.ContinuityGroup == second.ContinuityGroup;
 
     private static WarApiMeasurementSample[] OrderAndValidate(
         IEnumerable<WarApiMeasurementSample> samples)
@@ -459,6 +537,12 @@ public static class WarApiMeasurementAnalyzer
 
     private sealed record RepresentationEpisode(
         DateTimeOffset StartedAt);
+
+    private sealed record DownsampleWindowResult(
+        int EpisodeCount,
+        int CapturedCount,
+        int SimulatedRequestCount,
+        IReadOnlyList<double> ObservationDelays);
 
     private static double? MaxOrNull(
         IEnumerable<long> values)
