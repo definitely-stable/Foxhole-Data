@@ -2,12 +2,6 @@ name: M4 Checkpoint Rehearsal
 
 on:
   workflow_call:
-  pull_request:
-    paths:
-      - .github/workflows/m4-checkpoint-rehearsal.yml
-      - .github/workflows/m4-live-campaign.yml
-      - .github/actions/m4-segment/action.yml
-      - .github/scripts/m4-checkpoint.sh
 
 permissions:
   contents: read
