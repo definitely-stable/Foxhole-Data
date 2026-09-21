@@ -1,0 +1,255 @@
+name: M4 Checkpoint Rehearsal
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - .github/workflows/m4-checkpoint-rehearsal.yml
+      - .github/workflows/m4-live-campaign.yml
+      - .github/actions/m4-segment/action.yml
+      - .github/scripts/m4-checkpoint.sh
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  M4_REHEARSAL_CACHE_01: m4-rehearsal-${{ github.run_id }}-01
+  M4_REHEARSAL_CACHE_02: m4-rehearsal-${{ github.run_id }}-02
+
+jobs:
+  seed:
+    name: Seed checkpoint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Start PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run \
+            --detach \
+            --name foxdata-m4-postgres \
+            --env POSTGRES_DB=foxdata \
+            --env POSTGRES_USER=foxdata \
+            --env POSTGRES_PASSWORD=foxdata_m4 \
+            postgres:18.6-bookworm >/dev/null
+
+          for attempt in $(seq 1 60); do
+            if docker exec foxdata-m4-postgres pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs foxdata-m4-postgres
+          exit 1
+
+      - name: Seed deterministic database state
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            psql \
+              --set ON_ERROR_STOP=1 \
+              --username foxdata \
+              --dbname foxdata \
+              --command "
+                CREATE TABLE public.m4_checkpoint_rehearsal (
+                  id integer PRIMARY KEY,
+                  value text NOT NULL
+                );
+                INSERT INTO public.m4_checkpoint_rehearsal(id, value)
+                VALUES (1, 'alpha'), (2, 'beta');
+              "
+
+      - name: Create and validate checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-rehearsal/checkpoint
+
+      - name: Persist seed checkpoint
+        uses: actions/cache/save@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_01 }}
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+
+  restore_and_mutate:
+    name: Fresh runner restore and mutate
+    needs: seed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore seed checkpoint
+        uses: actions/cache/restore@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_01 }}
+          fail-on-cache-miss: true
+
+      - name: Start fresh PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run \
+            --detach \
+            --name foxdata-m4-postgres \
+            --env POSTGRES_DB=foxdata \
+            --env POSTGRES_USER=foxdata \
+            --env POSTGRES_PASSWORD=foxdata_m4 \
+            postgres:18.6-bookworm >/dev/null
+
+          for attempt in $(seq 1 60); do
+            if docker exec foxdata-m4-postgres pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs foxdata-m4-postgres
+          exit 1
+
+      - name: Restore and verify seed state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-rehearsal/checkpoint
+
+          actual="$(
+            docker exec \
+              --env PGPASSWORD=foxdata_m4 \
+              foxdata-m4-postgres \
+              psql -At \
+                --username foxdata \
+                --dbname foxdata \
+                --command "
+                  SELECT string_agg(id::text || ':' || value, ',' ORDER BY id)
+                  FROM public.m4_checkpoint_rehearsal;
+                "
+          )"
+          test "$actual" = "1:alpha,2:beta"
+
+      - name: Mutate restored state and checkpoint again
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            psql \
+              --set ON_ERROR_STOP=1 \
+              --username foxdata \
+              --dbname foxdata \
+              --command "
+                UPDATE public.m4_checkpoint_rehearsal
+                SET value = 'beta-updated'
+                WHERE id = 2;
+                INSERT INTO public.m4_checkpoint_rehearsal(id, value)
+                VALUES (3, 'gamma');
+              "
+
+          bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-rehearsal/checkpoint
+
+      - name: Persist mutated checkpoint
+        uses: actions/cache/save@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_02 }}
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+
+  verify:
+    name: Second fresh runner continuity
+    needs: restore_and_mutate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore mutated checkpoint
+        uses: actions/cache/restore@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_02 }}
+          fail-on-cache-miss: true
+
+      - name: Start second fresh PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run \
+            --detach \
+            --name foxdata-m4-postgres \
+            --env POSTGRES_DB=foxdata \
+            --env POSTGRES_USER=foxdata \
+            --env POSTGRES_PASSWORD=foxdata_m4 \
+            postgres:18.6-bookworm >/dev/null
+
+          for attempt in $(seq 1 60); do
+            if docker exec foxdata-m4-postgres pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs foxdata-m4-postgres
+          exit 1
+
+      - name: Restore mutated state and verify exact continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-rehearsal/checkpoint
+
+          actual="$(
+            docker exec \
+              --env PGPASSWORD=foxdata_m4 \
+              foxdata-m4-postgres \
+              psql -At \
+                --username foxdata \
+                --dbname foxdata \
+                --command "
+                  SELECT string_agg(id::text || ':' || value, ',' ORDER BY id)
+                  FROM public.m4_checkpoint_rehearsal;
+                "
+          )"
+          test "$actual" = "1:alpha,2:beta-updated,3:gamma"
+
+      - name: Prove corrupted checkpoints fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp -R m4-rehearsal/checkpoint m4-rehearsal/corrupt
+          printf 'corruption' >> m4-rehearsal/corrupt/checkpoint.dump
+          if bash .github/scripts/m4-checkpoint.sh verify foxdata-m4-postgres m4-rehearsal/corrupt; then
+            echo "Corrupted checkpoint unexpectedly passed validation." >&2
+            exit 1
+          fi
+
+          cp -R m4-rehearsal/checkpoint m4-rehearsal/missing-sha
+          rm m4-rehearsal/missing-sha/checkpoint.dump.sha256
+          if bash .github/scripts/m4-checkpoint.sh verify foxdata-m4-postgres m4-rehearsal/missing-sha; then
+            echo "Checkpoint without SHA-256 unexpectedly passed validation." >&2
+            exit 1
+          fi
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
