@@ -12,6 +12,7 @@ public sealed class WarApiAttemptExecutor(
     EvidenceKernel evidence,
     IEndpointPollStateStore pollState,
     WarApiRegistryResolver resolver,
+    WarApiOutboundRateGovernor rateGovernor,
     IWarApiTransport transport,
     TimeProvider timeProvider,
     ILogger<WarApiAttemptExecutor> logger)
@@ -98,6 +99,25 @@ public sealed class WarApiAttemptExecutor(
 
         using (request)
         {
+            try
+            {
+                await rateGovernor.WaitAsync(
+                    request.RequestUri
+                        ?? throw new InvalidOperationException(
+                            "War API request URI must be set before traffic admission."),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                await DeferBeforeExchangeBestEffortAsync(
+                    workerId,
+                    attemptId,
+                    job,
+                    "war_api_traffic_gate",
+                    "request_cancelled");
+                return;
+            }
+
             var authorization = await ingestion.AuthorizeExchangeAsync(
                 attemptId,
                 workerId,
