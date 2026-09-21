@@ -70,6 +70,13 @@ internal static class MeasurementRunner
             NpgsqlDataSource.Create(connectionString);
 
         var reader = new PostgresSourceMeasurementReader(dataSource);
+        var activeWindows = await ReadActiveWindowsAsync(
+            options,
+            cancellationToken);
+        var activeObservationSeconds = activeWindows.Sum(
+            window =>
+                (window.EndExclusive - window.StartInclusive)
+                .TotalSeconds);
 
         var fetches = new List<SourceMeasurementFetch>();
         await foreach (var fetch in reader.ReadFetchesAsync(
@@ -78,7 +85,12 @@ internal static class MeasurementRunner
             options.EndExclusive,
             cancellationToken))
         {
-            fetches.Add(fetch);
+            if (ActiveWindowIndex(
+                    activeWindows,
+                    fetch.RequestStartedAt) >= 0)
+            {
+                fetches.Add(fetch);
+            }
         }
 
         if (fetches.Count == 0)
@@ -94,7 +106,12 @@ internal static class MeasurementRunner
             options.EndExclusive,
             cancellationToken))
         {
-            attempts.Add(attempt);
+            if (ActiveWindowIndex(
+                    activeWindows,
+                    attempt.StartedAt) >= 0)
+            {
+                attempts.Add(attempt);
+            }
         }
 
         var parseRuns = new List<SourceMeasurementParseRun>();
@@ -104,7 +121,10 @@ internal static class MeasurementRunner
             options.EndExclusive,
             cancellationToken))
         {
-            if (string.Equals(
+            if (ActiveWindowIndex(
+                    activeWindows,
+                    parseRun.RepresentationObservedAt) >= 0 &&
+                string.Equals(
                     parseRun.AdapterVersion,
                     WarApiVersions.Adapter,
                     StringComparison.Ordinal) &&
@@ -125,7 +145,12 @@ internal static class MeasurementRunner
             options.EndExclusive,
             cancellationToken))
         {
-            scheduleDecisions.Add(decision);
+            if (ActiveWindowIndex(
+                    activeWindows,
+                    decision.CreatedAt) >= 0)
+            {
+                scheduleDecisions.Add(decision);
+            }
         }
 
         var probeManifest = BuildProbeManifest(
@@ -167,7 +192,10 @@ internal static class MeasurementRunner
                             fetch.DurationMs,
                             parseRun?.SourceVersion,
                             fetch.StatusCode == 304 &&
-                                fetch.PriorFetchId is not null);
+                                fetch.PriorFetchId is not null,
+                            ActiveWindowIndex(
+                                activeWindows,
+                                fetch.RequestStartedAt));
                     })
                     .ToArray();
 
@@ -201,7 +229,10 @@ internal static class MeasurementRunner
                                 parseRun.UnknownPropertyCount,
                                 parseRun.UnknownCodeCount,
                                 parseRun.SourceVersion,
-                                parseRun.SourceLastUpdated))
+                                parseRun.SourceLastUpdated,
+                                ActiveWindowIndex(
+                                    activeWindows,
+                                    parseRun.RepresentationObservedAt)))
                     .ToArray();
 
                 return new WarApiMeasurementSeries(
@@ -218,6 +249,7 @@ internal static class MeasurementRunner
 
         var storageGrowth = await TryReadStorageGrowthAsync(
             options.OutputDirectory,
+            TimeSpan.FromSeconds(activeObservationSeconds),
             cancellationToken);
         var scheduling = AnalyzeScheduling(
             fetches,
@@ -227,7 +259,8 @@ internal static class MeasurementRunner
             fetches,
             attempts,
             scheduleDecisions,
-            parseByFetch);
+            parseByFetch,
+            activeWindows);
 
         var summary = new MeasurementSummary(
             options.RunId,
@@ -284,7 +317,8 @@ internal static class MeasurementRunner
                 options,
                 fetches,
                 parseRuns,
-                scheduleDecisions),
+                scheduleDecisions,
+                activeWindows),
             AnalyzeExecutorCapacity(
                 fetches,
                 scheduleDecisions),
@@ -311,6 +345,8 @@ internal static class MeasurementRunner
             WarApiVersions.BackoffPolicy,
             WarApiVersions.PollPolicy,
             options.CollectionProfileVersion,
+            activeObservationSeconds,
+            activeWindows,
             fetches
                 .Select(fetch => fetch.ShardKey)
                 .Distinct(StringComparer.Ordinal)
@@ -327,6 +363,9 @@ internal static class MeasurementRunner
                 "Observations bound source state to retrieval times; they do not prove exact upstream event times.",
                 "Counterfactual cadence downsampling does not synthesize HTTP 200/304 validator behaviour.",
                 "ingest.collection_jobs.available_at is mutable across deferral/requeue and is not treated as immutable per-attempt history.",
+                options.SegmentsFile is null
+                    ? "This analysis uses one continuous observation window."
+                    : "GitHub-hosted runner gaps are excluded from active-duration normalization and cross-gap interval/change calculations.",
             ]);
 
         Directory.CreateDirectory(options.OutputDirectory);
