@@ -24,22 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run \
-            --detach \
-            --name foxdata-m4-postgres \
-            --env POSTGRES_DB=foxdata \
-            --env POSTGRES_USER=foxdata \
-            --env POSTGRES_PASSWORD=foxdata_m4 \
-            postgres:18.6-bookworm >/dev/null
-
-          for attempt in $(seq 1 60); do
-            if docker exec foxdata-m4-postgres pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs foxdata-m4-postgres
-          exit 1
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
       - name: Seed deterministic database state
         shell: bash
@@ -85,7 +70,7 @@ jobs:
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
-        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
 
   restore_and_mutate:
     name: Fresh runner restore and mutate
@@ -103,26 +88,11 @@ jobs:
           key: ${{ env.M4_REHEARSAL_CACHE_01 }}
           fail-on-cache-miss: true
 
-      - name: Start fresh PostgreSQL 18
+      - name: Start PostgreSQL 18
         shell: bash
         run: |
           set -euo pipefail
-          docker run \
-            --detach \
-            --name foxdata-m4-postgres \
-            --env POSTGRES_DB=foxdata \
-            --env POSTGRES_USER=foxdata \
-            --env POSTGRES_PASSWORD=foxdata_m4 \
-            postgres:18.6-bookworm >/dev/null
-
-          for attempt in $(seq 1 60); do
-            if docker exec foxdata-m4-postgres pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs foxdata-m4-postgres
-          exit 1
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
       - name: Restore and verify seed state
         shell: bash
@@ -183,7 +153,7 @@ jobs:
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
-        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
 
   verify:
     name: Second fresh runner continuity
@@ -200,26 +170,11 @@ jobs:
           name: m4-rehearsal-${{ github.run_id }}-02-artifact
           path: m4-rehearsal/checkpoint
 
-      - name: Start second fresh PostgreSQL 18
+      - name: Start PostgreSQL 18
         shell: bash
         run: |
           set -euo pipefail
-          docker run \
-            --detach \
-            --name foxdata-m4-postgres \
-            --env POSTGRES_DB=foxdata \
-            --env POSTGRES_USER=foxdata \
-            --env POSTGRES_PASSWORD=foxdata_m4 \
-            postgres:18.6-bookworm >/dev/null
-
-          for attempt in $(seq 1 60); do
-            if docker exec foxdata-m4-postgres pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs foxdata-m4-postgres
-          exit 1
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
       - name: Restore mutated state and verify exact continuity
         shell: bash
@@ -263,4 +218,4 @@ jobs:
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
-        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
