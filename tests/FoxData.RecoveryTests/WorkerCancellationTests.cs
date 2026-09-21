@@ -26,7 +26,10 @@ public sealed class WorkerCancellationTests
             MaxResponseHeadersLengthKiB: 16,
             MaxWireBytes: 1024 * 1024,
             MaxDecodedBytes: 2 * 1024 * 1024,
-            MaxExpansionRatio: 20);
+            MaxExpansionRatio: 20,
+            OutboundGlobalMinimumInterval: TimeSpan.FromMilliseconds(150),
+            OutboundPerHostMinimumInterval: TimeSpan.FromMilliseconds(400),
+            UserAgent: "Foxhole-Chronicle/FoxData-Test");
 
         var worker = new BootstrapWorker(
             services.GetRequiredService<IServiceScopeFactory>(),
