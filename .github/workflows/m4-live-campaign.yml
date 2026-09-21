@@ -8,6 +8,7 @@ on:
       - .github/actions/m4-segment/action.yml
       - .github/workflows/m4-checkpoint-rehearsal.yml
       - .github/scripts/m4-checkpoint.sh
+      - .github/scripts/m4-postgres.sh
   push:
     branches:
       - main
@@ -94,6 +95,7 @@ jobs:
           RUBY
 
           bash -n .github/scripts/m4-checkpoint.sh
+          bash -n .github/scripts/m4-postgres.sh
 
   checkpoint_rehearsal:
     name: M4 checkpoint rehearsal gate
@@ -452,26 +454,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
-          docker run \
-            --detach \
-            --name foxdata-m4-postgres \
-            --publish 127.0.0.1:5432:5432 \
-            --env POSTGRES_DB=foxdata \
-            --env POSTGRES_USER=foxdata \
-            --env POSTGRES_PASSWORD=foxdata_m4 \
-            postgres:18.6-bookworm >/dev/null
-
-          for attempt in $(seq 1 60); do
-            if docker exec foxdata-m4-postgres \
-                pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-
-          docker logs foxdata-m4-postgres
-          exit 1
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
       - name: Restore final PostgreSQL state
         shell: bash
@@ -641,4 +624,4 @@ jobs:
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
-        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
