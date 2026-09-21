@@ -11,7 +11,8 @@ public sealed record WarApiParseMeasurementSample(
     int UnknownPropertyCount,
     int UnknownCodeCount,
     long? SourceVersion,
-    long? SourceLastUpdated);
+    long? SourceLastUpdated,
+    int? ContinuityGroup = null);
 
 public sealed record WarApiParseMeasurementSummary(
     string EndpointKey,
@@ -74,8 +75,22 @@ public static class WarApiMeasurementStatistics
         long? previousSourceVersion = null;
         long? previousSourceLastUpdated = null;
 
+        int? previousContinuityGroup = null;
+        var hasPreviousSample = false;
+
         foreach (var sample in ordered)
         {
+            if (hasPreviousSample &&
+                sample.ContinuityGroup != previousContinuityGroup)
+            {
+                previousFingerprint = null;
+                previousSourceVersion = null;
+                previousSourceLastUpdated = null;
+            }
+
+            previousContinuityGroup = sample.ContinuityGroup;
+            hasPreviousSample = true;
+
             if (!string.Equals(
                     endpointKey,
                     sample.EndpointKey,
