@@ -84,6 +84,13 @@ jobs:
 
           action = YAML.load_file(".github/actions/m4-segment/action.yml")
           abort("M4 segment action is not composite") unless action.dig("runs", "using") == "composite"
+
+          action_text = File.read(".github/actions/m4-segment/action.yml")
+          save_at = action_text.index("- name: Save campaign checkpoint")
+          analyze_at = action_text.index("- name: Analyze segment evidence")
+          abort("M4 segment must persist its checkpoint before analysis") unless save_at && analyze_at && save_at < analyze_at
+          abort("M4 segment must support exact completed-segment resume") unless action_text.include?("Resolve completed segment resume state")
+          abort("M4 segment must keep a recovery artifact") unless action_text.include?("Upload campaign checkpoint recovery artifact")
           RUBY
 
           bash -n .github/scripts/m4-checkpoint.sh
