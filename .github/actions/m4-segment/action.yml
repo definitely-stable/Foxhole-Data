@@ -39,16 +39,38 @@ runs:
         cache: true
         cache-dependency-path: "**/packages.lock.json"
 
-    - name: Restore completed segment checkpoint
-      id: restore_current
+    - name: Restore completed segment checkpoint cache
+      id: restore_current_cache
       uses: actions/cache/restore@v6
       with:
         path: m4-ci/checkpoint
         key: ${{ inputs.checkpoint_cache_key }}
 
+    - name: Restore completed segment checkpoint artifact
+      id: restore_current_artifact
+      if: ${{ steps.restore_current_cache.outputs.cache-hit != 'true' }}
+      continue-on-error: true
+      uses: actions/download-artifact@v7
+      with:
+        name: ${{ inputs.checkpoint_cache_key }}-checkpoint
+        path: m4-ci/checkpoint
+
+    - name: Resolve completed segment resume state
+      id: resume_state
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.restore_current_cache.outputs.cache-hit }}
+        ARTIFACT_OUTCOME: ${{ steps.restore_current_artifact.outcome }}
+      run: |
+        if [[ "$CACHE_HIT" == "true" || "$ARTIFACT_OUTCOME" == "success" ]]; then
+          echo "current_checkpoint=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "current_checkpoint=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Restore previous campaign checkpoint
       id: restore_previous
-      if: ${{ steps.restore_current.outputs.cache-hit != 'true' && inputs.previous_cache_key != '' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && inputs.previous_cache_key != '' }}
       uses: actions/cache/restore@v6
       with:
         path: m4-ci/checkpoint
@@ -82,7 +104,7 @@ runs:
         exit 1
 
     - name: Restore PostgreSQL checkpoint
-      if: ${{ steps.restore_current.outputs.cache-hit == 'true' || inputs.previous_cache_key != '' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint == 'true' || inputs.previous_cache_key != '' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -160,7 +182,7 @@ runs:
 
     - name: Run bounded War API collection segment
       id: run_segment
-      if: ${{ steps.restore_current.outputs.cache-hit != 'true' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' }}
       continue-on-error: true
       shell: bash
       env:
@@ -340,7 +362,7 @@ runs:
         fi
 
     - name: Capture final storage snapshot and analysis boundary
-      if: ${{ inputs.final_segment == 'true' && steps.restore_current.outputs.cache-hit != 'true' && steps.run_segment.outcome == 'success' }}
+      if: ${{ inputs.final_segment == 'true' && steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -370,21 +392,31 @@ runs:
             --output m4-ci/checkpoint/measurement
 
     - name: Create PostgreSQL checkpoint
-      if: ${{ steps.restore_current.outputs.cache-hit != 'true' && steps.run_segment.outcome == 'success' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
       shell: bash
       run: |
         set -euo pipefail
         bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-ci/checkpoint
 
     - name: Save campaign checkpoint
-      if: ${{ steps.restore_current.outputs.cache-hit != 'true' && steps.run_segment.outcome == 'success' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
       uses: actions/cache/save@v6
       with:
         path: m4-ci/checkpoint
         key: ${{ inputs.checkpoint_cache_key }}
 
+    - name: Upload campaign checkpoint recovery artifact
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.checkpoint_cache_key }}-checkpoint
+        path: m4-ci/checkpoint
+        if-no-files-found: error
+        retention-days: 4
+        compression-level: 0
+
     - name: Enforce collection completion
-      if: ${{ steps.restore_current.outputs.cache-hit != 'true' && steps.run_segment.outcome != 'success' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome != 'success' }}
       shell: bash
       run: |
         echo "M4-E collection step failed before an authoritative segment checkpoint could be persisted." >&2
