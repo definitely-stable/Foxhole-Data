@@ -1,0 +1,3 @@
+M4-E v3 automatic campaign trigger.
+
+This marker is consumed only after the multi-runner checkpoint rehearsal and repository checks are green.
