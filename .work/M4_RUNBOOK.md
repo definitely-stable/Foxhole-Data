@@ -62,8 +62,14 @@ War API requests. The live campaign starts only after the one-shot marker
 .work/M4_E_V2_START is merged to main. There is no manual approval or
 workflow_dispatch step in the M4-E v2 path.
 
-The push first runs a six-minute Live-1 canary. The 48-hour campaign starts
-automatically only when that canary succeeds.
+The push first runs a three-job offline checkpoint rehearsal on separate
+GitHub-hosted runners. It performs create -> persist -> fresh-runner restore ->
+mutate -> persist -> second fresh-runner restore and also proves that corrupted
+or SHA-less checkpoints fail closed. This rehearsal issues zero War API
+requests.
+
+Only after the rehearsal succeeds does the workflow run the six-minute Live-1
+canary. The 48-hour campaign starts automatically only when both gates succeed.
 
 The hosted-runner preset records 48 hours of active Worker runtime as 12
 sequential four-hour jobs:
@@ -104,15 +110,24 @@ stops the Worker immediately when it observes:
 The post-segment guard remains a second line of defence and also checks root
 404s, uncertain exchanges, parse failures and disk pressure.
 
-PostgreSQL checkpoints are streamed between the runner and container rather
-than written to a reused container /tmp path. Every dump has a SHA-256
-sidecar, is verified before restore, and is structurally checked with
-pg_restore --list before it replaces the previous local dump.
+PostgreSQL checkpoint handling is centralized in
+.github/scripts/m4-checkpoint.sh. pg_dump writes to a host-side temporary file;
+validation copies that file into the container and runs pg_restore --list on
+the file directly, so validation never depends on an early-closing shell pipe.
+The dump is promoted atomically only after structural validation and receives a
+SHA-256 sidecar.
 
-Checkpoint state is stored under exact-key GitHub Actions caches between
-sequential jobs. The preceding known-good cache is deleted only after the next
-segment succeeds, so a failed segment does not destroy the last recoverable
-checkpoint.
+The authoritative segment checkpoint is persisted immediately after collection
+and before per-segment analysis or safety-report generation. It is written to
+an exact-key GitHub Actions cache and also uploaded as a short-retention
+recovery artifact. Therefore an analyzer/reporting failure cannot discard an
+already completed collection segment.
+
+A rerun of the same failed GitHub job first looks for the exact checkpoint of
+that segment. If the cache exists, or the recovery artifact exists, collection
+is skipped and the job resumes from the persisted database state. Only an
+unexpected failure before authoritative checkpoint creation may require
+repeating that segment.
 
 The final job requires the exact 12-segment sequence and at least 172,800
 recorded active Worker seconds. Wall-clock runner provisioning/restore gaps do
@@ -135,6 +150,7 @@ dotnet test FoxData.slnx -c Release --no-build
 
 Before enabling source collection:
 
+- require the multi-runner checkpoint rehearsal to be green;
 - apply the exact migration bundle from the deployed commit;
 - verify API readiness;
 - verify Worker starts with `WarApi__Enabled=false`;
