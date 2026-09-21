@@ -1,0 +1,3 @@
+M4-E v2 automatic retry marker 01.
+
+Added after the first v2 canary correctly stopped at build-time fixture errors before issuing War API traffic. Merging this marker retries the automatic canary on the reviewed fix.
