@@ -11,6 +11,7 @@ on:
       - main
     paths:
       - .work/M4_E_V2_START
+      - .work/M4_E_V2_RETRY_01
 permissions:
   contents: read
   actions: write
