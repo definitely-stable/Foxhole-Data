@@ -15,7 +15,7 @@ The milestone MUST answer:
 - which per-capability cadence is justified by observed cache and representation-change behaviour;
 - whether the serial M3 executor remains sufficient;
 - whether inline PostgreSQL raw evidence remains appropriate at measured volume;
-- which assumptions remain uncertain after a 48–72 hour observation window.
+- which assumptions remain uncertain after a 48-hour controlled active-observation window.
 
 M4 publishes `collection-profile@1`. It does not implement canonical Foxhole state.
 
@@ -332,7 +332,7 @@ A 95% observed representation-capture ratio may be used as one engineering input
 
 ## 10. Static map data
 
-A 48–72 hour measurement cannot prove that static map data never changes during an entire World Conquest.
+A 48-hour measurement cannot prove that static map data never changes during an entire World Conquest.
 
 M4 therefore MUST NOT redefine static data as immutable.
 
@@ -433,7 +433,8 @@ dotnet run --project tools/FoxData.SourceMeasurement -- analyze \
   --profile-version <collection-profile-version> \
   --probe-shards <comma-separated-live-shards> \
   --probe-max-maps <1..3> \
-  --probe-target-seconds <15..60>
+  --probe-target-seconds <15..60> \
+  --segments-file <segments.ndjson>
 ~~~
 
 When both storage snapshots exist, `analyze` also emits physical PostgreSQL growth/day and 30/365-day projections in the summary/report.
@@ -456,24 +457,34 @@ Do not include credentials or connection strings.
 
 ## 14. Recommended live campaign
 
-Preferred duration: 72 hours.
-Minimum acceptable duration: 48 hours if operational constraints require it.
+The GitHub-hosted publication campaign records at least 48 hours of **active
+Worker observation time**. Wall-clock gaps between hosted-runner jobs do not
+count toward this requirement.
 
-### Phase 0 — preflight
+The campaign is deliberately measurement-oriented rather than a load test.
+The outbound admission gate enforces hard spacing before exchange authorization even if durable jobs become
+overdue after a hosted-runner restart:
+
+- at least 400 ms between requests to the same upstream host (at most 2.5 req/s);
+- at least 150 ms between War API requests globally (at most about 6.67 req/s);
+- no in-process HTTP retry or hedging;
+- source cache eligibility and Retry-After remain authoritative lower bounds.
+
+### Phase 0 — preflight/canary
 
 Require:
 
 - migration bundle applied;
 - mandatory repository gates green;
-- recent live canary success;
+- an automated Live-1 canary succeeds;
 - dedicated measurement database/volume or otherwise clearly bounded data window;
-- Worker starts with source ingestion disabled;
+- Worker starts with source ingestion disabled by default;
 - sufficient disk capacity;
 - exact code SHA recorded.
 
 ### Phase 1 — Live-1 baseline
 
-Approximate duration: first 6 hours.
+Duration: 4 active hours.
 
 Use the unchanged conservative bootstrap profile:
 
@@ -485,21 +496,29 @@ Use the unchanged conservative bootstrap profile:
 
 ### Phase 2 — bounded Live-1 probe
 
-Approximate duration: next 6 hours.
+Duration: 8 active hours.
 
-Keep the baseline fleet and activate only the bounded deterministic probe cohort.
+Keep the baseline fleet and activate only the bounded deterministic probe
+cohort. Probe remains limited to at most three Live-1 maps and a 15-second local
+target for dynamic-map-state and region-war-report.
 
 ### Phase 3 — add Live-2
 
-Approximate window: hour 12 through hour 24.
+Duration: 8 active hours.
 
-Do not simultaneously change global cadence.
+Enable Live-2 while returning the probe to disabled. Do not combine first-time
+shard expansion with elevated probe cadence.
 
 ### Phase 4 — add Live-3
 
-Approximate window: hour 24 through hour 72.
+Duration: 28 active hours.
 
-This gives Live-3 roughly 48 hours in the preferred campaign.
+Enable all three live shards under the bootstrap profile with the probe
+disabled. This is the steady-state soak used for cross-shard behaviour,
+storage growth and capacity evidence.
+
+The hosted preset is therefore 12 sequential four-hour jobs:
+4 h baseline + 8 h probe + 8 h Live-2 expansion + 28 h all-shard soak = 48 h.
 
 ## 15. Hold/rollback conditions
 
@@ -551,7 +570,7 @@ Deliver read-only measurement queries/calculations and deterministic tests using
 
 Only after M4-B/C, add disabled-by-default deterministic probe cohort support that cannot bypass source cache or retry eligibility.
 
-### M4-E — 48–72 hour live campaign
+### M4-E — 48-hour live campaign
 
 Run the controlled campaign and freeze the exact analysis window.
 

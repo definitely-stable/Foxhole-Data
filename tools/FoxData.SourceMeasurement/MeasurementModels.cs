@@ -17,6 +17,12 @@ internal sealed record MeasurementPhaseObservation(
     DateTimeOffset LastObservedAt,
     int EvidenceCount);
 
+internal sealed record MeasurementActiveWindow(
+    string Segment,
+    string Phase,
+    DateTimeOffset StartInclusive,
+    DateTimeOffset EndExclusive);
+
 internal sealed record MeasurementManifest(
     string MeasurementVersion,
     string RunId,
@@ -32,6 +38,8 @@ internal sealed record MeasurementManifest(
     string BackoffPolicyVersion,
     string PollPolicyVersion,
     string CollectionProfileVersion,
+    double ActiveObservationSeconds,
+    IReadOnlyList<MeasurementActiveWindow> ActiveWindows,
     IReadOnlyList<string> Shards,
     MeasurementProbeManifest? Probe,
     IReadOnlyDictionary<string, int> SchedulingPolicyCounts,
@@ -189,7 +197,8 @@ internal sealed record AnalyzeOptions(
     string CollectionProfileVersion,
     IReadOnlyList<string> ProbeShardKeys,
     int? ProbeMaxMapsPerShard,
-    int? ProbeTargetCadenceSeconds);
+    int? ProbeTargetCadenceSeconds,
+    string? SegmentsFile);
 
 internal sealed record MeasurementValidationResult(
     bool EvidenceComplete,

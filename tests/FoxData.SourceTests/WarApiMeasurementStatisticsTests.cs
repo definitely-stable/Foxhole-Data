@@ -51,6 +51,26 @@ public sealed class WarApiMeasurementStatisticsTests
     }
 
     [Fact]
+    public void ParseStatisticsDoNotBridgeHostedRunnerGaps()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var summary = WarApiMeasurementStatistics.AnalyzeParseRuns(
+        [
+            Sample(start, "parsed", "shape-a", 0, 0, 1, 100, continuityGroup: 0),
+            Sample(start.AddMinutes(1), "parsed", "shape-a", 0, 0, 2, 200, continuityGroup: 0),
+            Sample(start.AddHours(1), "parsed", "shape-b", 0, 0, 50, 50, continuityGroup: 1),
+            Sample(start.AddHours(1).AddMinutes(1), "parsed", "shape-c", 0, 0, 51, 300, continuityGroup: 1),
+        ]);
+
+        Assert.Equal(1, summary.StructuralFingerprintChangeCount);
+        Assert.Equal(2, summary.SourceVersionAdvanceCount);
+        Assert.Equal(0, summary.SourceVersionGapCount);
+        Assert.Equal(0, summary.SourceVersionRegressionCount);
+        Assert.Equal(0, summary.SourceLastUpdatedRegressionCount);
+    }
+
+    [Fact]
     public void BurstStatisticsUseUtcAlignedWindows()
     {
         var epoch = DateTimeOffset.FromUnixTimeSeconds(0);
@@ -111,7 +131,8 @@ public sealed class WarApiMeasurementStatisticsTests
         int unknownProperties,
         int unknownCodes,
         long? sourceVersion,
-        long? sourceLastUpdated) =>
+        long? sourceLastUpdated,
+        int? continuityGroup = null) =>
         new(
             "map-dynamic/DeadLandsHex",
             WarApiCapabilities.DynamicMapState,
@@ -121,5 +142,6 @@ public sealed class WarApiMeasurementStatisticsTests
             unknownProperties,
             unknownCodes,
             sourceVersion,
-            sourceLastUpdated);
+            sourceLastUpdated,
+            continuityGroup);
 }

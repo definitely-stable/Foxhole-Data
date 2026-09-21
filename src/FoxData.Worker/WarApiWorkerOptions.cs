@@ -18,7 +18,10 @@ public sealed record WarApiWorkerOptions(
     int MaxResponseHeadersLengthKiB,
     int MaxWireBytes,
     int MaxDecodedBytes,
-    double MaxExpansionRatio)
+    double MaxExpansionRatio,
+    TimeSpan OutboundGlobalMinimumInterval,
+    TimeSpan OutboundPerHostMinimumInterval,
+    string UserAgent)
 {
     public static WarApiWorkerOptions FromConfiguration(IConfiguration configuration)
     {
@@ -68,7 +71,15 @@ public sealed record WarApiWorkerOptions(
             ReadInt32(section, "Http:MaxResponseHeadersKiB", 32),
             ReadInt32(section, "Http:MaxWireBytes", 8 * 1024 * 1024),
             ReadInt32(section, "Http:MaxDecodedBytes", 16 * 1024 * 1024),
-            ReadDouble(section, "Http:MaxExpansionRatio", 20));
+            ReadDouble(section, "Http:MaxExpansionRatio", 20),
+            TimeSpan.FromMilliseconds(
+                ReadInt32(section, "Http:OutboundGlobalMinimumIntervalMilliseconds", 150)),
+            TimeSpan.FromMilliseconds(
+                ReadInt32(section, "Http:OutboundPerHostMinimumIntervalMilliseconds", 400)),
+            ReadString(
+                section,
+                "Http:UserAgent",
+                "Foxhole-Chronicle/FoxData-M4 (+https://github.com/definitely-stable/Foxhole-Data)"));
 
         Validate(options, configuration);
         return options;
@@ -120,6 +131,27 @@ public sealed record WarApiWorkerOptions(
         {
             throw new InvalidOperationException(
                 "WarApi:Http:MaxDecodedBytes must be at least MaxWireBytes.");
+        }
+
+        if (options.OutboundGlobalMinimumInterval < TimeSpan.FromMilliseconds(150))
+        {
+            throw new InvalidOperationException(
+                "WarApi:Http:OutboundGlobalMinimumIntervalMilliseconds must be at least 150 ms.");
+        }
+
+        if (options.OutboundPerHostMinimumInterval < TimeSpan.FromMilliseconds(400))
+        {
+            throw new InvalidOperationException(
+                "WarApi:Http:OutboundPerHostMinimumIntervalMilliseconds must be at least 400 ms.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.UserAgent) ||
+            !string.Equals(options.UserAgent, options.UserAgent.Trim(), StringComparison.Ordinal) ||
+            options.UserAgent.Contains('\r') ||
+            options.UserAgent.Contains('\n'))
+        {
+            throw new InvalidOperationException(
+                "WarApi:Http:UserAgent must be a non-empty single-line value.");
         }
 
         var evidenceLimit = ReadInt64(
@@ -224,5 +256,16 @@ public sealed record WarApiWorkerOptions(
         }
 
         return parsed;
+    }
+
+    private static string ReadString(
+        IConfiguration section,
+        string key,
+        string defaultValue)
+    {
+        var value = section[key];
+        return string.IsNullOrWhiteSpace(value)
+            ? defaultValue
+            : value;
     }
 }

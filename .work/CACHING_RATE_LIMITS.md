@@ -59,6 +59,14 @@ M4 measures actual cache lifetime, 200/304 ratio and safe cadence before a faste
 
 The local target cadence is owned by a versioned collection profile. M4 starts with `warapi-bootstrap-profile@1`, which preserves the M3 target values exactly. A later measured `collection-profile@1` may change local targets, but it never overrides a later valid source-cache or Retry-After eligibility bound.
 
+For the M4-E hosted measurement path, outbound transport additionally enforces
+hard spacing before the HTTP exchange: at least 400 ms between sends to the
+same upstream host and at least 150 ms between War API sends globally. These
+ceilings are defence-in-depth and do not authorize polling faster than the
+collection profile, source cache eligibility or Retry-After. The live CI
+watchdog treats the first observed 429 as a stop signal rather than attempting
+to discover the upstream limit.
+
 ## Public GET caching
 
 Current mutable resources:

@@ -27,6 +27,9 @@ public sealed class WarApiTransport : IWarApiTransport, IDisposable
         {
             Timeout = Timeout.InfiniteTimeSpan,
         };
+        Client.DefaultRequestHeaders.TryAddWithoutValidation(
+            "User-Agent",
+            options.UserAgent);
 
         Exchange = new WarApiHttpExchange(
             timeProvider,

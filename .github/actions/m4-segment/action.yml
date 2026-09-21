@@ -80,21 +80,24 @@ runs:
         set -euo pipefail
 
         test -f m4-ci/checkpoint/checkpoint.dump
-        docker cp \
-          m4-ci/checkpoint/checkpoint.dump \
-          foxdata-m4-postgres:/tmp/checkpoint.dump
+        test -f m4-ci/checkpoint/checkpoint.dump.sha256
+        (
+          cd m4-ci/checkpoint
+          sha256sum --check checkpoint.dump.sha256
+        )
 
-        docker exec \
-          --env PGPASSWORD=foxdata_m4 \
-          foxdata-m4-postgres \
-          pg_restore \
-            --clean \
-            --if-exists \
-            --no-owner \
-            --no-privileges \
-            --username foxdata \
-            --dbname foxdata \
-            /tmp/checkpoint.dump
+        cat m4-ci/checkpoint/checkpoint.dump |
+          docker exec \
+            --interactive \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            pg_restore \
+              --clean \
+              --if-exists \
+              --no-owner \
+              --no-privileges \
+              --username foxdata \
+              --dbname foxdata
 
     - name: Restore and build exact campaign SHA
       shell: bash
@@ -185,6 +188,9 @@ runs:
         export ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4"
         export WarApi__Enabled=true
         export WarApi__EnableDev=false
+        export WarApi__Http__OutboundGlobalMinimumIntervalMilliseconds=150
+        export WarApi__Http__OutboundPerHostMinimumIntervalMilliseconds=400
+        export WarApi__Http__UserAgent="Foxhole-Chronicle/FoxData-M4 (+https://github.com/definitely-stable/Foxhole-Data)"
         export WarApi__EnabledShards__0=live-1
         unset WarApi__EnabledShards__1 || true
         unset WarApi__EnabledShards__2 || true
@@ -203,12 +209,12 @@ runs:
             ;;
           live2)
             export WarApi__EnabledShards__1=live-2
-            export WarApi__MeasurementProbe__Enabled=true
+            export WarApi__MeasurementProbe__Enabled=false
             ;;
           live3)
             export WarApi__EnabledShards__1=live-2
             export WarApi__EnabledShards__2=live-3
-            export WarApi__MeasurementProbe__Enabled=true
+            export WarApi__MeasurementProbe__Enabled=false
             ;;
           *)
             echo "Unsupported M4 phase '$M4_PHASE'." >&2
@@ -224,6 +230,7 @@ runs:
         duration_seconds=$(( M4_DURATION_MINUTES * 60 ))
         deadline=$(( SECONDS + duration_seconds ))
 
+        traffic_violation=""
         while (( SECONDS < deadline )); do
           if ! kill -0 "$worker_pid" >/dev/null 2>&1; then
             set +e
@@ -234,7 +241,66 @@ runs:
             tail -n 200 "$worker_log" >&2 || true
             exit 1
           fi
-          sleep 30
+
+          stats="$(
+            docker exec \
+              --env PGPASSWORD=foxdata_m4 \
+              foxdata-m4-postgres \
+              psql \
+                --tuples-only \
+                --no-align \
+                --field-separator='|' \
+                --username foxdata \
+                --dbname foxdata \
+                --command "
+                  SELECT
+                    COUNT(*) FILTER (WHERE captured_fetch.status_code IN (401, 403)),
+                    COUNT(*) FILTER (WHERE captured_fetch.status_code = 429),
+                    COUNT(*) FILTER (WHERE captured_fetch.body_error_code IS NOT NULL),
+                    COUNT(*) FILTER (
+                      WHERE captured_fetch.request_started_at >= NOW() - INTERVAL '60 seconds'
+                    ),
+                    COUNT(*) FILTER (
+                      WHERE captured_fetch.request_started_at >= NOW() - INTERVAL '5 minutes'
+                        AND captured_fetch.status_code BETWEEN 500 AND 599
+                    ),
+                    COUNT(*) FILTER (
+                      WHERE captured_fetch.request_started_at >= NOW() - INTERVAL '5 minutes'
+                    )
+                  FROM evidence.fetches AS captured_fetch
+                  INNER JOIN sources.endpoints AS endpoint
+                    ON endpoint.id = captured_fetch.endpoint_id
+                  INNER JOIN sources.shards AS shard
+                    ON shard.id = endpoint.shard_id
+                  INNER JOIN sources.sources AS source
+                    ON source.id = shard.source_id
+                  WHERE source.key = 'official-war-api'
+                    AND captured_fetch.request_started_at >= TIMESTAMPTZ '$segment_start';
+                " |
+              tr -d '[:space:]'
+          )"
+
+          IFS='|' read -r unauthorized_now rate_limited_now body_errors_now recent_60s server_errors_5m fetches_5m <<< "$stats"
+
+          if (( unauthorized_now > 0 )); then
+            traffic_violation="401/403 observed"
+          elif (( rate_limited_now > 0 )); then
+            traffic_violation="429 observed"
+          elif (( body_errors_now > 0 )); then
+            traffic_violation="body read/limit error observed"
+          elif (( recent_60s > 390 )); then
+            traffic_violation="60-second request budget exceeded"
+          elif (( fetches_5m > 0 && server_errors_5m >= 5 && server_errors_5m * 20 >= fetches_5m )); then
+            traffic_violation="5xx rate reached at least 5% with >=5 responses in five minutes"
+          fi
+
+          if [[ -n "$traffic_violation" ]]; then
+            printf '%s\n' "$traffic_violation" > "m4-ci/diagnostics/traffic-violation-${M4_SEGMENT_ID}.txt"
+            echo "M4-E live watchdog stop: $traffic_violation" >&2
+            break
+          fi
+
+          sleep 10
         done
 
         kill -INT "$worker_pid" >/dev/null 2>&1 || true
@@ -276,13 +342,21 @@ runs:
             endExclusive: $end
           }' >> m4-ci/checkpoint/segments.ndjson
 
+        if [[ -n "$traffic_violation" ]]; then
+          exit 78
+        fi
+
     - name: Capture final storage snapshot and analysis boundary
       if: ${{ inputs.final_segment == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
 
-        analysis_end="$(date -u --date='2 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+        analysis_end="$(
+          tail -n 1 m4-ci/checkpoint/segments.ndjson |
+            jq -r '.endExclusive'
+        )"
+        test -n "$analysis_end"
         jq \
           --arg endExclusive "$analysis_end" \
           '. + {endExclusive: $endExclusive}' \
@@ -326,7 +400,7 @@ runs:
           --profile-version warapi-bootstrap-profile@1
         )
 
-        if [[ "$M4_PHASE" != "baseline-live1" ]]; then
+        if [[ "$M4_PHASE" == "probe-live1" ]]; then
           args+=(
             --probe-shards live-1
             --probe-max-maps 3
@@ -345,7 +419,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        rm -f m4-ci/checkpoint/checkpoint.dump
+        rm -f \
+          m4-ci/checkpoint/checkpoint.dump \
+          m4-ci/checkpoint/checkpoint.dump.tmp \
+          m4-ci/checkpoint/checkpoint.dump.sha256
 
         docker exec \
           --env PGPASSWORD=foxdata_m4 \
@@ -356,13 +433,24 @@ runs:
             --no-privileges \
             --username foxdata \
             --dbname foxdata \
-            --file /tmp/checkpoint.dump
+          > m4-ci/checkpoint/checkpoint.dump.tmp
 
-        docker cp \
-          foxdata-m4-postgres:/tmp/checkpoint.dump \
+        test -s m4-ci/checkpoint/checkpoint.dump.tmp
+
+        cat m4-ci/checkpoint/checkpoint.dump.tmp |
+          docker exec \
+            --interactive \
+            foxdata-m4-postgres \
+            pg_restore --list \
+          >/dev/null
+
+        mv \
+          m4-ci/checkpoint/checkpoint.dump.tmp \
           m4-ci/checkpoint/checkpoint.dump
-
-        test -s m4-ci/checkpoint/checkpoint.dump
+        (
+          cd m4-ci/checkpoint
+          sha256sum checkpoint.dump > checkpoint.dump.sha256
+        )
 
     - name: Save campaign checkpoint
       uses: actions/cache/save@v6
@@ -438,8 +526,8 @@ runs:
           exit 1
         fi
 
-        if (( rate_limited >= 3 )); then
-          echo "M4-E stop condition: sustained 429 observed." >&2
+        if (( rate_limited > 0 )); then
+          echo "M4-E stop condition: any 429 response is treated as an upstream pressure signal." >&2
           exit 1
         fi
 
