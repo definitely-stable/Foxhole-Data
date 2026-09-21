@@ -582,7 +582,8 @@ jobs:
               --profile-version warapi-bootstrap-profile@1 \
               --probe-shards live-1 \
               --probe-max-maps 3 \
-              --probe-target-seconds 15
+              --probe-target-seconds 15 \
+              --segments-file m4-ci/final-report/segments.ndjson
 
       - name: Validate M4 publication evidence
         id: validate
