@@ -265,6 +265,45 @@ public sealed class WarApiMeasurementAnalyzerTests
     }
 
     [Fact]
+    public void SegmentBoundaryDoesNotCreateSyntheticPollOrVersionGap()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var summary = WarApiMeasurementAnalyzer.AnalyzeEndpoint(
+        [
+            Sample(start, 200, "A", 100, "etag-a", 10, version: 1, continuityGroup: 0),
+            Sample(start.AddSeconds(60), 304, null, null, "etag-a", 10, validationHit: true, continuityGroup: 0),
+            Sample(start.AddHours(1), 200, "B", 100, "etag-b", 10, version: 50, continuityGroup: 1),
+            Sample(start.AddHours(1).AddSeconds(60), 200, "C", 100, "etag-c", 10, version: 51, continuityGroup: 1),
+        ]);
+
+        Assert.Equal(60d, summary.PollIntervalMaxSeconds!.Value);
+        Assert.Equal(1, summary.RepresentationChangeCount);
+        Assert.Equal(1, summary.VersionAdvanceCount);
+        Assert.Equal(0, summary.VersionGapCount);
+    }
+
+    [Fact]
+    public void DownsamplingRestartsCandidateClockAtSegmentBoundary()
+    {
+        var start = DateTimeOffset.Parse("2026-09-20T12:00:00+00:00");
+
+        var summary = WarApiMeasurementAnalyzer.SimulateCadence(
+        [
+            Sample(start, 200, "A", 100, "etag-a", 10, continuityGroup: 0),
+            Sample(start.AddSeconds(15), 200, "B", 100, "etag-b", 10, continuityGroup: 0),
+            Sample(start.AddHours(1), 200, "C", 100, "etag-c", 10, continuityGroup: 1),
+            Sample(start.AddHours(1).AddSeconds(15), 200, "D", 100, "etag-d", 10, continuityGroup: 1),
+        ],
+            TimeSpan.FromSeconds(30));
+
+        Assert.Equal(4, summary.BaselineEpisodeCount);
+        Assert.Equal(2, summary.CapturedEpisodeCount);
+        Assert.Equal(2, summary.SimulatedRequestCount);
+        Assert.Equal(0.5d, summary.CaptureRatio);
+    }
+
+    [Fact]
     public void EmptyAnalyzerInputIsRejected()
     {
         Assert.Throws<ArgumentException>(
@@ -280,7 +319,8 @@ public sealed class WarApiMeasurementAnalyzerTests
         string? etag,
         long durationMs,
         long? version = null,
-        bool validationHit = false) =>
+        bool validationHit = false,
+        int? continuityGroup = null) =>
         new(
             "map-dynamic/DeadLandsHex",
             WarApiCapabilities.DynamicMapState,
@@ -291,5 +331,6 @@ public sealed class WarApiMeasurementAnalyzerTests
             etag,
             durationMs,
             version,
-            validationHit);
+            validationHit,
+            continuityGroup);
 }
