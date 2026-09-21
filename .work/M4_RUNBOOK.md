@@ -79,8 +79,8 @@ Four-hour segments remain below the hosted-runner job execution ceiling while
 leaving time for restore/build/analyze/checkpoint work. Every segment checks out
 the exact campaign SHA.
 
-The Worker transport itself enforces an outbound safety envelope before any
-HTTP exchange:
+The Worker outbound admission gate enforces a safety envelope before durable
+HTTP exchange authorization:
 
 ~~~text
 same upstream host: >= 400 ms between sends (<= 2.5 req/s)
@@ -91,7 +91,7 @@ These are hard safety ceilings, not target polling rates. Normal collection is
 slower because capability cadence, source cache eligibility and Retry-After are
 also lower bounds.
 
-The live loop additionally checks durable Fetch evidence every 30 seconds and
+The live loop additionally checks durable Fetch evidence every 10 seconds and
 stops the Worker immediately when it observes:
 
 - any 401/403;
