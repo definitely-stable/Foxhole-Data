@@ -352,7 +352,11 @@ runs:
       run: |
         set -euo pipefail
 
-        analysis_end="$(date -u --date='2 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+        analysis_end="$(
+          tail -n 1 m4-ci/checkpoint/segments.ndjson |
+            jq -r '.endExclusive'
+        )"
+        test -n "$analysis_end"
         jq \
           --arg endExclusive "$analysis_end" \
           '. + {endExclusive: $endExclusive}' \
