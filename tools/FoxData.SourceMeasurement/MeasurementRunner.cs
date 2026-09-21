@@ -559,6 +559,112 @@ internal static class MeasurementRunner
         return result;
     }
 
+    private static async Task<IReadOnlyList<MeasurementActiveWindow>>
+        ReadActiveWindowsAsync(
+            AnalyzeOptions options,
+            CancellationToken cancellationToken)
+    {
+        if (options.SegmentsFile is null)
+        {
+            return
+            [
+                new MeasurementActiveWindow(
+                    "continuous",
+                    "continuous",
+                    options.StartInclusive,
+                    options.EndExclusive),
+            ];
+        }
+
+        if (!File.Exists(options.SegmentsFile))
+        {
+            throw new FileNotFoundException(
+                "The configured --segments-file does not exist.",
+                options.SegmentsFile);
+        }
+
+        var lines = await File.ReadAllLinesAsync(
+            options.SegmentsFile,
+            cancellationToken);
+        var windows = lines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(
+                line =>
+                    JsonSerializer.Deserialize<MeasurementActiveWindow>(
+                        line,
+                        JsonOptions)
+                    ?? throw new InvalidOperationException(
+                        "An active-window ledger row could not be deserialized."))
+            .OrderBy(window => window.StartInclusive)
+            .ToArray();
+
+        if (windows.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "The active-window ledger contains no segments.");
+        }
+
+        for (var index = 0; index < windows.Length; index++)
+        {
+            var window = windows[index];
+
+            if (string.IsNullOrWhiteSpace(window.Segment) ||
+                string.IsNullOrWhiteSpace(window.Phase))
+            {
+                throw new InvalidOperationException(
+                    "Active-window segment and phase must be non-empty.");
+            }
+
+            if (window.StartInclusive >= window.EndExclusive)
+            {
+                throw new InvalidOperationException(
+                    $"Active window '{window.Segment}' has a non-positive duration.");
+            }
+
+            if (window.StartInclusive < options.StartInclusive ||
+                window.EndExclusive > options.EndExclusive)
+            {
+                throw new InvalidOperationException(
+                    $"Active window '{window.Segment}' lies outside the requested analysis window.");
+            }
+
+            if (index > 0 &&
+                windows[index - 1].EndExclusive > window.StartInclusive)
+            {
+                throw new InvalidOperationException(
+                    $"Active windows '{windows[index - 1].Segment}' and '{window.Segment}' overlap.");
+            }
+        }
+
+        if (windows
+            .Select(window => window.Segment)
+            .Distinct(StringComparer.Ordinal)
+            .Count() != windows.Length)
+        {
+            throw new InvalidOperationException(
+                "Active-window segment identifiers must be unique.");
+        }
+
+        return windows;
+    }
+
+    private static int ActiveWindowIndex(
+        IReadOnlyList<MeasurementActiveWindow> activeWindows,
+        DateTimeOffset timestamp)
+    {
+        for (var index = 0; index < activeWindows.Count; index++)
+        {
+            var window = activeWindows[index];
+            if (timestamp >= window.StartInclusive &&
+                timestamp < window.EndExclusive)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     private static MeasurementVolumeSummary AnalyzeVolume(
         AnalyzeOptions options,
         IReadOnlyCollection<SourceMeasurementFetch> fetches,
