@@ -10,11 +10,11 @@ on:
     branches:
       - main
     paths:
-      - .work/M4_E_START
+      - .work/M4_E_V2_START
   workflow_dispatch:
     inputs:
       mode:
-        description: Smoke-check the campaign plumbing or run the full 72-hour measurement.
+        description: Smoke-check the campaign plumbing or run the full 48-hour measurement.
         required: true
         type: choice
         default: smoke
@@ -89,7 +89,7 @@ jobs:
 
           workflow = YAML.load_file(".github/workflows/m4-live-campaign.yml")
           jobs = workflow.fetch("jobs")
-          expected = (1..18).map { |number| format("segment_%02d", number) }
+          expected = (1..12).map { |number| format("segment_%02d", number) }
           missing = expected.reject { |job| jobs.key?(job) }
           abort("Missing M4 segment jobs: #{missing.join(', ')}") unless missing.empty?
 
@@ -108,12 +108,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Run eight-minute baseline segment
+      - name: Run six-minute baseline segment
         uses: ./.github/actions/m4-segment
         with:
           segment_id: smoke
           phase: baseline-live1
-          duration_minutes: "8"
+          duration_minutes: "6"
           previous_cache_key: ""
           checkpoint_cache_key: m4-e-${{ github.run_id }}-smoke
           run_id: m4-ci-${{ github.run_id }}
@@ -156,7 +156,7 @@ jobs:
           final_segment: "false"
 
   segment_02:
-    name: M4-E 02 · baseline-live1
+    name: M4-E 02 · probe-live1
     needs: segment_01
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
     runs-on: ubuntu-latest
@@ -171,7 +171,7 @@ jobs:
         uses: ./.github/actions/m4-segment
         with:
           segment_id: s02
-          phase: baseline-live1
+          phase: probe-live1
           duration_minutes: "240"
           previous_cache_key: m4-e-${{ github.run_id }}-s01
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s02
@@ -204,7 +204,7 @@ jobs:
           final_segment: "false"
 
   segment_04:
-    name: M4-E 04 · probe-live1
+    name: M4-E 04 · live2
     needs: segment_03
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
     runs-on: ubuntu-latest
@@ -219,7 +219,7 @@ jobs:
         uses: ./.github/actions/m4-segment
         with:
           segment_id: s04
-          phase: probe-live1
+          phase: live2
           duration_minutes: "240"
           previous_cache_key: m4-e-${{ github.run_id }}-s03
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s04
@@ -252,7 +252,7 @@ jobs:
           final_segment: "false"
 
   segment_06:
-    name: M4-E 06 · live2
+    name: M4-E 06 · live3
     needs: segment_05
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
     runs-on: ubuntu-latest
@@ -267,7 +267,7 @@ jobs:
         uses: ./.github/actions/m4-segment
         with:
           segment_id: s06
-          phase: live2
+          phase: live3
           duration_minutes: "240"
           previous_cache_key: m4-e-${{ github.run_id }}-s05
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s06
@@ -417,155 +417,11 @@ jobs:
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s12
           run_id: m4-ci-${{ github.run_id }}
           observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
-          final_segment: "false"
-
-  segment_13:
-    name: M4-E 13 · live3
-    needs: segment_12
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    steps:
-      - name: Checkout exact campaign SHA
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Run M4 segment
-        uses: ./.github/actions/m4-segment
-        with:
-          segment_id: s13
-          phase: live3
-          duration_minutes: "240"
-          previous_cache_key: m4-e-${{ github.run_id }}-s12
-          checkpoint_cache_key: m4-e-${{ github.run_id }}-s13
-          run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
-          final_segment: "false"
-
-  segment_14:
-    name: M4-E 14 · live3
-    needs: segment_13
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    steps:
-      - name: Checkout exact campaign SHA
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Run M4 segment
-        uses: ./.github/actions/m4-segment
-        with:
-          segment_id: s14
-          phase: live3
-          duration_minutes: "240"
-          previous_cache_key: m4-e-${{ github.run_id }}-s13
-          checkpoint_cache_key: m4-e-${{ github.run_id }}-s14
-          run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
-          final_segment: "false"
-
-  segment_15:
-    name: M4-E 15 · live3
-    needs: segment_14
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    steps:
-      - name: Checkout exact campaign SHA
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Run M4 segment
-        uses: ./.github/actions/m4-segment
-        with:
-          segment_id: s15
-          phase: live3
-          duration_minutes: "240"
-          previous_cache_key: m4-e-${{ github.run_id }}-s14
-          checkpoint_cache_key: m4-e-${{ github.run_id }}-s15
-          run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
-          final_segment: "false"
-
-  segment_16:
-    name: M4-E 16 · live3
-    needs: segment_15
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    steps:
-      - name: Checkout exact campaign SHA
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Run M4 segment
-        uses: ./.github/actions/m4-segment
-        with:
-          segment_id: s16
-          phase: live3
-          duration_minutes: "240"
-          previous_cache_key: m4-e-${{ github.run_id }}-s15
-          checkpoint_cache_key: m4-e-${{ github.run_id }}-s16
-          run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
-          final_segment: "false"
-
-  segment_17:
-    name: M4-E 17 · live3
-    needs: segment_16
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    steps:
-      - name: Checkout exact campaign SHA
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Run M4 segment
-        uses: ./.github/actions/m4-segment
-        with:
-          segment_id: s17
-          phase: live3
-          duration_minutes: "240"
-          previous_cache_key: m4-e-${{ github.run_id }}-s16
-          checkpoint_cache_key: m4-e-${{ github.run_id }}-s17
-          run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
-          final_segment: "false"
-
-  segment_18:
-    name: M4-E 18 · live3
-    needs: segment_17
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    steps:
-      - name: Checkout exact campaign SHA
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Run M4 segment
-        uses: ./.github/actions/m4-segment
-        with:
-          segment_id: s18
-          phase: live3
-          duration_minutes: "240"
-          previous_cache_key: m4-e-${{ github.run_id }}-s17
-          checkpoint_cache_key: m4-e-${{ github.run_id }}-s18
-          run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
           final_segment: "true"
 
   finalize:
     name: M4-E analyze and validate
-    needs: segment_18
+    needs: segment_12
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -586,7 +442,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: m4-ci/checkpoint
-          key: m4-e-${{ github.run_id }}-s18
+          key: m4-e-${{ github.run_id }}-s12
           fail-on-cache-miss: true
 
       - name: Start PostgreSQL 18
@@ -619,20 +475,23 @@ jobs:
         run: |
           set -euo pipefail
           test -s m4-ci/checkpoint/checkpoint.dump
-          docker cp \
-            m4-ci/checkpoint/checkpoint.dump \
-            foxdata-m4-postgres:/tmp/checkpoint.dump
-          docker exec \
-            --env PGPASSWORD=foxdata_m4 \
-            foxdata-m4-postgres \
-            pg_restore \
-              --clean \
-              --if-exists \
-              --no-owner \
-              --no-privileges \
-              --username foxdata \
-              --dbname foxdata \
-              /tmp/checkpoint.dump
+          test -f m4-ci/checkpoint/checkpoint.dump.sha256
+          (
+            cd m4-ci/checkpoint
+            sha256sum --check checkpoint.dump.sha256
+          )
+          cat m4-ci/checkpoint/checkpoint.dump |
+            docker exec \
+              --interactive \
+              --env PGPASSWORD=foxdata_m4 \
+              foxdata-m4-postgres \
+              pg_restore \
+                --clean \
+                --if-exists \
+                --no-owner \
+                --no-privileges \
+                --username foxdata \
+                --dbname foxdata
 
       - name: Restore and build exact campaign SHA
         shell: bash
@@ -646,7 +505,7 @@ jobs:
         shell: bash
         env:
           EXPECTED_RUN_ID: m4-ci-${{ github.run_id }}
-          EXPECTED_OBSERVER_REGION: ${{ inputs.observer_region }}
+          EXPECTED_OBSERVER_REGION: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
         run: |
           set -euo pipefail
           test -f m4-ci/checkpoint/campaign.json
@@ -667,10 +526,10 @@ jobs:
           segment_count="$(wc -l < "$ledger" | tr -d '[:space:]')"
           actual_segments="$(jq -r '.segment' "$ledger" | paste -sd, -)"
           actual_phases="$(jq -r '.phase' "$ledger" | paste -sd, -)"
-          expected_segments="s01,s02,s03,s04,s05,s06,s07,s08,s09,s10,s11,s12,s13,s14,s15,s16,s17,s18"
-          expected_phases="baseline-live1,baseline-live1,probe-live1,probe-live1,live2,live2,live3,live3,live3,live3,live3,live3,live3,live3,live3,live3,live3,live3"
+          expected_segments="s01,s02,s03,s04,s05,s06,s07,s08,s09,s10,s11,s12"
+          expected_phases="baseline-live1,probe-live1,probe-live1,live2,live2,live3,live3,live3,live3,live3,live3,live3"
 
-          test "$segment_count" = "18"
+          test "$segment_count" = "12"
           test "$actual_segments" = "$expected_segments"
           test "$actual_phases" = "$expected_phases"
 
@@ -684,8 +543,8 @@ jobs:
             ' "$ledger"
           )"
 
-          if (( active_seconds < 259200 )); then
-            echo "M4-E recorded only $active_seconds active seconds; 259200 are required." >&2
+          if (( active_seconds < 172800 )); then
+            echo "M4-E recorded only $active_seconds active seconds; 172800 are required." >&2
             exit 1
           fi
 
@@ -694,7 +553,7 @@ jobs:
             echo
             echo "- Segments: $segment_count"
             echo "- Active Worker seconds: $active_seconds"
-            echo "- Phase plan: 8h baseline Live-1 → 8h probe Live-1 → 8h Live-2 expansion → 48h Live-3 expansion"
+            echo "- Phase plan: 4h baseline Live-1 → 8h probe Live-1 → 8h Live-2 expansion → 28h Live-3 expansion"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate final M4 report
