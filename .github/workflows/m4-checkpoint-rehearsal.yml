@@ -73,6 +73,15 @@ jobs:
           path: m4-rehearsal/checkpoint
           key: ${{ env.M4_REHEARSAL_CACHE_01 }}
 
+      - name: Persist seed recovery artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m4-rehearsal-${{ github.run_id }}-01-artifact
+          path: m4-rehearsal/checkpoint
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
@@ -162,6 +171,15 @@ jobs:
           path: m4-rehearsal/checkpoint
           key: ${{ env.M4_REHEARSAL_CACHE_02 }}
 
+      - name: Persist mutated recovery artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m4-rehearsal-${{ github.run_id }}-02-artifact
+          path: m4-rehearsal/checkpoint
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
@@ -176,12 +194,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Restore mutated checkpoint
-        uses: actions/cache/restore@v6
+      - name: Restore mutated recovery artifact
+        uses: actions/download-artifact@v7
         with:
+          name: m4-rehearsal-${{ github.run_id }}-02-artifact
           path: m4-rehearsal/checkpoint
-          key: ${{ env.M4_REHEARSAL_CACHE_02 }}
-          fail-on-cache-miss: true
 
       - name: Start second fresh PostgreSQL 18
         shell: bash
