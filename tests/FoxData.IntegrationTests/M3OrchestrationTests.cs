@@ -892,11 +892,16 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var transport = new QueueTransport();
 
         var resolver = new WarApiRegistryResolver(registry);
+        var rateGovernor = new WarApiOutboundRateGovernor(
+            timeProvider,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
         var executor = new WarApiAttemptExecutor(
             ingestion,
             evidence,
             pollState,
             resolver,
+            rateGovernor,
             transport,
             timeProvider,
             NullLogger<WarApiAttemptExecutor>.Instance);
@@ -980,7 +985,10 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             MaxResponseHeadersLengthKiB: 16,
             MaxWireBytes: 1024 * 1024,
             MaxDecodedBytes: 2 * 1024 * 1024,
-            MaxExpansionRatio: 20);
+            MaxExpansionRatio: 20,
+            OutboundGlobalMinimumInterval: TimeSpan.FromMilliseconds(150),
+            OutboundPerHostMinimumInterval: TimeSpan.FromMilliseconds(400),
+            UserAgent: "Foxhole-Chronicle/FoxData-Test");
 
     private static WarApiHttpExchangeResult CreateResponse(
         DateTimeOffset timestamp,
