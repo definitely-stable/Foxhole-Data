@@ -5,7 +5,7 @@ public sealed class WarApiOutboundRateGovernor(
     TimeSpan globalMinimumInterval,
     TimeSpan perHostMinimumInterval)
 {
-    private readonly Lock _gate = new();
+    private readonly object _gate = new();
     private readonly Dictionary<string, DateTimeOffset> _nextPerHost =
         new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _nextGlobal = DateTimeOffset.MinValue;
