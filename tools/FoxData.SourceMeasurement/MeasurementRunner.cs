@@ -563,16 +563,18 @@ internal static class MeasurementRunner
         AnalyzeOptions options,
         IReadOnlyCollection<SourceMeasurementFetch> fetches,
         IReadOnlyCollection<SourceMeasurementParseRun> parseRuns,
-        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions,
+        IReadOnlyList<MeasurementActiveWindow> activeWindows)
     {
-        var days =
-            (options.EndExclusive - options.StartInclusive)
-            .TotalDays;
+        var days = activeWindows.Sum(
+            window =>
+                (window.EndExclusive - window.StartInclusive)
+                .TotalDays);
 
         if (days <= 0)
         {
             throw new InvalidOperationException(
-                "Measurement window duration must be positive.");
+                "Active measurement duration must be positive.");
         }
 
         var createdPayloadRows = fetches
@@ -580,16 +582,12 @@ internal static class MeasurementRunner
                 fetch =>
                     fetch.PayloadId is not null &&
                     fetch.PayloadCreatedAt is { } createdAt &&
-                    createdAt >= options.StartInclusive &&
-                    createdAt < options.EndExclusive)
+                    ActiveWindowIndex(activeWindows, createdAt) >= 0)
             .Select(fetch => fetch.PayloadId!.Value.Value)
             .Distinct()
             .Count();
 
-        var scheduleRows = decisions.Count(
-            decision =>
-                decision.CreatedAt >= options.StartInclusive &&
-                decision.CreatedAt < options.EndExclusive);
+        var scheduleRows = decisions.Count;
 
         return new MeasurementVolumeSummary(
             days,
@@ -743,13 +741,19 @@ internal static class MeasurementRunner
                 "Manifest and summary identity/window do not match.");
         }
 
-        var duration =
-            manifest.EndExclusive -
-            manifest.StartInclusive;
-        if (duration < TimeSpan.FromHours(48))
+        var activeDuration =
+            TimeSpan.FromSeconds(
+                manifest.ActiveObservationSeconds);
+        if (activeDuration < TimeSpan.FromHours(48))
         {
             errors.Add(
-                $"Measurement window is {duration.TotalHours:0.##} hours; M4 requires at least 48 hours.");
+                $"Active measurement time is {activeDuration.TotalHours:0.##} hours; M4 requires at least 48 active hours.");
+        }
+
+        if (manifest.ActiveWindows.Count == 0)
+        {
+            errors.Add(
+                "Measurement manifest contains no active observation windows.");
         }
 
         if (summary.FetchCount == 0)
@@ -1279,7 +1283,8 @@ internal static class MeasurementRunner
         IReadOnlyCollection<SourceMeasurementFetch> fetches,
         IReadOnlyCollection<SourceMeasurementAttempt> attempts,
         IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions,
-        IReadOnlyDictionary<Guid, SourceMeasurementParseRun> parseByFetch)
+        IReadOnlyDictionary<Guid, SourceMeasurementParseRun> parseByFetch,
+        IReadOnlyList<MeasurementActiveWindow> activeWindows)
     {
         var attemptById = attempts.ToDictionary(
             attempt => attempt.AttemptId.Value);
@@ -1346,7 +1351,10 @@ internal static class MeasurementRunner
                             fetch.DurationMs,
                             parseRun?.SourceVersion,
                             fetch.StatusCode == 304 &&
-                                fetch.PriorFetchId is not null);
+                                fetch.PriorFetchId is not null,
+                            ActiveWindowIndex(
+                                activeWindows,
+                                fetch.RequestStartedAt));
                     })
                     .ToArray();
 
@@ -1570,6 +1578,7 @@ internal static class MeasurementRunner
 
     private static async Task<MeasurementStorageGrowth?> TryReadStorageGrowthAsync(
         string outputDirectory,
+        TimeSpan activeObservationDuration,
         CancellationToken cancellationToken)
     {
         var beforePath =
@@ -1626,7 +1635,13 @@ internal static class MeasurementRunner
                 "Storage snapshots do not contain the same measured relations.");
         }
 
-        var days = elapsed.TotalDays;
+        if (activeObservationDuration <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                "Active observation duration must be positive for storage normalization.");
+        }
+
+        var days = activeObservationDuration.TotalDays;
         var databaseDelta =
             after.DatabaseBytes - before.DatabaseBytes;
         var databasePerDay = databaseDelta / days;
@@ -1679,6 +1694,8 @@ internal static class MeasurementRunner
             $"Collection profile: {manifest.CollectionProfileVersion}");
         builder.AppendLine(
             $"Observer region: {manifest.ObserverRegion}");
+        builder.AppendLine(
+            $"Active observation: {TimeSpan.FromSeconds(manifest.ActiveObservationSeconds).TotalHours:0.###} h across {manifest.ActiveWindows.Count} window(s)");
         builder.AppendLine();
         if (manifest.ObservedPhases.Count > 0)
         {
@@ -2058,7 +2075,8 @@ internal static class MeasurementRunner
             "profile-version",
             "probe-shards",
             "probe-max-maps",
-            "probe-target-seconds");
+            "probe-target-seconds",
+            "segments-file");
 
         var runId = Required(values, "run-id");
         ValidateIdentifier(runId, "run-id");
@@ -2128,6 +2146,12 @@ internal static class MeasurementRunner
                 "probe-target-seconds")
             : null;
 
+        var segmentsFile = values.TryGetValue(
+            "segments-file",
+            out var configuredSegmentsFile)
+            ? Path.GetFullPath(configuredSegmentsFile)
+            : null;
+
         return new AnalyzeOptions(
             runId,
             start,
@@ -2138,7 +2162,8 @@ internal static class MeasurementRunner
             profileVersion,
             probeShardKeys,
             probeMaxMaps,
-            probeTargetSeconds);
+            probeTargetSeconds,
+            segmentsFile);
     }
 
     private static ValidationOptions ParseValidationOptions(
@@ -2352,6 +2377,7 @@ internal static class MeasurementRunner
                 [--probe-shards <live-1,live-2>]
                 [--probe-max-maps <1..3>]
                 [--probe-target-seconds <15..60>]
+                [--segments-file <segments.ndjson>]
 
               storage
                 --label <before|after>
