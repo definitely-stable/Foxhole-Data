@@ -433,7 +433,8 @@ dotnet run --project tools/FoxData.SourceMeasurement -- analyze \
   --profile-version <collection-profile-version> \
   --probe-shards <comma-separated-live-shards> \
   --probe-max-maps <1..3> \
-  --probe-target-seconds <15..60>
+  --probe-target-seconds <15..60> \
+  --segments-file <segments.ndjson>
 ~~~
 
 When both storage snapshots exist, `analyze` also emits physical PostgreSQL growth/day and 30/365-day projections in the summary/report.
@@ -461,7 +462,7 @@ Worker observation time**. Wall-clock gaps between hosted-runner jobs do not
 count toward this requirement.
 
 The campaign is deliberately measurement-oriented rather than a load test.
-The transport enforces hard outbound spacing even if durable jobs become
+The outbound admission gate enforces hard spacing before exchange authorization even if durable jobs become
 overdue after a hosted-runner restart:
 
 - at least 400 ms between requests to the same upstream host (at most 2.5 req/s);
