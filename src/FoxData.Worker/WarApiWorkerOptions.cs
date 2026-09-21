@@ -147,8 +147,8 @@ public sealed record WarApiWorkerOptions(
 
         if (string.IsNullOrWhiteSpace(options.UserAgent) ||
             !string.Equals(options.UserAgent, options.UserAgent.Trim(), StringComparison.Ordinal) ||
-            options.UserAgent.Contains('\r', StringComparison.Ordinal) ||
-            options.UserAgent.Contains('\n', StringComparison.Ordinal))
+            options.UserAgent.Contains('\r') ||
+            options.UserAgent.Contains('\n'))
         {
             throw new InvalidOperationException(
                 "WarApi:Http:UserAgent must be a non-empty single-line value.");
