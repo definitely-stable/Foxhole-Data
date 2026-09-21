@@ -398,15 +398,19 @@ runs:
         set -euo pipefail
         bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-ci/checkpoint
 
-    - name: Save campaign checkpoint
+    - name: Save campaign checkpoint cache
+      id: save_checkpoint_cache
       if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      continue-on-error: true
       uses: actions/cache/save@v6
       with:
         path: m4-ci/checkpoint
         key: ${{ inputs.checkpoint_cache_key }}
 
     - name: Upload campaign checkpoint recovery artifact
-      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      id: save_checkpoint_artifact
+      if: ${{ always() && steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      continue-on-error: true
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.checkpoint_cache_key }}-checkpoint
@@ -414,6 +418,18 @@ runs:
         if-no-files-found: error
         retention-days: 4
         compression-level: 0
+
+    - name: Enforce checkpoint persistence
+      if: ${{ always() && steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      shell: bash
+      env:
+        CACHE_OUTCOME: ${{ steps.save_checkpoint_cache.outcome }}
+        ARTIFACT_OUTCOME: ${{ steps.save_checkpoint_artifact.outcome }}
+      run: |
+        if [[ "$CACHE_OUTCOME" != "success" && "$ARTIFACT_OUTCOME" != "success" ]]; then
+          echo "Neither checkpoint cache nor recovery artifact persisted successfully." >&2
+          exit 1
+        fi
 
     - name: Enforce collection completion
       if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome != 'success' }}
