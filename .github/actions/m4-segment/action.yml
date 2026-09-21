@@ -300,7 +300,7 @@ runs:
             break
           fi
 
-          sleep 30
+          sleep 10
         done
 
         kill -INT "$worker_pid" >/dev/null 2>&1 || true
