@@ -1,5 +1,5 @@
 name: M4 Live Campaign
-run-name: M4-E ${{ inputs.mode || 'auto-full' }} · ${{ github.sha }}
+run-name: M4-E auto-48h · ${{ github.sha }}
 
 on:
   pull_request:
@@ -11,22 +11,6 @@ on:
       - main
     paths:
       - .work/M4_E_V2_START
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: Smoke-check the campaign plumbing or run the full 48-hour measurement.
-        required: true
-        type: choice
-        default: smoke
-        options:
-          - smoke
-          - full
-      observer_region:
-        description: Coarse non-secret observer region label. Hosted runners should keep the default.
-        required: true
-        type: string
-        default: github-actions-hosted-variable
-
 permissions:
   contents: read
   actions: write
@@ -99,7 +83,7 @@ jobs:
 
   smoke:
     name: M4-E workflow smoke
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -117,7 +101,7 @@ jobs:
           previous_cache_key: ""
           checkpoint_cache_key: m4-e-${{ github.run_id }}-smoke
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
       - name: Delete smoke checkpoint cache
@@ -134,7 +118,7 @@ jobs:
   segment_01:
     name: M4-E 01 · baseline-live1
     needs: smoke
-    if: ${{ always() && ((github.event_name == 'push' && needs.smoke.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')) }}
+    if: ${{ always() && github.event_name == 'push' && needs.smoke.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -152,13 +136,13 @@ jobs:
           previous_cache_key: ""
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s01
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_02:
     name: M4-E 02 · probe-live1
     needs: segment_01
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -176,13 +160,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s01
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s02
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_03:
     name: M4-E 03 · probe-live1
     needs: segment_02
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -200,13 +184,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s02
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s03
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_04:
     name: M4-E 04 · live2
     needs: segment_03
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -224,13 +208,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s03
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s04
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_05:
     name: M4-E 05 · live2
     needs: segment_04
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -248,13 +232,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s04
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s05
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_06:
     name: M4-E 06 · live3
     needs: segment_05
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -272,13 +256,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s05
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s06
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_07:
     name: M4-E 07 · live3
     needs: segment_06
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -296,13 +280,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s06
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s07
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_08:
     name: M4-E 08 · live3
     needs: segment_07
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -320,13 +304,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s07
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s08
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_09:
     name: M4-E 09 · live3
     needs: segment_08
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -344,13 +328,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s08
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s09
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_10:
     name: M4-E 10 · live3
     needs: segment_09
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -368,13 +352,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s09
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s10
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_11:
     name: M4-E 11 · live3
     needs: segment_10
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -392,13 +376,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s10
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s11
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "false"
 
   segment_12:
     name: M4-E 12 · live3
     needs: segment_11
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -416,13 +400,13 @@ jobs:
           previous_cache_key: m4-e-${{ github.run_id }}-s11
           checkpoint_cache_key: m4-e-${{ github.run_id }}-s12
           run_id: m4-ci-${{ github.run_id }}
-          observer_region: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          observer_region: github-actions-hosted-variable
           final_segment: "true"
 
   finalize:
     name: M4-E analyze and validate
     needs: segment_12
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -505,7 +489,7 @@ jobs:
         shell: bash
         env:
           EXPECTED_RUN_ID: m4-ci-${{ github.run_id }}
-          EXPECTED_OBSERVER_REGION: ${{ inputs.observer_region || 'github-actions-hosted-variable' }}
+          EXPECTED_OBSERVER_REGION: github-actions-hosted-variable
         run: |
           set -euo pipefail
           test -f m4-ci/checkpoint/campaign.json
