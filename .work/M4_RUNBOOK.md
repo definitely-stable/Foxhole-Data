@@ -51,64 +51,76 @@ source payloads.
 
 ## 3. GitHub Actions campaign
 
-The repository contains a manual workflow:
+The repository contains an automatic one-shot hosted-runner workflow:
 
 ~~~text
 .github/workflows/m4-live-campaign.yml
 ~~~
 
-It has two modes:
+Pull requests only validate the workflow/action definition and MUST issue zero
+War API requests. The live campaign starts only after the one-shot marker
+.work/M4_E_V2_START is merged to main. There is no manual approval or
+workflow_dispatch step in the M4-E v2 path.
 
-- `smoke` — one two-minute Live-1 baseline segment to verify runner, PostgreSQL,
-  migration, Worker, analyzer, checkpoint and safety-guard plumbing;
-- `full` — the controlled M4-E campaign.
+The push first runs a six-minute Live-1 canary. The 48-hour campaign starts
+automatically only when that canary succeeds.
 
-The full hosted-runner preset records 72 hours of active Worker runtime as
-18 sequential four-hour jobs:
+The hosted-runner preset records 48 hours of active Worker runtime as 12
+sequential four-hour jobs:
 
 ~~~text
-segments 01-02   8 h   Live-1 baseline
-segments 03-04   8 h   Live-1 bounded probe
-segments 05-06   8 h   Live-1 + Live-2, probe remains Live-1 only
-segments 07-18  48 h   Live-1 + Live-2 + Live-3, probe remains Live-1 only
+segment 01       4 h   Live-1 baseline
+segments 02-03   8 h   Live-1 bounded probe
+segments 04-05   8 h   Live-1 + Live-2, probe disabled
+segments 06-12  28 h   Live-1 + Live-2 + Live-3, probe disabled
 ~~~
 
-Four-hour segments stay below the hosted-runner job execution limit while the
-workflow remains far below the workflow-level execution limit. Every job checks
-out the same workflow-dispatch SHA.
+Four-hour segments remain below the hosted-runner job execution ceiling while
+leaving time for restore/build/analyze/checkpoint work. Every segment checks out
+the exact campaign SHA.
 
-PostgreSQL is checkpointed with exact-key GitHub Actions caches between jobs.
-The preceding checkpoint is deleted only after the next segment passes its
-safety guard, so a failed segment leaves the last known-good checkpoint
-available. Raw evidence is not committed to git.
+The Worker transport itself enforces an outbound safety envelope before any
+HTTP exchange:
 
-The hosted-runner observer label is
-`github-actions-hosted-variable`. Because GitHub-hosted jobs are not guaranteed
-to originate from one stable network location, source latency and derived
-executor-capacity results from this mode must retain that limitation. A
-stable-region self-hosted campaign may later be used if latency precision proves
-decision-critical.
+~~~text
+same upstream host: >= 400 ms between sends (<= 2.5 req/s)
+all War API hosts:  >= 150 ms between sends (<= ~6.67 req/s)
+~~~
 
-The per-segment guard stops expansion for:
+These are hard safety ceilings, not target polling rates. Normal collection is
+slower because capability cadence, source cache eligibility and Retry-After are
+also lower bounds.
+
+The live loop additionally checks durable Fetch evidence every 30 seconds and
+stops the Worker immediately when it observes:
 
 - any 401/403;
-- any 404 on root `war` or `maps`;
-- at least three 429 responses in a segment;
+- any 429;
 - any body read/limit error;
-- at least three uncertain exchanges in a segment;
-- at least five 5xx responses when they are also at least 5% of segment Fetches;
-- less than 1 GiB runner disk after collection.
+- more than 390 captured requests in the preceding 60 seconds;
+- at least five 5xx responses when they are also at least 5% of the preceding
+  five-minute Fetch window.
 
-Parse failures are surfaced as warnings for evidence review rather than silently
-converted into a source-health conclusion.
+The post-segment guard remains a second line of defence and also checks root
+404s, uncertain exchanges, parse failures and disk pressure.
 
-The final job requires the exact 18-segment sequence and at least 259,200
-recorded active Worker seconds, generates the complete report, runs
-`validate`, uploads the report artifact and fails if publication evidence is
-structurally incomplete.
+PostgreSQL checkpoints are streamed between the runner and container rather
+than written to a reused container /tmp path. Every dump has a SHA-256
+sidecar, is verified before restore, and is structurally checked with
+pg_restore --list before it replaces the previous local dump.
 
-The manual workflow can only be dispatched after the workflow file exists on
-the default branch. Run `smoke` first, then `full`.
+Checkpoint state is stored under exact-key GitHub Actions caches between
+sequential jobs. The preceding known-good cache is deleted only after the next
+segment succeeds, so a failed segment does not destroy the last recoverable
+checkpoint.
+
+The final job requires the exact 12-segment sequence and at least 172,800
+recorded active Worker seconds. Wall-clock runner provisioning/restore gaps do
+not count toward the 48-hour active-observation requirement.
+
+The hosted-runner observer label is github-actions-hosted-variable. Because
+GitHub-hosted jobs are not guaranteed to originate from one stable network
+location, latency results retain that limitation.
 
 ## 4. Preflight
 
@@ -138,7 +150,7 @@ dotnet run --project tools/FoxData.SourceMeasurement -c Release --no-build --   
 
 ## 5. Phase 1 — Live-1 baseline
 
-Target window: approximately 6 hours.
+Target window: 4 active hours.
 
 Environment:
 
@@ -164,7 +176,7 @@ Do not add Live-2/Live-3 and do not enable the probe during this phase.
 
 ## 6. Phase 2 — bounded Live-1 probe
 
-Target window: approximately 6 hours.
+Target window: 8 active hours.
 
 Keep Live-1 enabled and activate only the deterministic probe cohort:
 
@@ -191,28 +203,25 @@ requires it.
 
 ## 7. Phase 3 — add Live-2
 
-Target window: approximately hour 12 through hour 24.
+Target window: 8 active hours after the probe phase.
 
-Enable Live-2 without changing the global bootstrap profile:
+Enable Live-2 without changing the global bootstrap profile and disable the
+probe before expanding the shard set:
 
 ~~~text
 WarApi__EnabledShards__0=live-1
 WarApi__EnabledShards__1=live-2
 ~~~
 
-The recommended default is to keep the high-resolution probe limited to Live-1
-while Live-2 establishes baseline behaviour:
-
 ~~~text
-WarApi__MeasurementProbe__EnabledShards__0=live-1
+WarApi__MeasurementProbe__Enabled=false
 ~~~
 
-Do not add Live-2 to the probe cohort in the same deployment that first enables
-the shard. Separate shard expansion from cadence expansion.
+Do not combine first-time shard expansion with elevated probe cadence.
 
 ## 8. Phase 4 — add Live-3
 
-Target window: approximately hour 24 through hour 72.
+Target window: 28 active hours after Live-2 expansion.
 
 Enable the final live shard:
 
@@ -233,12 +242,13 @@ reviewed change is justified by measured queue/scheduling lag.
 
 ## 9. Stop / hold conditions
 
-Stop expansion and normally disable ingestion when any of these becomes
-credible and persistent:
+Stop expansion and disable ingestion when any hard upstream-protection
+condition becomes credible. In the automated M4-E v2 path, the first observed
+401/403 or 429 is sufficient to stop the current segment.
 
-- 401/403 from live source endpoints;
+- any 401/403 from live source endpoints;
 - root endpoint 404;
-- sustained 429;
+- any 429;
 - sustained 5xx burst;
 - unexpected response-header/body-limit failures;
 - material uncertain-exchange burst;
