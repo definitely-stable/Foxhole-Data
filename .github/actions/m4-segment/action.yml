@@ -39,8 +39,38 @@ runs:
         cache: true
         cache-dependency-path: "**/packages.lock.json"
 
+    - name: Restore completed segment checkpoint cache
+      id: restore_current_cache
+      uses: actions/cache/restore@v6
+      with:
+        path: m4-ci/checkpoint
+        key: ${{ inputs.checkpoint_cache_key }}
+
+    - name: Restore completed segment checkpoint artifact
+      id: restore_current_artifact
+      if: ${{ steps.restore_current_cache.outputs.cache-hit != 'true' }}
+      continue-on-error: true
+      uses: actions/download-artifact@v7
+      with:
+        name: ${{ inputs.checkpoint_cache_key }}-checkpoint
+        path: m4-ci/checkpoint
+
+    - name: Resolve completed segment resume state
+      id: resume_state
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.restore_current_cache.outputs.cache-hit }}
+        ARTIFACT_OUTCOME: ${{ steps.restore_current_artifact.outcome }}
+      run: |
+        if [[ "$CACHE_HIT" == "true" || "$ARTIFACT_OUTCOME" == "success" ]]; then
+          echo "current_checkpoint=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "current_checkpoint=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Restore previous campaign checkpoint
-      if: ${{ inputs.previous_cache_key != '' }}
+      id: restore_previous
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && inputs.previous_cache_key != '' }}
       uses: actions/cache/restore@v6
       with:
         path: m4-ci/checkpoint
@@ -51,53 +81,14 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-
-        docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
-        docker run \
-          --detach \
-          --name foxdata-m4-postgres \
-          --publish 127.0.0.1:5432:5432 \
-          --env POSTGRES_DB=foxdata \
-          --env POSTGRES_USER=foxdata \
-          --env POSTGRES_PASSWORD=foxdata_m4 \
-          postgres:18.6-bookworm >/dev/null
-
-        for attempt in $(seq 1 60); do
-          if docker exec foxdata-m4-postgres \
-              pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
-            exit 0
-          fi
-          sleep 1
-        done
-
-        docker logs foxdata-m4-postgres
-        exit 1
+        bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
     - name: Restore PostgreSQL checkpoint
-      if: ${{ inputs.previous_cache_key != '' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint == 'true' || inputs.previous_cache_key != '' }}
       shell: bash
       run: |
         set -euo pipefail
-
-        test -f m4-ci/checkpoint/checkpoint.dump
-        test -f m4-ci/checkpoint/checkpoint.dump.sha256
-        (
-          cd m4-ci/checkpoint
-          sha256sum --check checkpoint.dump.sha256
-        )
-
-        cat m4-ci/checkpoint/checkpoint.dump |
-          docker exec \
-            --interactive \
-            --env PGPASSWORD=foxdata_m4 \
-            foxdata-m4-postgres \
-            pg_restore \
-              --clean \
-              --if-exists \
-              --no-owner \
-              --no-privileges \
-              --username foxdata \
-              --dbname foxdata
+        bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-ci/checkpoint
 
     - name: Restore and build exact campaign SHA
       shell: bash
@@ -171,6 +162,8 @@ runs:
 
     - name: Run bounded War API collection segment
       id: run_segment
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' }}
+      continue-on-error: true
       shell: bash
       env:
         M4_SEGMENT_ID: ${{ inputs.segment_id }}
@@ -190,7 +183,7 @@ runs:
         export WarApi__EnableDev=false
         export WarApi__Http__OutboundGlobalMinimumIntervalMilliseconds=150
         export WarApi__Http__OutboundPerHostMinimumIntervalMilliseconds=400
-        export WarApi__Http__UserAgent="Foxhole-Chronicle/FoxData-M4 (+https://github.com/definitely-stable/Foxhole-Data)"
+        export WarApi__Http__UserAgent="FoxData/M4 (+https://github.com/definitely-stable/Foxhole-Data)"
         export WarApi__EnabledShards__0=live-1
         unset WarApi__EnabledShards__1 || true
         unset WarApi__EnabledShards__2 || true
@@ -343,11 +336,13 @@ runs:
           }' >> m4-ci/checkpoint/segments.ndjson
 
         if [[ -n "$traffic_violation" ]]; then
-          exit 78
+          echo "traffic_violation=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "traffic_violation=false" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Capture final storage snapshot and analysis boundary
-      if: ${{ inputs.final_segment == 'true' }}
+      if: ${{ inputs.final_segment == 'true' && steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -376,24 +371,81 @@ runs:
             --label after \
             --output m4-ci/checkpoint/measurement
 
+    - name: Create PostgreSQL checkpoint
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-ci/checkpoint
+
+    - name: Save campaign checkpoint cache
+      id: save_checkpoint_cache
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      continue-on-error: true
+      uses: actions/cache/save@v6
+      with:
+        path: m4-ci/checkpoint
+        key: ${{ inputs.checkpoint_cache_key }}
+
+    - name: Upload campaign checkpoint recovery artifact
+      id: save_checkpoint_artifact
+      if: ${{ always() && steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      continue-on-error: true
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.checkpoint_cache_key }}-checkpoint
+        path: m4-ci/checkpoint
+        if-no-files-found: error
+        retention-days: 4
+        compression-level: 0
+
+    - name: Enforce checkpoint persistence
+      if: ${{ always() && steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome == 'success' }}
+      shell: bash
+      env:
+        CACHE_OUTCOME: ${{ steps.save_checkpoint_cache.outcome }}
+        ARTIFACT_OUTCOME: ${{ steps.save_checkpoint_artifact.outcome }}
+      run: |
+        if [[ "$CACHE_OUTCOME" != "success" && "$ARTIFACT_OUTCOME" != "success" ]]; then
+          echo "Neither checkpoint cache nor recovery artifact persisted successfully." >&2
+          exit 1
+        fi
+
+    - name: Enforce collection completion
+      if: ${{ steps.resume_state.outputs.current_checkpoint != 'true' && steps.run_segment.outcome != 'success' }}
+      shell: bash
+      run: |
+        echo "M4-E collection step failed before an authoritative segment checkpoint could be persisted." >&2
+        exit 1
+
     - name: Analyze segment evidence
       shell: bash
       env:
+        M4_SEGMENT_ID: ${{ inputs.segment_id }}
         M4_PHASE: ${{ inputs.phase }}
         M4_RUN_ID: ${{ inputs.run_id }}
         M4_OBSERVER_REGION: ${{ inputs.observer_region }}
-        SEGMENT_START: ${{ steps.run_segment.outputs.segment_start }}
-        SEGMENT_END: ${{ steps.run_segment.outputs.segment_end }}
       run: |
         set -euo pipefail
         rm -rf m4-ci/segment-report
         mkdir -p m4-ci/segment-report
 
+        segment_json="$(
+          jq -sc \
+            --arg segment "$M4_SEGMENT_ID" \
+            '[.[] | select(.segment == $segment)] | last // empty' \
+            m4-ci/checkpoint/segments.ndjson
+        )"
+        test -n "$segment_json"
+
+        segment_start="$(jq -r '.startInclusive' <<< "$segment_json")"
+        segment_end="$(jq -r '.endExclusive' <<< "$segment_json")"
+
         args=(
           analyze
           --run-id "$M4_RUN_ID"
-          --start "$SEGMENT_START"
-          --end "$SEGMENT_END"
+          --start "$segment_start"
+          --end "$segment_end"
           --output m4-ci/segment-report
           --observer-region "$M4_OBSERVER_REGION"
           --repository-sha "$GITHUB_SHA"
@@ -415,56 +467,22 @@ runs:
             --no-build \
             -- "${args[@]}"
 
-    - name: Create PostgreSQL checkpoint
-      shell: bash
-      run: |
-        set -euo pipefail
-        rm -f \
-          m4-ci/checkpoint/checkpoint.dump \
-          m4-ci/checkpoint/checkpoint.dump.tmp \
-          m4-ci/checkpoint/checkpoint.dump.sha256
-
-        docker exec \
-          --env PGPASSWORD=foxdata_m4 \
-          foxdata-m4-postgres \
-          pg_dump \
-            --format=custom \
-            --no-owner \
-            --no-privileges \
-            --username foxdata \
-            --dbname foxdata \
-          > m4-ci/checkpoint/checkpoint.dump.tmp
-
-        test -s m4-ci/checkpoint/checkpoint.dump.tmp
-
-        cat m4-ci/checkpoint/checkpoint.dump.tmp |
-          docker exec \
-            --interactive \
-            foxdata-m4-postgres \
-            pg_restore --list \
-          >/dev/null
-
-        mv \
-          m4-ci/checkpoint/checkpoint.dump.tmp \
-          m4-ci/checkpoint/checkpoint.dump
-        (
-          cd m4-ci/checkpoint
-          sha256sum checkpoint.dump > checkpoint.dump.sha256
-        )
-
-    - name: Save campaign checkpoint
-      uses: actions/cache/save@v6
-      with:
-        path: m4-ci/checkpoint
-        key: ${{ inputs.checkpoint_cache_key }}
-
     - name: Enforce per-segment safety guard
       shell: bash
       env:
-        SEGMENT_START: ${{ steps.run_segment.outputs.segment_start }}
-        SEGMENT_END: ${{ steps.run_segment.outputs.segment_end }}
+        M4_SEGMENT_ID: ${{ inputs.segment_id }}
       run: |
         set -euo pipefail
+
+        segment_json="$(
+          jq -sc \
+            --arg segment "$M4_SEGMENT_ID" \
+            '[.[] | select(.segment == $segment)] | last // empty' \
+            m4-ci/checkpoint/segments.ndjson
+        )"
+        test -n "$segment_json"
+        SEGMENT_START="$(jq -r '.startInclusive' <<< "$segment_json")"
+        SEGMENT_END="$(jq -r '.endExclusive' <<< "$segment_json")"
 
         summary="m4-ci/segment-report/measurement-summary.json"
         fetch_count="$(jq -r '.fetchCount' "$summary")"
@@ -584,4 +602,4 @@ runs:
     - name: Stop PostgreSQL
       if: ${{ always() }}
       shell: bash
-      run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+      run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres

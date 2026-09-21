@@ -6,12 +6,16 @@ on:
     paths:
       - .github/workflows/m4-live-campaign.yml
       - .github/actions/m4-segment/action.yml
+      - .github/workflows/m4-checkpoint-rehearsal.yml
+      - .github/scripts/m4-checkpoint.sh
+      - .github/scripts/m4-postgres.sh
   push:
     branches:
       - main
     paths:
       - .work/M4_E_V2_START
       - .work/M4_E_V2_RETRY_01
+      - .work/M4_E_V3_START
 permissions:
   contents: read
   actions: write
@@ -28,7 +32,7 @@ jobs:
   validate-definition:
     name: Validate M4-E workflow definition
     if: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -44,6 +48,7 @@ jobs:
 
           files = [
             ".github/workflows/m4-live-campaign.yml",
+            ".github/workflows/m4-checkpoint-rehearsal.yml",
             ".github/actions/m4-segment/action.yml",
           ]
 
@@ -80,12 +85,27 @@ jobs:
 
           action = YAML.load_file(".github/actions/m4-segment/action.yml")
           abort("M4 segment action is not composite") unless action.dig("runs", "using") == "composite"
+
+          action_text = File.read(".github/actions/m4-segment/action.yml")
+          save_at = action_text.index("- name: Save campaign checkpoint")
+          analyze_at = action_text.index("- name: Analyze segment evidence")
+          abort("M4 segment must persist its checkpoint before analysis") unless save_at && analyze_at && save_at < analyze_at
+          abort("M4 segment must support exact completed-segment resume") unless action_text.include?("Resolve completed segment resume state")
+          abort("M4 segment must keep a recovery artifact") unless action_text.include?("Upload campaign checkpoint recovery artifact")
           RUBY
+
+          bash -n .github/scripts/m4-checkpoint.sh
+          bash -n .github/scripts/m4-postgres.sh
+
+  checkpoint_rehearsal:
+    name: M4 checkpoint rehearsal gate
+    uses: ./.github/workflows/m4-checkpoint-rehearsal.yml
 
   smoke:
     name: M4-E workflow smoke
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    needs: checkpoint_rehearsal
+    if: ${{ github.event_name == 'push' && needs.checkpoint_rehearsal.result == 'success' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout exact campaign SHA
@@ -120,7 +140,7 @@ jobs:
     name: M4-E 01 · baseline-live1
     needs: smoke
     if: ${{ always() && github.event_name == 'push' && needs.smoke.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -144,7 +164,7 @@ jobs:
     name: M4-E 02 · probe-live1
     needs: segment_01
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -168,7 +188,7 @@ jobs:
     name: M4-E 03 · probe-live1
     needs: segment_02
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -192,7 +212,7 @@ jobs:
     name: M4-E 04 · live2
     needs: segment_03
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -216,7 +236,7 @@ jobs:
     name: M4-E 05 · live2
     needs: segment_04
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -240,7 +260,7 @@ jobs:
     name: M4-E 06 · live3
     needs: segment_05
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -264,7 +284,7 @@ jobs:
     name: M4-E 07 · live3
     needs: segment_06
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -288,7 +308,7 @@ jobs:
     name: M4-E 08 · live3
     needs: segment_07
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -312,7 +332,7 @@ jobs:
     name: M4-E 09 · live3
     needs: segment_08
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -336,7 +356,7 @@ jobs:
     name: M4-E 10 · live3
     needs: segment_09
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -360,7 +380,7 @@ jobs:
     name: M4-E 11 · live3
     needs: segment_10
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -384,7 +404,7 @@ jobs:
     name: M4-E 12 · live3
     needs: segment_11
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
       - name: Checkout exact campaign SHA
@@ -408,7 +428,7 @@ jobs:
     name: M4-E analyze and validate
     needs: segment_12
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout exact campaign SHA
@@ -434,49 +454,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
-          docker run \
-            --detach \
-            --name foxdata-m4-postgres \
-            --publish 127.0.0.1:5432:5432 \
-            --env POSTGRES_DB=foxdata \
-            --env POSTGRES_USER=foxdata \
-            --env POSTGRES_PASSWORD=foxdata_m4 \
-            postgres:18.6-bookworm >/dev/null
-
-          for attempt in $(seq 1 60); do
-            if docker exec foxdata-m4-postgres \
-                pg_isready -U foxdata -d foxdata >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-
-          docker logs foxdata-m4-postgres
-          exit 1
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
       - name: Restore final PostgreSQL state
         shell: bash
         run: |
           set -euo pipefail
-          test -s m4-ci/checkpoint/checkpoint.dump
-          test -f m4-ci/checkpoint/checkpoint.dump.sha256
-          (
-            cd m4-ci/checkpoint
-            sha256sum --check checkpoint.dump.sha256
-          )
-          cat m4-ci/checkpoint/checkpoint.dump |
-            docker exec \
-              --interactive \
-              --env PGPASSWORD=foxdata_m4 \
-              foxdata-m4-postgres \
-              pg_restore \
-                --clean \
-                --if-exists \
-                --no-owner \
-                --no-privileges \
-                --username foxdata \
-                --dbname foxdata
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-ci/checkpoint
 
       - name: Restore and build exact campaign SHA
         shell: bash
@@ -640,4 +624,4 @@ jobs:
       - name: Stop PostgreSQL
         if: ${{ always() }}
         shell: bash
-        run: docker rm --force foxdata-m4-postgres >/dev/null 2>&1 || true
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres

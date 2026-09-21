@@ -1,0 +1,221 @@
+name: M4 Checkpoint Rehearsal
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  M4_REHEARSAL_CACHE_01: m4-rehearsal-${{ github.run_id }}-01
+  M4_REHEARSAL_CACHE_02: m4-rehearsal-${{ github.run_id }}-02
+
+jobs:
+  seed:
+    name: Seed checkpoint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Start PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
+
+      - name: Seed deterministic database state
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            psql \
+              --set ON_ERROR_STOP=1 \
+              --username foxdata \
+              --dbname foxdata \
+              --command "
+                CREATE TABLE public.m4_checkpoint_rehearsal (
+                  id integer PRIMARY KEY,
+                  value text NOT NULL
+                );
+                INSERT INTO public.m4_checkpoint_rehearsal(id, value)
+                VALUES (1, 'alpha'), (2, 'beta');
+              "
+
+      - name: Create and validate checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-rehearsal/checkpoint
+
+      - name: Persist seed checkpoint
+        uses: actions/cache/save@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_01 }}
+
+      - name: Persist seed recovery artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m4-rehearsal-${{ github.run_id }}-01-artifact
+          path: m4-rehearsal/checkpoint
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
+
+  restore_and_mutate:
+    name: Fresh runner restore and mutate
+    needs: seed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore seed checkpoint
+        uses: actions/cache/restore@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_01 }}
+          fail-on-cache-miss: true
+
+      - name: Start PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
+
+      - name: Restore and verify seed state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-rehearsal/checkpoint
+
+          actual="$(
+            docker exec \
+              --env PGPASSWORD=foxdata_m4 \
+              foxdata-m4-postgres \
+              psql -At \
+                --username foxdata \
+                --dbname foxdata \
+                --command "
+                  SELECT string_agg(id::text || ':' || value, ',' ORDER BY id)
+                  FROM public.m4_checkpoint_rehearsal;
+                "
+          )"
+          test "$actual" = "1:alpha,2:beta"
+
+      - name: Mutate restored state and checkpoint again
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            psql \
+              --set ON_ERROR_STOP=1 \
+              --username foxdata \
+              --dbname foxdata \
+              --command "
+                UPDATE public.m4_checkpoint_rehearsal
+                SET value = 'beta-updated'
+                WHERE id = 2;
+                INSERT INTO public.m4_checkpoint_rehearsal(id, value)
+                VALUES (3, 'gamma');
+              "
+
+          bash .github/scripts/m4-checkpoint.sh create foxdata-m4-postgres m4-rehearsal/checkpoint
+
+      - name: Persist mutated checkpoint
+        uses: actions/cache/save@v6
+        with:
+          path: m4-rehearsal/checkpoint
+          key: ${{ env.M4_REHEARSAL_CACHE_02 }}
+
+      - name: Persist mutated recovery artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m4-rehearsal-${{ github.run_id }}-02-artifact
+          path: m4-rehearsal/checkpoint
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
+
+  verify:
+    name: Second fresh runner continuity
+    needs: restore_and_mutate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore mutated recovery artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: m4-rehearsal-${{ github.run_id }}-02-artifact
+          path: m4-rehearsal/checkpoint
+
+      - name: Start PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
+
+      - name: Restore mutated state and verify exact continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-rehearsal/checkpoint
+
+          actual="$(
+            docker exec \
+              --env PGPASSWORD=foxdata_m4 \
+              foxdata-m4-postgres \
+              psql -At \
+                --username foxdata \
+                --dbname foxdata \
+                --command "
+                  SELECT string_agg(id::text || ':' || value, ',' ORDER BY id)
+                  FROM public.m4_checkpoint_rehearsal;
+                "
+          )"
+          test "$actual" = "1:alpha,2:beta-updated,3:gamma"
+
+      - name: Prove corrupted checkpoints fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp -R m4-rehearsal/checkpoint m4-rehearsal/corrupt
+          printf 'corruption' >> m4-rehearsal/corrupt/checkpoint.dump
+          if bash .github/scripts/m4-checkpoint.sh verify foxdata-m4-postgres m4-rehearsal/corrupt; then
+            echo "Corrupted checkpoint unexpectedly passed validation." >&2
+            exit 1
+          fi
+
+          cp -R m4-rehearsal/checkpoint m4-rehearsal/missing-sha
+          rm m4-rehearsal/missing-sha/checkpoint.dump.sha256
+          if bash .github/scripts/m4-checkpoint.sh verify foxdata-m4-postgres m4-rehearsal/missing-sha; then
+            echo "Checkpoint without SHA-256 unexpectedly passed validation." >&2
+            exit 1
+          fi
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres

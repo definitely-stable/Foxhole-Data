@@ -79,7 +79,7 @@ public sealed record WarApiWorkerOptions(
             ReadString(
                 section,
                 "Http:UserAgent",
-                "Foxhole-Chronicle/FoxData-M4 (+https://github.com/definitely-stable/Foxhole-Data)"));
+                "FoxData/M4 (+https://github.com/definitely-stable/Foxhole-Data)"));
 
         Validate(options, configuration);
         return options;

@@ -470,13 +470,16 @@ overdue after a hosted-runner restart:
 - no in-process HTTP retry or hedging;
 - source cache eligibility and Retry-After remain authoritative lower bounds.
 
-### Phase 0 — preflight/canary
+### Phase 0 — checkpoint rehearsal, preflight and canary
 
 Require:
 
+- the exact checkpoint implementation to pass create/restore/mutate/restore
+  across fresh GitHub-hosted runners without upstream traffic;
+- corrupted or incomplete checkpoint material to fail closed;
 - migration bundle applied;
 - mandatory repository gates green;
-- an automated Live-1 canary succeeds;
+- an automated Live-1 canary succeeds only after the checkpoint rehearsal;
 - dedicated measurement database/volume or otherwise clearly bounded data window;
 - Worker starts with source ingestion disabled by default;
 - sufficient disk capacity;
