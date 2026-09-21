@@ -1,0 +1,3 @@
+M4-E v2 automatic CI campaign trigger.
+
+Created once by the safety redesign. Merging this file to main starts the automatic six-minute Live-1 canary; a successful canary continues into the bounded 48-hour campaign. Do not edit this marker merely to rerun a failed campaign without a reviewed fix.
