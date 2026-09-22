@@ -1,0 +1,318 @@
+name: M4 Resume From S02
+run-name: M4-E resume s03 · ${{ github.sha }}
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/m4-resume-s03.yml
+      - .github/workflows/m4-segment-job.yml
+      - .github/workflows/m4-finalize-job.yml
+      - .github/workflows/m4-checkpoint-rehearsal.yml
+      - .github/actions/m4-segment/action.yml
+      - .github/scripts/m4-checkpoint.sh
+      - .github/scripts/m4-postgres.sh
+      - .work/M4_RUNBOOK.md
+  push:
+    branches: [main]
+    paths:
+      - .work/M4_E_V4_RESUME_S03
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: m4-live-campaign
+  cancel-in-progress: false
+
+env:
+  M4_CAMPAIGN_RUN_ID: m4-ci-35604611891
+  M4_CAMPAIGN_REPOSITORY_SHA: 11ce905035b094832ddc18d524b4b0a5b9483724
+  M4_SOURCE_RUN_ID: "35604611891"
+  M4_SOURCE_ARTIFACT: m4-e-35604611891-s02-checkpoint
+  M4_OBSERVER_REGION: github-actions-hosted-variable
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate recovery workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/m4-resume-s03.yml"); YAML.load_file(".github/workflows/m4-segment-job.yml"); YAML.load_file(".github/workflows/m4-finalize-job.yml")'
+          bash -n .github/scripts/m4-postgres.sh
+          bash -n .github/scripts/m4-checkpoint.sh
+          grep -q '/proc/1/comm' .github/scripts/m4-postgres.sh
+          grep -q -- '--host 127.0.0.1' .github/scripts/m4-postgres.sh
+          grep -q 'preloaded_previous_checkpoint' .github/actions/m4-segment/action.yml
+          grep -q 'campaign_repository_sha' .github/actions/m4-segment/action.yml
+
+  rehearsal:
+    needs: validate
+    uses: ./.github/workflows/m4-checkpoint-rehearsal.yml
+
+  compatibility:
+    needs: rehearsal
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Prove data plane is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$M4_CAMPAIGN_REPOSITORY_SHA^{commit}"
+          changed="$(git diff --name-only "$M4_CAMPAIGN_REPOSITORY_SHA" "$GITHUB_SHA")"
+          printf '%s\n' "$changed"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(\.github/|\.work/)' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "Resume forbidden: data-plane files changed." >&2
+            printf '%s\n' "$unexpected" >&2
+            exit 1
+          fi
+          test "$(git rev-parse "$M4_CAMPAIGN_REPOSITORY_SHA:src")" = "$(git rev-parse "$GITHUB_SHA:src")"
+          test "$(git rev-parse "$M4_CAMPAIGN_REPOSITORY_SHA:tools")" = "$(git rev-parse "$GITHUB_SHA:tools")"
+
+  preflight:
+    needs: compatibility
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download saved s02 checkpoint
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.M4_SOURCE_ARTIFACT }}
+          path: m4-ci/checkpoint
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.M4_SOURCE_RUN_ID }}
+      - name: Verify saved campaign metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s m4-ci/checkpoint/checkpoint.dump
+          test -s m4-ci/checkpoint/checkpoint.dump.sha256
+          test "$(jq -r '.runId' m4-ci/checkpoint/campaign.json)" = "$M4_CAMPAIGN_RUN_ID"
+          test "$(jq -r '.repositorySha' m4-ci/checkpoint/campaign.json)" = "$M4_CAMPAIGN_REPOSITORY_SHA"
+          test "$(jq -r '.observerRegion' m4-ci/checkpoint/campaign.json)" = "$M4_OBSERVER_REGION"
+          test "$(wc -l < m4-ci/checkpoint/segments.ndjson | tr -d '[:space:]')" = "2"
+          test "$(jq -r '.segment' m4-ci/checkpoint/segments.ndjson | paste -sd, -)" = "s01,s02"
+      - name: Restore exact s02 checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-ci/checkpoint
+          fetch_count="$(
+            docker exec --env PGPASSWORD=foxdata_m4 foxdata-m4-postgres \
+              psql --host 127.0.0.1 --port 5432 --username foxdata --dbname foxdata \
+                --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 \
+                --command 'SELECT COUNT(*) FROM evidence.fetches;'
+          )"
+          (( fetch_count > 0 ))
+          echo "Verified saved s02 checkpoint with $fetch_count Fetch rows."
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
+
+  segment_03:
+    name: M4-E 03 · probe-live1 · resumed
+    needs: preflight
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s03
+      phase: probe-live1
+      previous_cache_key: ""
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s03"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: true
+      source_artifact_run_id: "35604611891"
+      source_artifact_name: "m4-e-35604611891-s02-checkpoint"
+
+  segment_04:
+    name: M4-E 04 · live2 · resumed
+    needs: segment_03
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s04
+      phase: live2
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s03"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s04"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_05:
+    name: M4-E 05 · live2 · resumed
+    needs: segment_04
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s05
+      phase: live2
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s04"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s05"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_06:
+    name: M4-E 06 · live3 · resumed
+    needs: segment_05
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s06
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s05"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s06"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_07:
+    name: M4-E 07 · live3 · resumed
+    needs: segment_06
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s07
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s06"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s07"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_08:
+    name: M4-E 08 · live3 · resumed
+    needs: segment_07
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s08
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s07"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s08"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_09:
+    name: M4-E 09 · live3 · resumed
+    needs: segment_08
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s09
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s08"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s09"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_10:
+    name: M4-E 10 · live3 · resumed
+    needs: segment_09
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s10
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s09"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s10"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_11:
+    name: M4-E 11 · live3 · resumed
+    needs: segment_10
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s11
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s10"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s11"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: false
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  segment_12:
+    name: M4-E 12 · live3 · resumed
+    needs: segment_11
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-segment-job.yml
+    with:
+      segment_id: s12
+      phase: live3
+      previous_cache_key: "m4-e-resume-${{ github.run_id }}-s11"
+      checkpoint_cache_key: "m4-e-resume-${{ github.run_id }}-s12"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      final_segment: true
+      preloaded_previous_checkpoint: false
+      source_artifact_run_id: ""
+      source_artifact_name: ""
+
+  finalize:
+    name: M4-E finalize · resumed
+    needs: segment_12
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/m4-finalize-job.yml
+    with:
+      final_cache_key: "m4-e-resume-${{ github.run_id }}-s12"
+      campaign_run_id: m4-ci-35604611891
+      observer_region: github-actions-hosted-variable
+      campaign_repository_sha: 11ce905035b094832ddc18d524b4b0a5b9483724
+      source_run_id: "35604611891"
+      source_artifact: m4-e-35604611891-s02-checkpoint
