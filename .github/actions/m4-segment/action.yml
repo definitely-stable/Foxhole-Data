@@ -28,6 +28,14 @@ inputs:
     description: true only for the last full-campaign segment.
     required: false
     default: "false"
+  preloaded_previous_checkpoint:
+    description: true when m4-ci/checkpoint already contains the preceding segment checkpoint.
+    required: false
+    default: "false"
+  campaign_repository_sha:
+    description: Stable data-plane repository SHA recorded for the campaign; defaults to the current SHA.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -84,7 +92,7 @@ runs:
         bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
 
     - name: Restore PostgreSQL checkpoint
-      if: ${{ steps.resume_state.outputs.current_checkpoint == 'true' || inputs.previous_cache_key != '' }}
+      if: ${{ steps.resume_state.outputs.current_checkpoint == 'true' || inputs.previous_cache_key != '' || inputs.preloaded_previous_checkpoint == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -117,9 +125,15 @@ runs:
       env:
         M4_RUN_ID: ${{ inputs.run_id }}
         M4_OBSERVER_REGION: ${{ inputs.observer_region }}
+        M4_CAMPAIGN_REPOSITORY_SHA: ${{ inputs.campaign_repository_sha }}
       run: |
         set -euo pipefail
         mkdir -p m4-ci/checkpoint/measurement
+
+        repository_sha="$M4_CAMPAIGN_REPOSITORY_SHA"
+        if [[ -z "$repository_sha" ]]; then
+          repository_sha="$GITHUB_SHA"
+        fi
 
         if [[ ! -f m4-ci/checkpoint/campaign.json ]]; then
           ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4" \
@@ -136,7 +150,7 @@ runs:
           jq -n \
             --arg runId "$M4_RUN_ID" \
             --arg startInclusive "$start" \
-            --arg repositorySha "$GITHUB_SHA" \
+            --arg repositorySha "$repository_sha" \
             --arg observerRegion "$M4_OBSERVER_REGION" \
             '{
               runId: $runId,
@@ -147,7 +161,7 @@ runs:
         fi
 
         test "$(jq -r '.runId' m4-ci/checkpoint/campaign.json)" = "$M4_RUN_ID"
-        test "$(jq -r '.repositorySha' m4-ci/checkpoint/campaign.json)" = "$GITHUB_SHA"
+        test "$(jq -r '.repositorySha' m4-ci/checkpoint/campaign.json)" = "$repository_sha"
         test "$(jq -r '.observerRegion' m4-ci/checkpoint/campaign.json)" = "$M4_OBSERVER_REGION"
 
     - name: Check runner disk headroom
@@ -425,6 +439,7 @@ runs:
         M4_PHASE: ${{ inputs.phase }}
         M4_RUN_ID: ${{ inputs.run_id }}
         M4_OBSERVER_REGION: ${{ inputs.observer_region }}
+        M4_CAMPAIGN_REPOSITORY_SHA: ${{ inputs.campaign_repository_sha }}
       run: |
         set -euo pipefail
         rm -rf m4-ci/segment-report
@@ -441,6 +456,11 @@ runs:
         segment_start="$(jq -r '.startInclusive' <<< "$segment_json")"
         segment_end="$(jq -r '.endExclusive' <<< "$segment_json")"
 
+        repository_sha="$M4_CAMPAIGN_REPOSITORY_SHA"
+        if [[ -z "$repository_sha" ]]; then
+          repository_sha="$GITHUB_SHA"
+        fi
+
         args=(
           analyze
           --run-id "$M4_RUN_ID"
@@ -448,7 +468,7 @@ runs:
           --end "$segment_end"
           --output m4-ci/segment-report
           --observer-region "$M4_OBSERVER_REGION"
-          --repository-sha "$GITHUB_SHA"
+          --repository-sha "$repository_sha"
           --profile-version warapi-bootstrap-profile@1
         )
 

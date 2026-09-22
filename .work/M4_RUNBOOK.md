@@ -137,6 +137,33 @@ The hosted-runner observer label is github-actions-hosted-variable. Because
 GitHub-hosted jobs are not guaranteed to originate from one stable network
 location, latency results retain that limitation.
 
+## 3.1 Cross-run recovery invariant
+
+A hosted-runner workflow failure after an authoritative segment checkpoint does
+not invalidate completed active observation. A continuation may start from the
+last persisted segment checkpoint in a new GitHub Actions run only when all of
+the following are proven before live traffic resumes:
+
+- the saved checkpoint SHA-256 and pg_restore structure validation succeed;
+- the exact saved PostgreSQL state restores on a fresh runner;
+- campaign run id, observer label and original data-plane repository SHA match;
+- the completed segment ledger is continuous and has no duplicate segment ids;
+- the Git diff from the recorded campaign SHA to the recovery execution SHA is
+  limited to .github/ and .work/;
+- the src/ and tools/ Git tree ids are byte-identical to the recorded campaign
+  SHA;
+- the recovery execution records its own SHA separately from the campaign
+  data-plane SHA in final provenance.
+
+A recovery workflow must never silently relabel old evidence as a new campaign
+and must never count failed-run wall time as active observation.
+
+PostgreSQL readiness is defined as the final server, not merely a successful
+Unix-socket pg_isready during docker-entrypoint initialization. The gate requires
+PID 1 to be postgres, TCP readiness on 127.0.0.1:5432, a successful SELECT 1,
+and three consecutive stable probes. Checkpoint dump/restore operations use the
+same TCP endpoint and re-run the final-server gate immediately before IO.
+
 ## 4. Preflight
 
 Required repository gates:
