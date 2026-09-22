@@ -1,0 +1,1 @@
+M4-E v4 automatic recovery marker.\n\nResume campaign m4-ci-35604611891 from the durable s02 checkpoint after the PostgreSQL final-server readiness fix and offline recovery gates pass.\n
