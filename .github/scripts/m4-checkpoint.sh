@@ -8,6 +8,10 @@ checkpoint_dir="${3:-m4-ci/checkpoint}"
 db_name="${M4_DB_NAME:-foxdata}"
 db_user="${M4_DB_USER:-foxdata}"
 db_password="${M4_DB_PASSWORD:-foxdata_m4}"
+db_host="${M4_DB_HOST:-127.0.0.1}"
+db_port="${M4_DB_PORT:-5432}"
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 dump_path="$checkpoint_dir/checkpoint.dump"
 tmp_path="$checkpoint_dir/checkpoint.dump.tmp"
@@ -52,6 +56,8 @@ verify_checkpoint() {
 }
 
 create_checkpoint() {
+  bash "$script_dir/m4-postgres.sh" wait "$container"
+
   mkdir -p "$checkpoint_dir"
   rm -f "$tmp_path" "$dump_path" "$sha_path"
 
@@ -62,6 +68,8 @@ create_checkpoint() {
       --format=custom \
       --no-owner \
       --no-privileges \
+      --host "$db_host" \
+      --port "$db_port" \
       --username "$db_user" \
       --dbname "$db_name" \
     > "$tmp_path"
@@ -81,6 +89,7 @@ create_checkpoint() {
 
 restore_checkpoint() {
   verify_checkpoint
+  bash "$script_dir/m4-postgres.sh" wait "$container"
 
   local remote
   remote="$(remote_path)"
@@ -95,6 +104,8 @@ restore_checkpoint() {
       --if-exists \
       --no-owner \
       --no-privileges \
+      --host "$db_host" \
+      --port "$db_port" \
       --username "$db_user" \
       --dbname "$db_name" \
       "$remote" || status=$?
