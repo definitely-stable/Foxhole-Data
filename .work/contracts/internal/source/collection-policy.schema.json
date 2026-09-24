@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:foxdata:contract:source:collection-policy",
+  "title": "FoxData resolved source collection policy",
+  "description": "Runtime operator choice of bootstrap, FoxData-recommended, or custom cadence. Any resolved policy remains subject to the non-disableable upstream safety envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "preset"
+  ],
+  "properties": {
+    "version": {
+      "const": "collection-policy@1"
+    },
+    "preset": {
+      "enum": [
+        "bootstrap",
+        "recommended",
+        "custom"
+      ]
+    },
+    "custom": {
+      "$ref": "#/$defs/customPolicy"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "preset": {
+            "const": "custom"
+          }
+        },
+        "required": [
+          "preset"
+        ]
+      },
+      "then": {
+        "required": [
+          "custom"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "custom"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetCadenceSeconds"
+      ],
+      "properties": {
+        "targetCadenceSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "discoveryWindowSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "customPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime-war-state",
+        "active-map-list",
+        "region-war-report",
+        "static-map-state",
+        "dynamic-map-state"
+      ],
+      "properties": {
+        "runtime-war-state": {
+          "$ref": "#/$defs/capability"
+        },
+        "active-map-list": {
+          "$ref": "#/$defs/capability"
+        },
+        "region-war-report": {
+          "$ref": "#/$defs/capability"
+        },
+        "static-map-state": {
+          "$ref": "#/$defs/capability"
+        },
+        "dynamic-map-state": {
+          "$ref": "#/$defs/capability"
+        }
+      }
+    }
+  }
+}
