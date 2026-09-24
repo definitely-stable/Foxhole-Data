@@ -2133,9 +2133,9 @@ internal static class MeasurementRunner
             $"- Decisions in window: {summary.Scheduling.WindowDecisionCount}");
         builder.AppendLine(
             $"- Missing decisions: {summary.Scheduling.MissingWindowDecisionCount}");
-        lines.Add(
+        builder.AppendLine(
             $"- Terminal unreconciled Fetches: {summary.Scheduling.TerminalUnreconciledFetchCount}");
-        lines.Add(
+        builder.AppendLine(
             $"- Interior missing decisions: {summary.Scheduling.InteriorMissingDecisionCount}");
         builder.AppendLine(
             $"- Probe-selected decisions: {summary.Scheduling.ProbeSelectedDecisionCount}");
