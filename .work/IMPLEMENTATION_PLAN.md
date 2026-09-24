@@ -114,6 +114,8 @@ Implementation slices:
 
 ## M5 — canonical war/region/report model
 
+Status: next.
+
 Implement:
 
 - war/shard identity;
