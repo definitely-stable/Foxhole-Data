@@ -83,7 +83,7 @@ jobs:
           jq -r '[.startInclusive, .endExclusive] | @csv'             m4-ci/checkpoint/segments.ndjson > /tmp/m4-active-windows.csv
           docker cp /tmp/m4-active-windows.csv foxdata-m4-postgres:/tmp/m4-active-windows.csv
 
-          docker exec             --env PGPASSWORD=foxdata_m4             foxdata-m4-postgres             psql               --host 127.0.0.1               --port 5432               --username foxdata               --dbname foxdata               --no-psqlrc               --set ON_ERROR_STOP=1 <<'SQL'
+          docker exec -i             --env PGPASSWORD=foxdata_m4             foxdata-m4-postgres             psql               --host 127.0.0.1               --port 5432               --username foxdata               --dbname foxdata               --no-psqlrc               --set ON_ERROR_STOP=1 <<'SQL'
           CREATE TEMP TABLE m4_active_windows (
             start_inclusive timestamptz NOT NULL,
             end_exclusive timestamptz NOT NULL
