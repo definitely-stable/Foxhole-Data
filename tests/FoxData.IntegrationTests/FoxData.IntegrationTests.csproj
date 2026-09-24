@@ -19,5 +19,6 @@
     <ProjectReference Include="../../src/FoxData.Api/FoxData.Api.csproj" />
     <ProjectReference Include="../../src/FoxData.Infrastructure/FoxData.Infrastructure.csproj" />
     <ProjectReference Include="../../src/FoxData.Worker/FoxData.Worker.csproj" />
+    <ProjectReference Include="../../tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj" Aliases="measurement" />
   </ItemGroup>
 </Project>

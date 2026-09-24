@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:foxdata:contract:source:collection-profile",
-  "title": "Foxhole-Data source collection profile",
+  "title": "FoxData recommended source collection profile",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -87,5 +87,6 @@
         }
       }
     }
-  }
+  },
+  "description": "A versioned FoxData-published recommendation derived from measurement evidence. Deployments may instead resolve a bootstrap or custom collection policy; this profile is not a universal mandatory cadence."
 }

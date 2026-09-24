@@ -1,0 +1,210 @@
+name: M4 Final Reanalysis
+
+run-name: M4-F reanalyze existing s12 · ${{ github.sha }}
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/m4-final-reanalysis.yml
+      - tools/FoxData.SourceMeasurement/**
+      - tests/FoxData.IntegrationTests/SourceMeasurementBoundaryTests.cs
+      - .work/M4_F_REANALYZE_01
+  push:
+    branches:
+      - main
+    paths:
+      - .work/M4_F_REANALYZE_01
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  M4_SOURCE_RUN_ID: "35679449942"
+  M4_SOURCE_ARTIFACT: m4-e-resume-35679449942-s12-checkpoint
+  M4_CAMPAIGN_RUN_ID: m4-ci-35604611891
+  M4_CAMPAIGN_REPOSITORY_SHA: 11ce905035b094832ddc18d524b4b0a5b9483724
+  M4_OBSERVER_REGION: github-actions-hosted-variable
+
+jobs:
+  validate-definition:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate workflow syntax and boundary fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/m4-final-reanalysis.yml")'
+          grep -q 'ScheduleDecisionBelongsToActiveEvidence' tools/FoxData.SourceMeasurement/MeasurementRunner.cs
+          grep -q 'activeFetchIds' tools/FoxData.SourceMeasurement/MeasurementRunner.cs
+          grep -q 'activeAttemptJobIds' tools/FoxData.SourceMeasurement/MeasurementRunner.cs
+
+  reanalyze:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout analyzer SHA
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Download authoritative s12 checkpoint
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.M4_SOURCE_ARTIFACT }}
+          path: m4-ci/checkpoint
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.M4_SOURCE_RUN_ID }}
+
+      - name: Verify campaign identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s m4-ci/checkpoint/checkpoint.dump
+          test -s m4-ci/checkpoint/checkpoint.dump.sha256
+          test -s m4-ci/checkpoint/campaign.json
+          test -s m4-ci/checkpoint/segments.ndjson
+          test "$(jq -r '.runId' m4-ci/checkpoint/campaign.json)" = "$M4_CAMPAIGN_RUN_ID"
+          test "$(jq -r '.repositorySha' m4-ci/checkpoint/campaign.json)" = "$M4_CAMPAIGN_REPOSITORY_SHA"
+          test "$(jq -r '.observerRegion' m4-ci/checkpoint/campaign.json)" = "$M4_OBSERVER_REGION"
+          test "$(wc -l < m4-ci/checkpoint/segments.ndjson | tr -d '[:space:]')" = "12"
+          test "$(jq -r '.segment' m4-ci/checkpoint/segments.ndjson | paste -sd, -)" = "s01,s02,s03,s04,s05,s06,s07,s08,s09,s10,s11,s12"
+
+      - name: Start PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
+
+      - name: Restore authoritative s12 state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-ci/checkpoint
+
+      - name: Restore and build analyzer SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet tool restore
+          dotnet restore FoxData.slnx --locked-mode
+          dotnet build FoxData.slnx -c Release --no-restore
+
+      - name: Reanalyze existing campaign
+        shell: bash
+        run: |
+          set -euo pipefail
+          output=m4-ci/final-report
+          rm -rf "$output"
+          mkdir -p "$output"
+
+          cp m4-ci/checkpoint/measurement/storage-before.json "$output/storage-before.json"
+          cp m4-ci/checkpoint/measurement/storage-after.json "$output/storage-after.json"
+          cp m4-ci/checkpoint/campaign.json "$output/campaign.json"
+          cp m4-ci/checkpoint/segments.ndjson "$output/segments.ndjson"
+
+          run_id="$(jq -r '.runId' m4-ci/checkpoint/campaign.json)"
+          start="$(jq -r '.startInclusive' m4-ci/checkpoint/campaign.json)"
+          end="$(jq -r '.endExclusive' m4-ci/checkpoint/campaign.json)"
+          observer="$(jq -r '.observerRegion' m4-ci/checkpoint/campaign.json)"
+          collector_sha="$(jq -r '.repositorySha' m4-ci/checkpoint/campaign.json)"
+
+          ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4" \
+            dotnet run \
+              --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj \
+              -c Release \
+              --no-build \
+              -- \
+              analyze \
+              --run-id "$run_id" \
+              --start "$start" \
+              --end "$end" \
+              --output "$output" \
+              --observer-region "$observer" \
+              --repository-sha "$collector_sha" \
+              --profile-version warapi-bootstrap-profile@1 \
+              --probe-shards live-1 \
+              --probe-max-maps 3 \
+              --probe-target-seconds 15 \
+              --segments-file "$output/segments.ndjson"
+
+          jq -n \
+            --arg sourceRunId "$M4_SOURCE_RUN_ID" \
+            --arg sourceArtifact "$M4_SOURCE_ARTIFACT" \
+            --arg campaignRepositorySha "$collector_sha" \
+            --arg analysisRepositorySha "$GITHUB_SHA" \
+            '{
+              sourceRunId: $sourceRunId,
+              sourceArtifact: $sourceArtifact,
+              campaignRepositorySha: $campaignRepositorySha,
+              analysisRepositorySha: $analysisRepositorySha,
+              upstreamTrafficIssued: false
+            }' > "$output/reanalysis-provenance.json"
+
+      - name: Validate publication evidence
+        id: validate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ConnectionStrings__FoxData="Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata_m4" \
+            dotnet run \
+              --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj \
+              -c Release \
+              --no-build \
+              -- \
+              validate \
+              --output m4-ci/final-report
+
+      - name: Upload reanalyzed final report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: m4-f-final-report-${{ github.run_id }}
+          path: m4-ci/final-report
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 9
+
+      - name: Publish report
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [[ -f m4-ci/final-report/measurement-report.md ]]; then
+            cat m4-ci/final-report/measurement-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ -f m4-ci/final-report/measurement-validation.json ]]; then
+            {
+              echo
+              echo "## Publication validation"
+              echo '~~~json'
+              cat m4-ci/final-report/measurement-validation.json
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Enforce publication validation
+        if: ${{ steps.validate.outcome != 'success' }}
+        shell: bash
+        run: |
+          echo "M4 reanalysis publication validation failed." >&2
+          exit 1
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres

@@ -9,6 +9,7 @@ public sealed record WarApiCapabilityCollectionProfile(
 public sealed class WarApiCollectionProfile
 {
     public const string BootstrapVersion = "warapi-bootstrap-profile@1";
+    public const string RecommendedVersion = "collection-profile@1";
 
     private static readonly string[] RequiredCapabilityKeys =
     [
@@ -162,6 +163,38 @@ public sealed class WarApiCollectionProfile
                     TimeSpan.FromMinutes(1),
                     TimeSpan.FromMinutes(1)),
             });
+
+    public static WarApiCollectionProfile Recommended { get; } =
+        new(
+            RecommendedVersion,
+            executorConcurrency: 1,
+            new Dictionary<string, WarApiCapabilityCollectionProfile>(
+                StringComparer.Ordinal)
+            {
+                ["runtime-war-state"] = new(
+                    TimeSpan.FromMinutes(1),
+                    TimeSpan.FromMinutes(1)),
+                ["active-map-list"] = new(
+                    TimeSpan.FromMinutes(5),
+                    TimeSpan.FromMinutes(5)),
+                ["region-war-report"] = new(
+                    TimeSpan.FromSeconds(30),
+                    TimeSpan.FromSeconds(30)),
+                ["static-map-state"] = new(
+                    TimeSpan.FromHours(6),
+                    TimeSpan.FromMinutes(5)),
+                ["dynamic-map-state"] = new(
+                    TimeSpan.FromSeconds(30),
+                    TimeSpan.FromSeconds(30)),
+            },
+            measurementReference: "m4:m4-ci-35604611891",
+            limitations:
+            [
+                "48.169 active measurement hours from the September 2026 M4 campaign.",
+                "15/30/60/120 second downsampling is based on an 8-hour deterministic three-region Live-1 probe.",
+                "The 30-second dynamic/report target is a balanced freshness/load recommendation, not a completeness guarantee.",
+                "Live-2 and Live-3 root endpoints returned 503 during their observed campaign phases.",
+            ]);
 
     public WarApiCapabilityCollectionProfile Get(SourceCapability capability)
     {

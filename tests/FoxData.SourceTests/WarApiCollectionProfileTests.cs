@@ -44,6 +44,47 @@ public sealed class WarApiCollectionProfileTests
     }
 
     [Fact]
+    public void RecommendedProfileUsesMeasuredBalancedCadence()
+    {
+        var profile = WarApiCollectionProfile.Recommended;
+
+        Assert.Equal(
+            WarApiCollectionProfile.RecommendedVersion,
+            profile.Version);
+        Assert.Equal(1, profile.ExecutorConcurrency);
+        Assert.Equal(
+            "m4:m4-ci-35604611891",
+            profile.MeasurementReference);
+        Assert.NotEmpty(profile.Limitations);
+
+        AssertCapability(
+            profile,
+            WarApiCapabilities.RuntimeWarState,
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromMinutes(1));
+        AssertCapability(
+            profile,
+            WarApiCapabilities.ActiveMapList,
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5));
+        AssertCapability(
+            profile,
+            WarApiCapabilities.RegionWarReport,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30));
+        AssertCapability(
+            profile,
+            WarApiCapabilities.StaticMapState,
+            TimeSpan.FromHours(6),
+            TimeSpan.FromMinutes(5));
+        AssertCapability(
+            profile,
+            WarApiCapabilities.DynamicMapState,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
     public void SchedulingPolicyIdentityIncludesCollectionProfile()
     {
         Assert.Equal(

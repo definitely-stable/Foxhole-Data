@@ -57,15 +57,46 @@ Bound Worker concurrency and per-server HTTP connections independently from cade
 
 M4 measures actual cache lifetime, 200/304 ratio and safe cadence before a faster collection profile is accepted.
 
-The local target cadence is owned by a versioned collection profile. M4 starts with `warapi-bootstrap-profile@1`, which preserves the M3 target values exactly. A later measured `collection-profile@1` may change local targets, but it never overrides a later valid source-cache or Retry-After eligibility bound.
+The local target cadence is owned by a resolved collection policy.
 
-For the M4-E hosted measurement path, outbound transport additionally enforces
-hard spacing before the HTTP exchange: at least 400 ms between sends to the
-same upstream host and at least 150 ms between War API sends globally. These
-ceilings are defence-in-depth and do not authorize polling faster than the
-collection profile, source cache eligibility or Retry-After. The live CI
-watchdog treats the first observed 429 as a stop signal rather than attempting
-to discover the upstream limit.
+Runtime policy selection is:
+
+~~~text
+bootstrap | recommended | custom
+~~~
+
+`bootstrap` preserves the M3 target values and remains the default.
+`recommended` selects the optional M4-measured `collection-profile@1`.
+`custom` lets the operator choose per-capability target cadence/discovery
+windows and receives a deterministic policy identity derived from those values.
+
+None of these modes can override a later valid source-cache or Retry-After
+eligibility bound.
+
+The mandatory effective scheduling envelope is:
+
+~~~text
+effective next request =
+  max(
+    configured target cadence,
+    source cache eligibility,
+    Retry-After / durable backoff eligibility
+  )
+~~~
+
+Outbound transport additionally enforces hard spacing before the HTTP
+exchange: at least 400 ms between sends to the same upstream host and at least
+150 ms between War API sends globally. These values are FoxData
+defence-in-depth ceilings, not claimed Official War API published numeric
+limits. They do not authorize polling faster than source cache eligibility,
+Retry-After or durable backoff.
+
+Custom cadence outside the M4-measured 15/30/60/120-second dynamic/report
+comparison range is permitted, but FoxData MUST describe it as unmeasured by
+M4 rather than as a validated recommendation.
+
+The M4 live CI watchdog treats the first observed 429 as a stop signal rather
+than attempting to discover the upstream limit.
 
 ## Public GET caching
 

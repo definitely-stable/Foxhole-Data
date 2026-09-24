@@ -1,0 +1,3 @@
+M4-F final reanalysis marker.
+
+Reanalyze the existing authoritative s12 checkpoint after the scheduling-decision boundary fix. No upstream War API traffic is permitted by this workflow.
