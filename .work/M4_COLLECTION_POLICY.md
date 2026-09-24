@@ -1,6 +1,6 @@
 # M4 collection policy result
 
-Status: candidate pending final offline publication reanalysis.
+Status: published and accepted 2026-09-24. Completion record: [M4_COMPLETION.md](M4_COMPLETION.md).
 
 ## 1. Decision
 
@@ -152,6 +152,32 @@ Those projections describe this measurement workload. They are not a storage SLA
 
 ## 8. Publication gate
 
-The first final validation found four Fetch rows without a scheduling decision because the analyzer incorrectly filtered decisions by `decision.CreatedAt` rather than by their causal association with an active Fetch or active successor job.
+The first final validation found four Fetch rows without a scheduling decision. The first analyzer correction stopped filtering decisions by `decision.CreatedAt` and instead retained them by causal association with an active Fetch or active successor job.
 
-The raw campaign and s12 checkpoint are retained. The fix is reanalyzed offline against that existing checkpoint; no replacement 48-hour collection is required.
+Offline reanalysis then exposed exactly two residual rows. Direct SQL against the authoritative s12 checkpoint proved both were successful final-window Fetches started less than one second before the campaign boundary:
+
+- `region-war-report / StlicanShelfHex`;
+- `runtime-war-state / war`.
+
+Both were durably captured as `completed / captured_current`, but host shutdown cancelled reconciliation before a scheduling decision and poll-state update were written.
+
+The analyzer now reports this condition explicitly instead of hiding it:
+
+~~~text
+missingWindowDecisionCount:       2
+terminalUnreconciledFetchCount:   2
+interiorMissingDecisionCount:     0
+~~~
+
+Only the strict terminal shutdown tail is non-fatal. Any interior or unclassified scheduling-decision gap remains a publication error.
+
+Final offline publication reanalysis on `main`:
+
+~~~text
+workflow run:      35975684583
+evidenceComplete:  true
+errors:            0
+upstream traffic:  none
+~~~
+
+The original 48-hour campaign and s12 checkpoint were reused; no replacement live collection was performed.

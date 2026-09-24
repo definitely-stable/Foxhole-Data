@@ -52,6 +52,8 @@ Primary documents:
 - M3_ACTIVATION.md
 - M3_COMPLETION.md
 - M4_SOURCE_MEASUREMENT.md
+- M4_COLLECTION_POLICY.md
+- M4_COMPLETION.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
@@ -61,6 +63,8 @@ Contract sources:
 - contracts/asyncapi/events-v1.yaml
 - contracts/jsonrpc/stdio-v1.md
 - contracts/internal/source/collection-profile.schema.json
+- contracts/internal/source/collection-profile@1.json
+- contracts/internal/source/collection-policy.schema.json
 
 Research snapshots:
 
