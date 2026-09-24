@@ -44,8 +44,96 @@ jobs:
           grep -q 'activeFetchIds' tools/FoxData.SourceMeasurement/MeasurementRunner.cs
           grep -q 'activeAttemptJobIds' tools/FoxData.SourceMeasurement/MeasurementRunner.cs
 
+  diagnose-missing-decisions:
+    name: Diagnose remaining decision gaps
+    if: ${{ github.event_name == 'pull_request' }}
+    needs: validate-definition
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout diagnostic SHA
+        uses: actions/checkout@v7
+
+      - name: Download authoritative s12 checkpoint
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.M4_SOURCE_ARTIFACT }}
+          path: m4-ci/checkpoint
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.M4_SOURCE_RUN_ID }}
+
+      - name: Start PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-postgres.sh start foxdata-m4-postgres
+
+      - name: Restore authoritative s12 state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-ci/checkpoint
+
+      - name: Diagnose active-window Fetches without decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jq -r '[.startInclusive, .endExclusive] | @csv'             m4-ci/checkpoint/segments.ndjson > /tmp/m4-active-windows.csv
+          docker cp /tmp/m4-active-windows.csv foxdata-m4-postgres:/tmp/m4-active-windows.csv
+
+          docker exec -i             --env PGPASSWORD=foxdata_m4             foxdata-m4-postgres             psql               --host 127.0.0.1               --port 5432               --username foxdata               --dbname foxdata               --no-psqlrc               --set ON_ERROR_STOP=1 <<'SQL'
+          CREATE TEMP TABLE m4_active_windows (
+            start_inclusive timestamptz NOT NULL,
+            end_exclusive timestamptz NOT NULL
+          );
+          \copy m4_active_windows FROM '/tmp/m4-active-windows.csv' CSV
+
+          SELECT
+            captured_fetch.id AS fetch_id,
+            shard.key AS shard_key,
+            endpoint.capability_key,
+            endpoint.semantic_key,
+            captured_fetch.request_started_at,
+            captured_fetch.retrieved_at,
+            captured_fetch.status_code,
+            attempt.id AS attempt_id,
+            attempt.job_id,
+            attempt.state AS attempt_state,
+            attempt.outcome_code,
+            attempt.started_at AS attempt_started_at,
+            attempt.completed_at AS attempt_completed_at,
+            poll_state.last_processed_fetch_id,
+            poll_state.updated_at AS poll_state_updated_at
+          FROM evidence.fetches AS captured_fetch
+          INNER JOIN ingest.attempts AS attempt
+            ON attempt.id = captured_fetch.attempt_id
+          INNER JOIN sources.endpoints AS endpoint
+            ON endpoint.id = captured_fetch.endpoint_id
+          INNER JOIN sources.shards AS shard
+            ON shard.id = endpoint.shard_id
+          LEFT JOIN evidence.source_schedule_decisions AS decision
+            ON decision.fetch_id = captured_fetch.id
+          LEFT JOIN ingest.endpoint_poll_state AS poll_state
+            ON poll_state.endpoint_id = captured_fetch.endpoint_id
+          WHERE decision.fetch_id IS NULL
+            AND EXISTS (
+              SELECT 1
+              FROM m4_active_windows AS active_window
+              WHERE captured_fetch.request_started_at >= active_window.start_inclusive
+                AND captured_fetch.request_started_at < active_window.end_exclusive
+            )
+          ORDER BY captured_fetch.request_started_at, captured_fetch.id;
+          SQL
+
+      - name: Stop PostgreSQL
+        if: ${{ always() }}
+        shell: bash
+        run: bash .github/scripts/m4-postgres.sh stop foxdata-m4-postgres
+
   reanalyze:
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:

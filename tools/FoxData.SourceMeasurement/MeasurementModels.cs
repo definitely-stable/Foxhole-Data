@@ -122,6 +122,8 @@ internal sealed record MeasurementAttemptSummary(
 internal sealed record MeasurementSchedulingSummary(
     int WindowDecisionCount,
     int MissingWindowDecisionCount,
+    int TerminalUnreconciledFetchCount,
+    int InteriorMissingDecisionCount,
     int ProbeSelectedDecisionCount,
     int SuccessorDecisionCount,
     int ProbeAttributedFetchCount,
