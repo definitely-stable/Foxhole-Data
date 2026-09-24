@@ -137,6 +137,13 @@ internal static class MeasurementRunner
             }
         }
 
+        var activeFetchIds = fetches
+            .Select(fetch => fetch.FetchId.Value)
+            .ToHashSet();
+        var activeAttemptJobIds = attempts
+            .Select(attempt => attempt.JobId.Value)
+            .ToHashSet();
+
         var scheduleDecisions =
             new List<SourceMeasurementScheduleDecision>();
         await foreach (var decision in reader.ReadScheduleDecisionsAsync(
@@ -145,9 +152,10 @@ internal static class MeasurementRunner
             options.EndExclusive,
             cancellationToken))
         {
-            if (ActiveWindowIndex(
-                    activeWindows,
-                    decision.CreatedAt) >= 0)
+            if (ScheduleDecisionBelongsToActiveEvidence(
+                    decision,
+                    activeFetchIds,
+                    activeAttemptJobIds))
             {
                 scheduleDecisions.Add(decision);
             }
@@ -1262,6 +1270,24 @@ internal static class MeasurementRunner
                     string.IsNullOrWhiteSpace(attempt.ErrorClass)
                         ? "<none>"
                         : attempt.ErrorClass!));
+    }
+
+    internal static bool ScheduleDecisionBelongsToActiveEvidence(
+        SourceMeasurementScheduleDecision decision,
+        IReadOnlySet<Guid> activeFetchIds,
+        IReadOnlySet<Guid> activeAttemptJobIds)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+        ArgumentNullException.ThrowIfNull(activeFetchIds);
+        ArgumentNullException.ThrowIfNull(activeAttemptJobIds);
+
+        if (activeFetchIds.Contains(decision.FetchId.Value))
+        {
+            return true;
+        }
+
+        return decision.SuccessorJobId is { } successorJobId &&
+               activeAttemptJobIds.Contains(successorJobId.Value);
     }
 
     private static MeasurementSchedulingSummary AnalyzeScheduling(
