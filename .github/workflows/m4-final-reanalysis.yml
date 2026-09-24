@@ -9,6 +9,8 @@ on:
       - tools/FoxData.SourceMeasurement/**
       - tests/FoxData.IntegrationTests/SourceMeasurementBoundaryTests.cs
       - .work/M4_F_REANALYZE_01
+      - .work/M4_F_REANALYZE_02
+      - .work/M4_F_REANALYZE_02
   push:
     branches:
       - main
@@ -95,6 +97,69 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/m4-checkpoint.sh restore foxdata-m4-postgres m4-ci/checkpoint
+
+      - name: Diagnose Fetch rows without scheduling decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          start="$(jq -r '.startInclusive' m4-ci/checkpoint/campaign.json)"
+          end="$(jq -r '.endExclusive' m4-ci/checkpoint/campaign.json)"
+
+          echo "Fetch rows without source_schedule_decisions in the campaign wall-clock window:"
+          docker exec \
+            --env PGPASSWORD=foxdata_m4 \
+            foxdata-m4-postgres \
+            psql \
+              --host 127.0.0.1 \
+              --port 5432 \
+              --username foxdata \
+              --dbname foxdata \
+              --no-psqlrc \
+              --set ON_ERROR_STOP=1 \
+              --pset pager=off \
+              --command "
+                SELECT
+                  captured_fetch.id AS fetch_id,
+                  shard.key AS shard_key,
+                  endpoint.semantic_key,
+                  captured_fetch.request_started_at,
+                  captured_fetch.retrieved_at,
+                  captured_fetch.status_code,
+                  attempt.state AS attempt_state,
+                  attempt.outcome_code,
+                  attempt.started_at AS attempt_started_at,
+                  attempt.completed_at AS attempt_completed_at,
+                  ROUND(
+                    EXTRACT(
+                      EPOCH FROM (
+                        TIMESTAMPTZ '$end' -
+                        captured_fetch.request_started_at
+                      )
+                    )::numeric,
+                    3
+                  ) AS seconds_before_campaign_end,
+                  EXISTS (
+                    SELECT 1
+                    FROM evidence.source_parse_runs AS parse_run
+                    WHERE parse_run.representation_fetch_id = captured_fetch.id
+                  ) AS has_parse_run
+                FROM evidence.fetches AS captured_fetch
+                INNER JOIN ingest.attempts AS attempt
+                  ON attempt.id = captured_fetch.attempt_id
+                INNER JOIN sources.endpoints AS endpoint
+                  ON endpoint.id = captured_fetch.endpoint_id
+                INNER JOIN sources.shards AS shard
+                  ON shard.id = endpoint.shard_id
+                INNER JOIN sources.sources AS source
+                  ON source.id = shard.source_id
+                LEFT JOIN evidence.source_schedule_decisions AS decision
+                  ON decision.fetch_id = captured_fetch.id
+                WHERE source.key = 'official-war-api'
+                  AND captured_fetch.request_started_at >= TIMESTAMPTZ '$start'
+                  AND captured_fetch.request_started_at < TIMESTAMPTZ '$end'
+                  AND decision.fetch_id IS NULL
+                ORDER BY captured_fetch.request_started_at;
+              "
 
       - name: Restore and build analyzer SHA
         shell: bash
