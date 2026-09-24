@@ -1,23 +1,25 @@
 # M4 — Source Measurement
 
-Status: normative implementation plan.
+Status: normative implementation and publication contract; live campaign complete, final offline reanalysis pending.
 Milestone: M4.
 Predecessor: M3 Official War API Adapter.
 Successor: M5 canonical war/region/report model.
 
 ## 1. Purpose
 
-M4 converts the conservative M3 bootstrap polling assumptions into a measured, versioned source collection profile.
+M4 converts the conservative M3 bootstrap polling assumptions into measured source characteristics and a configurable collection-policy model.
 
 The milestone MUST answer:
 
 - how the official War API actually behaves under bounded collection;
-- which per-capability cadence is justified by observed cache and representation-change behaviour;
+- what freshness/source-load trade-offs were measured for candidate cadences;
+- which cadence FoxData recommends as an optional balanced preset;
+- which safety constraints remain mandatory regardless of operator-selected cadence;
 - whether the serial M3 executor remains sufficient;
 - whether inline PostgreSQL raw evidence remains appropriate at measured volume;
 - which assumptions remain uncertain after a 48-hour controlled active-observation window.
 
-M4 publishes `collection-profile@1`. It does not implement canonical Foxhole state.
+M4 publishes an optional `collection-profile@1` recommendation, a runtime `collection-policy@1` selection contract, and a non-disableable safety envelope. It does not implement canonical Foxhole state.
 
 ## 2. Non-goals
 
@@ -266,7 +268,7 @@ required service load ~= sum(
 )
 ~~~
 
-The final profile MUST record the chosen executor concurrency.
+The published recommendation MUST record the chosen executor concurrency. Operator cadence customization does not imply permission to increase executor concurrency; concurrency remains an independently measured implementation decision.
 
 ## 8. High-resolution probe requirement
 
@@ -326,9 +328,11 @@ For each candidate estimate from the observed probe series:
 
 Downsampling is a counterfactual state-observation simulation, not a counterfactual HTTP cache simulation. A client polling at a different cadence would carry a different validator history, so M4 MUST NOT infer a synthetic 200/304 or duplicate-200 ratio from selected high-resolution responses. HTTP 200/304 and validator efficiency are reported from traffic that was actually observed under the profile that generated it.
 
-The profile should prefer the slowest cadence that still preserves the required source-observation fidelity and freshness while avoiding unnecessary source load.
+The FoxData recommendation should prefer a cadence that gives a defensible freshness/load balance for the measured cohort. It is not a universal mandate for all deployments.
 
-A 95% observed representation-capture ratio may be used as one engineering input, not as the sole acceptance rule.
+The operator MAY select another cadence. The resulting runtime policy MUST still obey source cache eligibility, Retry-After/backoff, transport admission spacing and other safety-envelope constraints.
+
+A 95% observed representation-capture ratio may be used as one engineering input, not as the sole acceptance rule. A source-version gap is an anomaly/evidence signal and MUST NOT be presented as a direct count of proven missed externally observable states.
 
 ## 10. Static map data
 
@@ -340,24 +344,62 @@ If no static change is observed, long-cadence conditional revalidation remains a
 
 If a static representation does change, the report records it and the measured profile may shorten revalidation.
 
-## 11. Collection profile contract
+## 11. Collection profile, policy and safety contracts
 
-M4 introduces a versioned operational contract:
+M4 separates three operational contracts.
+
+### 11.1 RecommendedCollectionProfile
+
+FoxData publishes:
 
 ~~~text
 collection-profile@1
 ~~~
 
-It owns measured source scheduling values and is distinct from:
+This is an optional, measured recommendation. It is not a mandatory cadence for every deployment.
+
+The in-code bootstrap profile remains behaviour-preserving and remains the default until an operator explicitly selects the recommendation.
+
+### 11.2 CollectionPolicy
+
+Runtime deployments select:
+
+~~~text
+collection-policy@1
+
+preset =
+  bootstrap
+  | recommended
+  | custom
+~~~
+
+A custom policy supplies target cadence per capability and optionally a separate discovery window. Its resolved values receive a deterministic policy identity so scheduling evidence remains reproducible when operator configuration changes.
+
+### 11.3 SafetyEnvelope
+
+Every bootstrap, recommended and custom policy is constrained by:
+
+~~~text
+effective next request =
+  max(
+    configured target cadence,
+    source cache eligibility,
+    Retry-After / durable backoff eligibility
+  )
+~~~
+
+The transport admission governor, no-hedging/no-in-process-retry rule, bounded concurrency and shard/dev controls also remain mandatory.
+
+A custom cadence outside the measured range is allowed but MUST be described as unmeasured by M4 rather than promoted as a FoxData recommendation.
+
+The profile/policy identities are distinct from:
 
 - `warapi-cache-policy@1`;
 - `warapi-backoff@1`;
 - structural fingerprint versions;
 - parser versions.
 
-The initial in-code bootstrap profile MUST preserve the exact M3 behaviour before any measured profile is adopted.
-
-The contract contains at least:
+The published recommendation contains at least:
 
 - version;
 - source key;
@@ -366,7 +408,9 @@ The contract contains at least:
 - executor concurrency;
 - measurement reference/limitations.
 
-Future changes publish a new profile version rather than silently rewriting `@1`.
+Future FoxData recommendations publish a new profile version rather than silently rewriting `collection-profile@1`.
+
+See `.work/M4_COLLECTION_POLICY.md` for the measured trade-off table, recommended preset, custom configuration contract and safety envelope.
 
 ## 12. Reproducible analyzer
 
@@ -577,15 +621,18 @@ Only after M4-B/C, add disabled-by-default deterministic probe cohort support th
 
 Run the controlled campaign and freeze the exact analysis window.
 
-### M4-F — publish measured profile
+### M4-F — publish measured source-policy result
 
 Publish:
 
-- research report;
-- `collection-profile@1`;
+- validated research report;
+- measured cadence trade-off table;
+- optional `collection-profile@1` recommended preset;
+- configurable `collection-policy@1`;
+- mandatory safety envelope;
 - storage decision;
 - executor-concurrency decision;
-- limitations;
+- limitations and measurement scope;
 - M4 completion record.
 
 Then mark M5 as next.
@@ -608,7 +655,11 @@ Unit/source tests MUST prove:
 - percentile calculations are deterministic;
 - representation-change intervals are endpoint-local;
 - version-gap/regression detection is correct;
-- downsampling calculations are deterministic.
+- downsampling calculations are deterministic;
+- scheduling decisions at active-window boundaries are retained by causal Fetch/successor linkage rather than decision CreatedAt;
+- bootstrap remains the default collection preset;
+- recommended is explicit opt-in;
+- custom collection policy identities change deterministically when cadence changes.
 
 Integration tests SHOULD construct synthetic PostgreSQL histories containing combinations such as:
 
