@@ -1,8 +1,10 @@
+extern alias measurement;
+
 using FoxData.Application.Sources;
 using FoxData.Core.Evidence;
 using FoxData.Core.Ingestion;
 using FoxData.Core.Sources;
-using FoxData.SourceMeasurement;
+using MeasurementRunner = measurement::FoxData.SourceMeasurement.MeasurementRunner;
 
 namespace FoxData.IntegrationTests;
 
