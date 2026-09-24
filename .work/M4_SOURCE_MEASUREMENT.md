@@ -1,6 +1,6 @@
 # M4 — Source Measurement
 
-Status: normative implementation and publication contract; live campaign complete, final offline reanalysis pending.
+Status: completed 2026-09-24; normative measurement and collection-policy contract. Completion record: [M4_COMPLETION.md](M4_COMPLETION.md).
 Milestone: M4.
 Predecessor: M3 Official War API Adapter.
 Successor: M5 canonical war/region/report model.
@@ -657,6 +657,7 @@ Unit/source tests MUST prove:
 - version-gap/regression detection is correct;
 - downsampling calculations are deterministic;
 - scheduling decisions at active-window boundaries are retained by causal Fetch/successor linkage rather than decision CreatedAt;
+- terminal shutdown-tail Fetches are classified separately from interior missing scheduling decisions and never silently erased;
 - bootstrap remains the default collection preset;
 - recommended is explicit opt-in;
 - custom collection policy identities change deterministically when cadence changes.
@@ -692,7 +693,8 @@ M4 is complete only when:
 - PostgreSQL growth is measured;
 - ADR-0010 is explicitly retained or superseded by a measured follow-up decision;
 - `collection-profile@1` is published;
-- the Worker uses the published profile;
+- the Worker can explicitly select the published recommended profile while bootstrap remains the behaviour-preserving default and custom cadence remains supported;
+- every preset/custom policy remains constrained by the mandatory safety envelope;
 - M4 completion is recorded;
 - M5 becomes the next milestone.
 
