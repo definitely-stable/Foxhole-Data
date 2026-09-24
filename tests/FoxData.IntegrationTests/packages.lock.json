@@ -770,6 +770,16 @@
         "dependencies": {
           "OpenTelemetry.Api": "[1.19.0, 2.0.0)"
         }
+      },
+      "foxdata-source-measurement": {
+        "type": "Project",
+        "dependencies": {
+          "FoxData.Application": "[0.1.0, )",
+          "FoxData.Hosting": "[0.1.0, )",
+          "FoxData.Infrastructure": "[0.1.0, )",
+          "FoxData.Sources.WarApi": "[0.1.0, )",
+          "Microsoft.Extensions.Hosting": "[10.0.12, )"
+        }
       }
     }
   }
