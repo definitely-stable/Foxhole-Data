@@ -1,0 +1,3 @@
+M4-F terminal scheduling diagnostic marker.
+
+Re-run the existing s12 checkpoint offline and print exact Fetch rows that have no scheduling decision. No upstream War API traffic is permitted.
