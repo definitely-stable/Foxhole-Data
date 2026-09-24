@@ -1,0 +1,39 @@
+{
+  "version": "collection-profile@1",
+  "source": "official-war-api",
+  "executorConcurrency": 1,
+  "measurementReference": "m4:m4-ci-35604611891",
+  "limitations": [
+    "48.169 active measurement hours from the September 2026 M4 campaign.",
+    "15/30/60/120 second downsampling is based on an 8-hour deterministic three-region Live-1 probe.",
+    "The 30-second dynamic/report target is a balanced freshness/load recommendation, not a completeness guarantee.",
+    "Live-2 and Live-3 root endpoints returned 503 during their observed campaign phases."
+  ],
+  "capabilities": {
+    "runtime-war-state": {
+      "targetCadenceSeconds": 60,
+      "discoveryWindowSeconds": 60,
+      "measurementNotes": "Conservative measured baseline retained; no high-resolution counterfactual cohort."
+    },
+    "active-map-list": {
+      "targetCadenceSeconds": 300,
+      "discoveryWindowSeconds": 300,
+      "measurementNotes": "Map-list representation was effectively stable during the campaign."
+    },
+    "region-war-report": {
+      "targetCadenceSeconds": 30,
+      "discoveryWindowSeconds": 30,
+      "measurementNotes": "Three-region Live-1 probe retained all 73 observed representation episodes at 30 seconds with roughly half the simulated requests of 15 seconds."
+    },
+    "static-map-state": {
+      "targetCadenceSeconds": 21600,
+      "discoveryWindowSeconds": 300,
+      "measurementNotes": "Static map data is not declared immutable; retain long conditional revalidation."
+    },
+    "dynamic-map-state": {
+      "targetCadenceSeconds": 30,
+      "discoveryWindowSeconds": 30,
+      "measurementNotes": "Three-region Live-1 probe retained all 26 observed representation episodes at 30 seconds with roughly half the simulated requests of 15 seconds."
+    }
+  }
+}
