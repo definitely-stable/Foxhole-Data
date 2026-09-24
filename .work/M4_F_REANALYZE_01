@@ -1,3 +1,11 @@
-M4-F final reanalysis marker.
+M4-F offline reanalysis marker.
 
-Reanalyze the existing authoritative s12 checkpoint after the scheduling-decision boundary fix. No upstream War API traffic is permitted by this workflow.
+Revision 2: re-run the preserved s12 checkpoint after explicit terminal shutdown-tail classification.
+
+Expected publication result:
+- source Fetch evidence remains immutable;
+- exactly two final-window Fetches remain without scheduling decisions;
+- both must classify as terminal unreconciled shutdown-tail Fetches;
+- interiorMissingDecisionCount must be zero;
+- publication validation must report evidenceComplete=true;
+- no Official War API traffic is issued by this workflow.
