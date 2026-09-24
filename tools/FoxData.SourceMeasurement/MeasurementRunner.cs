@@ -262,7 +262,8 @@ internal static class MeasurementRunner
         var scheduling = AnalyzeScheduling(
             fetches,
             attempts,
-            scheduleDecisions);
+            scheduleDecisions,
+            activeWindows);
         var downsampling = BuildDownsampling(
             fetches,
             attempts,
@@ -886,10 +887,16 @@ internal static class MeasurementRunner
                 "Measurement contains no immutable scheduling-decision evidence.");
         }
 
-        if (summary.Scheduling.MissingWindowDecisionCount != 0)
+        if (summary.Scheduling.InteriorMissingDecisionCount != 0)
         {
             errors.Add(
-                $"{summary.Scheduling.MissingWindowDecisionCount} Fetches in the measurement window have no scheduling decision.");
+                $"{summary.Scheduling.InteriorMissingDecisionCount} Fetches in the measurement window have no scheduling decision and are not a classified terminal shutdown tail.");
+        }
+
+        if (summary.Scheduling.TerminalUnreconciledFetchCount != 0)
+        {
+            warnings.Add(
+                $"{summary.Scheduling.TerminalUnreconciledFetchCount} final-window Fetches were durably captured during shutdown before reconciliation recorded a scheduling decision.");
         }
 
         if (summary.StorageGrowth is null)
@@ -1290,10 +1297,83 @@ internal static class MeasurementRunner
                activeAttemptJobIds.Contains(successorJobId.Value);
     }
 
+    internal static int CountTerminalUnreconciledFetches(
+        IReadOnlyCollection<SourceMeasurementFetch> missingDecisionFetches,
+        IReadOnlyCollection<SourceMeasurementFetch> activeFetches,
+        IReadOnlyDictionary<Guid, SourceMeasurementAttempt> attemptById,
+        IReadOnlyList<MeasurementActiveWindow> activeWindows)
+    {
+        ArgumentNullException.ThrowIfNull(missingDecisionFetches);
+        ArgumentNullException.ThrowIfNull(activeFetches);
+        ArgumentNullException.ThrowIfNull(attemptById);
+        ArgumentNullException.ThrowIfNull(activeWindows);
+
+        if (missingDecisionFetches.Count == 0 ||
+            activeWindows.Count == 0)
+        {
+            return 0;
+        }
+
+        var finalWindow = activeWindows[^1];
+        var terminalBoundaryStart =
+            finalWindow.EndExclusive - TimeSpan.FromSeconds(5);
+
+        var lastFetchByEndpoint = activeFetches
+            .GroupBy(fetch => fetch.EndpointId.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderBy(fetch => fetch.RequestStartedAt)
+                    .ThenBy(fetch => fetch.FetchId.Value)
+                    .Last()
+                    .FetchId
+                    .Value);
+
+        var count = 0;
+        foreach (var fetch in missingDecisionFetches)
+        {
+            if (fetch.RequestStartedAt < terminalBoundaryStart ||
+                fetch.RequestStartedAt >= finalWindow.EndExclusive)
+            {
+                continue;
+            }
+
+            if (!lastFetchByEndpoint.TryGetValue(
+                    fetch.EndpointId.Value,
+                    out var lastFetchId) ||
+                lastFetchId != fetch.FetchId.Value)
+            {
+                continue;
+            }
+
+            if (!attemptById.TryGetValue(
+                    fetch.AttemptId.Value,
+                    out var attempt) ||
+                !string.Equals(
+                    attempt.State,
+                    "completed",
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    attempt.OutcomeCode,
+                    "captured_current",
+                    StringComparison.Ordinal) ||
+                attempt.CompletedAt is null ||
+                attempt.CompletedAt >= finalWindow.EndExclusive)
+            {
+                continue;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
+
     private static MeasurementSchedulingSummary AnalyzeScheduling(
         IReadOnlyCollection<SourceMeasurementFetch> fetches,
         IReadOnlyCollection<SourceMeasurementAttempt> attempts,
-        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions)
+        IReadOnlyCollection<SourceMeasurementScheduleDecision> decisions,
+        IReadOnlyList<MeasurementActiveWindow> activeWindows)
     {
         var fetchById = fetches.ToDictionary(
             fetch => fetch.FetchId.Value);
@@ -1304,8 +1384,26 @@ internal static class MeasurementRunner
                         decision.FetchId.Value))
             .ToArray();
 
+        var decisionFetchIds = windowDecisions
+            .Select(decision => decision.FetchId.Value)
+            .ToHashSet();
+        var missingDecisionFetches = fetches
+            .Where(fetch => !decisionFetchIds.Contains(fetch.FetchId.Value))
+            .ToArray();
+
         var attemptById = attempts.ToDictionary(
             attempt => attempt.AttemptId.Value);
+
+        var terminalUnreconciledFetchCount =
+            CountTerminalUnreconciledFetches(
+                missingDecisionFetches,
+                fetches,
+                attemptById,
+                activeWindows);
+        var interiorMissingDecisionCount =
+            missingDecisionFetches.Length -
+            terminalUnreconciledFetchCount;
+
         var decisionBySuccessorJob = decisions
             .Where(decision => decision.SuccessorJobId is not null)
             .ToDictionary(
@@ -1394,9 +1492,9 @@ internal static class MeasurementRunner
 
         return new MeasurementSchedulingSummary(
             windowDecisions.Length,
-            Math.Max(
-                0,
-                fetches.Count - windowDecisions.Length),
+            missingDecisionFetches.Length,
+            terminalUnreconciledFetchCount,
+            interiorMissingDecisionCount,
             windowDecisions.Count(
                 decision => decision.ProbeSelected),
             windowDecisions.Count(
@@ -2035,6 +2133,10 @@ internal static class MeasurementRunner
             $"- Decisions in window: {summary.Scheduling.WindowDecisionCount}");
         builder.AppendLine(
             $"- Missing decisions: {summary.Scheduling.MissingWindowDecisionCount}");
+        lines.Add(
+            $"- Terminal unreconciled Fetches: {summary.Scheduling.TerminalUnreconciledFetchCount}");
+        lines.Add(
+            $"- Interior missing decisions: {summary.Scheduling.InteriorMissingDecisionCount}");
         builder.AppendLine(
             $"- Probe-selected decisions: {summary.Scheduling.ProbeSelectedDecisionCount}");
         builder.AppendLine(
