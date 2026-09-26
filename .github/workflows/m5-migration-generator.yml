@@ -62,7 +62,7 @@ jobs:
             echo 'M5 migration already exists.'
             exit 0
           fi
-          dotnet ef migrations add M5CanonicalWarRegionReport
+          dotnet ef migrations add M5CanonicalWarRegionReport \
             --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj \
             --startup-project src/FoxData.Api/FoxData.Api.csproj \
             --context FoxDataDbContext \
