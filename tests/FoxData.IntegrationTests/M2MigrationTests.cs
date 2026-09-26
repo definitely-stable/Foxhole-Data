@@ -7,7 +7,7 @@ namespace FoxData.IntegrationTests;
 public sealed class M2MigrationTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
     [Fact]
-    public async Task MigrationCreatesExpectedM2AndM3SchemasAndTables()
+    public async Task MigrationCreatesExpectedPlatformSchemasAndTables()
     {
         await MigrateAsync();
 
@@ -32,6 +32,7 @@ public sealed class M2MigrationTests(PostgresFixture postgres) : IClassFixture<P
         Assert.Equal(
             [
                 "evidence.fetches",
+                "evidence.normalization_runs",
                 "evidence.payloads",
                 "evidence.source_parse_runs",
                 "evidence.source_schedule_decisions",
@@ -39,6 +40,11 @@ public sealed class M2MigrationTests(PostgresFixture postgres) : IClassFixture<P
                 "ingest.collection_jobs",
                 "ingest.endpoint_poll_state",
                 "ingest.endpoint_state",
+                "runtime.regions",
+                "runtime.war_observations",
+                "runtime.war_regions",
+                "runtime.war_report_observations",
+                "runtime.wars",
                 "sources.endpoints",
                 "sources.shards",
                 "sources.sources",
