@@ -130,9 +130,9 @@ Implement:
 
 Implementation slices:
 
-- M5-A contract foundation — in progress;
-- M5-B persistence foundation — in progress;
-- M5-C normalization kernel — pending;
+- M5-A contract foundation — complete;
+- M5-B persistence foundation — complete;
+- M5-C normalization kernel — complete;
 - M5-D war normalization — pending;
 - M5-E region discovery/membership — pending;
 - M5-F war-report normalization — pending;
