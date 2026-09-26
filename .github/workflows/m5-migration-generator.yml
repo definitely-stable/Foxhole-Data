@@ -1,0 +1,69 @@
+name: M5 migration generator
+
+on:
+  push:
+    branches:
+      - m5/canonical-foundation
+    paths:
+      - .github/workflows/m5-migration-generator.yml
+      - src/FoxData.Infrastructure/Persistence/FoxDataDbContext.cs
+      - src/FoxData.Infrastructure/Persistence/M5ModelConfiguration.cs
+      - src/FoxData.Infrastructure/Persistence/M5PersistenceModels.cs
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  ConnectionStrings__FoxData: "Host=127.0.0.1;Port=5432;Database=foxdata;Username=foxdata;Password=foxdata"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: m5/canonical-foundation
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore tools and dependencies
+        run: |
+          dotnet tool restore
+          dotnet restore FoxData.slnx --locked-mode
+
+      - name: Build startup project
+        run: dotnet build src/FoxData.Api/FoxData.Api.csproj --no-restore
+
+      - name: Generate M5 migration
+        run: >-
+          dotnet ef migrations add M5CanonicalWarRegionReport
+          --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj
+          --startup-project src/FoxData.Api/FoxData.Api.csproj
+          --context FoxDataDbContext
+          --output-dir Persistence/Migrations
+          --no-build
+
+      - name: Commit generated migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add src/FoxData.Infrastructure/Persistence/Migrations
+          if git diff --cached --quiet; then
+            echo "EF generated no migration changes." >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build: generate M5 canonical foundation migration"
+          git push origin HEAD:m5/canonical-foundation
