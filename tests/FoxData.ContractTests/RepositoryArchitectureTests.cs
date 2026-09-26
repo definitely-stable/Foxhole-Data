@@ -55,6 +55,7 @@ public sealed class RepositoryArchitectureTests
         Assert.True(File.Exists(Path.Combine(root, ".work", "M2_EVIDENCE_KERNEL.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M4_SOURCE_MEASUREMENT.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M4_RUNBOOK.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M5_CANONICAL_WAR_REGION_REPORT.md")));
         Assert.True(
             File.Exists(
                 Path.Combine(

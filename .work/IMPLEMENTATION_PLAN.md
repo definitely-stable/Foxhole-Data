@@ -114,15 +114,30 @@ Implementation slices:
 
 ## M5 — canonical war/region/report model
 
-Status: next.
+Status: in progress.
+
+Detailed normative plan: [M5_CANONICAL_WAR_REGION_REPORT.md](M5_CANONICAL_WAR_REGION_REPORT.md).
 
 Implement:
 
 - war/shard identity;
 - lifecycle/time anchors;
-- regions;
-- war reports;
-- coverage.
+- regions and within-war source-region membership;
+- versioned normalization-run provenance;
+- immutable war observations;
+- immutable war-report observations;
+- coverage and local evidence reprocessing.
+
+Implementation slices:
+
+- M5-A contract foundation — complete;
+- M5-B persistence foundation — complete;
+- M5-C normalization kernel — complete;
+- M5-D war normalization — pending;
+- M5-E region discovery/membership — pending;
+- M5-F war-report normalization — pending;
+- M5-G coverage/recovery verification — pending;
+- M5-H completion gate — pending.
 
 ## M6 — maps, taxonomy and quality
 
