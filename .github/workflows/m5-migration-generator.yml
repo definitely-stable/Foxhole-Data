@@ -10,6 +10,15 @@ on:
       - src/FoxData.Infrastructure/Persistence/M5ModelConfiguration.cs
       - src/FoxData.Infrastructure/Persistence/M5PersistenceModels.cs
 
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/m5-migration-generator.yml
+      - src/FoxData.Infrastructure/Persistence/FoxDataDbContext.cs
+      - src/FoxData.Infrastructure/Persistence/M5ModelConfiguration.cs
+      - src/FoxData.Infrastructure/Persistence/M5PersistenceModels.cs
+
 permissions:
   contents: write
 
@@ -46,13 +55,19 @@ jobs:
         run: dotnet build src/FoxData.Api/FoxData.Api.csproj --no-restore
 
       - name: Generate M5 migration
-        run: >-
+        shell: bash
+        run: |
+          set -euo pipefail
+          if compgen -G 'src/FoxData.Infrastructure/Persistence/Migrations/*_M5CanonicalWarRegionReport.cs' >/dev/null; then
+            echo 'M5 migration already exists.'
+            exit 0
+          fi
           dotnet ef migrations add M5CanonicalWarRegionReport
-          --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj
-          --startup-project src/FoxData.Api/FoxData.Api.csproj
-          --context FoxDataDbContext
-          --output-dir Persistence/Migrations
-          --no-build
+            --project src/FoxData.Infrastructure/FoxData.Infrastructure.csproj \
+            --startup-project src/FoxData.Api/FoxData.Api.csproj \
+            --context FoxDataDbContext \
+            --output-dir Persistence/Migrations \
+            --no-build
 
       - name: Commit generated migration
         shell: bash
@@ -60,8 +75,8 @@ jobs:
           set -euo pipefail
           git add src/FoxData.Infrastructure/Persistence/Migrations
           if git diff --cached --quiet; then
-            echo "EF generated no migration changes." >&2
-            exit 1
+            echo "No generated migration changes to commit."
+            exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
