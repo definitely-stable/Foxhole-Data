@@ -1,7 +1,9 @@
 using System.Globalization;
+using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
 using FoxData.Application.Sources;
+using FoxData.Infrastructure.Canonical;
 using FoxData.Infrastructure.Configuration;
 using FoxData.Infrastructure.Evidence;
 using FoxData.Infrastructure.Health;
@@ -73,6 +75,9 @@ public static class DependencyInjection
         services.AddScoped<ISourceMeasurementReader, PostgresSourceMeasurementReader>();
         services.AddScoped<ISourceScheduleDecisionStore, PostgresSourceScheduleDecisionStore>();
         services.AddScoped<PostgresSourceMeasurementStorageReader>();
+
+        services.AddScoped<INormalizationRunStore, PostgresNormalizationRunStore>();
+        services.AddScoped<NormalizationKernel>();
 
         services.AddSingleton<PostgresHealthCheck>();
 
