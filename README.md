@@ -2,7 +2,7 @@
 
 Independent, language-neutral developer data platform for public Foxhole data.
 
-Status: **M2 Evidence Kernel + post-M2 hardening completed**. Next milestone: M3 Official War API Adapter. The current runtime intentionally performs no upstream Foxhole requests; real source ingestion begins in M3.
+Status: **M4 Source Measurement completed; M5 Canonical War/Region/Report Model in progress**. Official War API collection is implemented and source behavior is measured; M5 is introducing consumer-neutral canonical state over durable evidence.
 
 ## Prerequisites
 
