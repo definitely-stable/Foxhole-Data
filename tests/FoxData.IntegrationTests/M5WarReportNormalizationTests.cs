@@ -799,10 +799,11 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 ExchangeAuthorizationStatus.AuthorizedNow,
                 authorized.Status);
 
-            ReadOnlyMemory<byte>? capturedBody =
-                body is null
-                    ? null
-                    : body;
+            ReadOnlyMemory<byte>? capturedBody = null;
+            if (body is not null)
+            {
+                capturedBody = new ReadOnlyMemory<byte>(body);
+            }
 
             var capture =
                 await evidence.CaptureSourceResponseAsync(
