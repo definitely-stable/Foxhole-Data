@@ -78,6 +78,9 @@ public static class DependencyInjection
 
         services.AddScoped<INormalizationRunStore, PostgresNormalizationRunStore>();
         services.AddScoped<NormalizationKernel>();
+        services.AddScoped<ICanonicalEvidenceReader, PostgresCanonicalEvidenceReader>();
+        services.AddScoped<IWarCanonicalStore, PostgresWarCanonicalStore>();
+        services.AddScoped<WarCanonicalKernel>();
 
         services.AddSingleton<PostgresHealthCheck>();
 
