@@ -156,7 +156,7 @@ evidence.map_item_occurrences
 evidence.map_text_occurrences
 ~~~
 
-The exact physical names MAY change before M6-A is frozen, but the semantic split is normative.
+M6-A has frozen these physical table names and the representation-versus-accepted-observation split. Later slices may extend the schema only when their owned semantics require it; they must not collapse these layers.
 
 A map snapshot is tied to:
 
@@ -197,11 +197,11 @@ validation Fetch.priorFetchId == representation Fetch
 
 The normalized snapshot and all source occurrences are reused. M6 MUST NOT duplicate thousands of occurrence rows solely because a 304 validated unchanged bytes.
 
-## 5. Planned persistence model
+## 5. Persistence model — M6-A frozen foundation
 
 ### 5.1 evidence.map_snapshots
 
-Immutable normalized representation content.
+Implemented by M6-A as immutable normalized representation content.
 
 Minimum fields:
 
@@ -230,7 +230,7 @@ The raw millisecond value is retained even when a safe DateTimeOffset conversion
 
 ### 5.2 evidence.map_item_occurrences
 
-One row per element in `mapItems` of one exact representation.
+Implemented by M6-A as one row per element in `mapItems` of one exact representation.
 
 Minimum fields:
 
@@ -262,7 +262,7 @@ Exact duplicate rows are preserved.
 
 ### 5.3 evidence.map_text_occurrences
 
-One row per `mapTextItems` element.
+Implemented by M6-A as one row per `mapTextItems` element.
 
 Minimum fields:
 
@@ -278,7 +278,7 @@ Unknown marker types are preserved.
 
 ### 5.4 quality.map_quality_runs
 
-One immutable evaluation of one candidate snapshot binding.
+Implemented by M6-A as the persistence foundation for one immutable evaluation of one candidate snapshot binding. M6-E will implement evaluation behavior.
 
 Minimum fields:
 
@@ -312,7 +312,7 @@ Required evaluation identity:
 
 ### 5.5 quality.map_quality_findings
 
-Immutable rule-level evidence.
+Implemented by M6-A as immutable rule-level evidence storage. M6-E/F will define and execute the versioned rules.
 
 Minimum fields:
 
@@ -331,7 +331,7 @@ The persisted input metrics must be sufficient to explain the decision without r
 
 ### 5.6 runtime.map_observations
 
-Only a quality policy that allows canonical acceptance creates a runtime map observation.
+Implemented by M6-A as the accepted-observation binding table. Only a quality policy that allows canonical acceptance may create a row.
 
 Minimum fields:
 
