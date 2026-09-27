@@ -247,6 +247,8 @@ Planned derived evidence:
 - sourceVersion nullable;
 - sourceLastUpdatedMs nullable;
 - sourceUpdatedAt nullable;
+- sourceMapItemsArrayPresent (M6-B extension);
+- sourceMapTextItemsArrayPresent (M6-B extension);
 - itemCount;
 - textItemCount;
 - recordedAt.
@@ -272,6 +274,8 @@ Planned derived evidence:
 - rawMapMarkerType nullable.
 
 The occurrence ordinal is representation-local provenance and MUST NOT become objective identity.
+
+M6-B must distinguish an empty-but-present source array from a null/missing source array. Counts alone are insufficient because both would otherwise appear as zero occurrences.
 
 Planned quality state:
 
