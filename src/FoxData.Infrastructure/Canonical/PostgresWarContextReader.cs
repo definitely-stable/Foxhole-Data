@@ -46,9 +46,12 @@ public sealed class PostgresWarContextReader(NpgsqlDataSource dataSource)
                     source_fetch.retrieved_at,
                     source_fetch.status_code
                 FROM evidence.fetches AS source_fetch
+                INNER JOIN ingest.attempts AS attempt
+                    ON attempt.id = source_fetch.attempt_id
                 INNER JOIN sources.endpoints AS endpoint
                     ON endpoint.id = source_fetch.endpoint_id
                 WHERE endpoint.shard_id = @shard_id
+                  AND attempt.outcome_code = 'captured_current'
                   AND endpoint.capability_key = @capability_key
                   AND endpoint.semantic_key = @semantic_key
                   AND source_fetch.retrieved_at <= @observed_at
