@@ -221,19 +221,25 @@ runtime.wars is a bounded projection only. Its observation bounds and projected 
 
 An active-map-list payload has no `warId`. M5 therefore MUST NOT attach it to whichever war happens to be current when replay executes.
 
-For a maps parse with canonical observation boundary `mapsObservedAt`, the eligible war context is:
+For a maps parse with canonical observation boundary `mapsObservedAt`, M5-E first resolves the latest authoritative immutable War API fetch for the same shard and the `runtime-war-state / war` endpoint with:
 
 ~~~text
-same shard
-AND warObservation.observedAt <= mapsObservedAt
-ORDER BY warObservation.observedAt DESC
+attempt.outcomeCode = captured_current
+AND warFetch.retrievedAt <= mapsObservedAt
+ORDER BY warFetch.retrievedAt DESC
 ~~~
 
-If no qualifying war observation exists, region membership normalization is deferred. Deferred work creates no `normalization_runs` row and remains replayable from the same durable source parse after suitable war evidence is normalized.
+A late/fenced-out capture is evidence but is not authoritative chronology and MUST NOT select the war context.
+
+The selected war fetch must confirm a replayable representation: either a body-bearing successful representation or a 304 linked to its prior body-bearing Fetch, with the matching versioned source parse run. M5-E does not skip a newer failed or otherwise unconfirmed authoritative war fetch to assume that an older representation remained current; such a gap is deferred because source unavailability is not proof of unchanged state.
+
+M5-E then invokes the versioned M5-D war normalizer for that exact source parse run. The resulting canonical `WarId` is used for membership, and the canonical store independently verifies the same temporal war context before commit.
+
+If no qualifying/replayable war source context exists, region membership normalization is deferred. Deferred work creates no `normalization_runs` row and remains replayable from the same durable source parse after suitable durable war evidence or parse metadata appears.
 
 Once `(sourceParseRunId, regionNormalizerVersion)` is durably normalized or rejected, that result is terminal for that version. Replay recognizes the existing run and MUST NOT resolve a new war context or mutate membership again. A new normalization policy requires a new normalizer version.
 
-This rule makes local replay stable across later wars and prevents historical map evidence from being silently rebound to a future or backfilled war.
+This rule makes local replay independent of canonical worker order and stable across later wars, and prevents historical map evidence from being silently rebound to a future or backfilled war.
 
 `runtime.regions` is source-scoped by canonical key in M5. `runtime.war_regions` retains the exact upstream source map name and does not infer aliases, strip suffixes, case-fold, or treat absence from a later list as a deletion.
 
@@ -309,8 +315,11 @@ Required behavior:
 - validate replay outcome/fingerprint/unknown counters before canonical writes;
 - preserve exact case-sensitive `sourceMapName` values; exact duplicates collapse, case variants remain distinct;
 - derive the initial canonical region key as `<sourceKey>/map/<exactSourceMapName>` so the global region table does not imply cross-source alias equivalence;
-- bind map membership only to the latest durable war observation for the same shard with `war.observedAt <= maps.retrievedAt`;
-- if no such war context exists, defer without writing a normalization run so replay can succeed later when qualifying durable war evidence appears;
+- resolve the war context from the latest authoritative `captured_current` War API fetch for the same shard with `warFetch.retrievedAt <= maps.retrievedAt`;
+- exclude `captured_late` / fenced-out responses from context selection even though they remain durable evidence;
+- require that selected war source context to provide a replayable body-bearing representation (directly or through 304 lineage) and the matching versioned source parse run;
+- invoke M5-D for that exact war source parse so membership is independent of canonical worker ordering;
+- if the latest authoritative war fetch is missing, failed, unconfirmed, or not yet parsed, defer without writing a normalization run rather than falling back to older source state;
 - never bind earlier map evidence to a future war observation;
 - atomically commit `normalization_run + region identities + war_regions` for accepted normalization;
 - treat an existing normalization run as terminal for that normalizer version so out-of-order war backfill cannot rebind prior map evidence;
