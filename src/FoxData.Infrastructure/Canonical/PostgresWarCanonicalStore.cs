@@ -84,7 +84,9 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
             SELECT
                 parse_run.representation_fetch_id,
                 parse_run.outcome,
-                shard.id
+                shard.id,
+                parse_run.capability_key,
+                endpoint.capability_key
             FROM evidence.source_parse_runs AS parse_run
             INNER JOIN evidence.fetches AS representation_fetch
                 ON representation_fetch.id = parse_run.representation_fetch_id
@@ -110,9 +112,15 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
         var representationFetchId = new FetchId(reader.GetGuid(0));
         var parseOutcome = reader.GetString(1);
         var shardId = new ShardId(reader.GetGuid(2));
+        var parseCapabilityKey = reader.GetString(3);
+        var endpointCapabilityKey = reader.GetString(4);
 
         if (representationFetchId != write.RepresentationFetchId ||
-            shardId != write.ShardId)
+            shardId != write.ShardId ||
+            !string.Equals(
+                parseCapabilityKey,
+                endpointCapabilityKey,
+                StringComparison.Ordinal))
         {
             throw new CanonicalStateIntegrityException(
                 "War canonical write does not match its durable source-parse provenance.");
