@@ -322,7 +322,7 @@ Minimum fields:
 - ruleVersion;
 - configurationVersion;
 - severity/effect;
-- optional source occurrence ordinal;
+- optional exact map-item occurrence ID or map-text occurrence ID;
 - detailCode;
 - deterministic input metrics JSONB;
 - createdAt.
