@@ -706,14 +706,66 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
             """{"totalEnlistments":40,"colonialCasualties":50,"wardenCasualties":60,"dayOfWar":0}""",
             start.AddMinutes(11));
 
-        var fetchCount =
+        await fixture.CreateHttpStatusAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "completion-source-unavailable",
+            503,
+            start.AddMinutes(20));
+        await fixture.CreateDeferredAttemptAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "completion-collector-unavailable",
+            authorizeExchange: false,
+            start.AddMinutes(21));
+        await fixture.CreateDeferredAttemptAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "completion-uncertain",
+            authorizeExchange: true,
+            start.AddMinutes(22));
+        _ = await fixture.CreateRawAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "completion-rejected-war",
+            """{"warId":""",
+            start.AddMinutes(23));
+
+        var fetchCountBeforeRecovery =
             await fixture.CountAsync("evidence.fetches");
-        var payloadCount =
+        var payloadCountBeforeRecovery =
             await fixture.CountAsync("evidence.payloads");
+
+        await fixture.RunRecoveryUntilQuiescentAsync();
+
+        Assert.Equal(
+            fetchCountBeforeRecovery,
+            await fixture.CountAsync("evidence.fetches"));
+        Assert.Equal(
+            payloadCountBeforeRecovery,
+            await fixture.CountAsync("evidence.payloads"));
+
+        var fetchCount = fetchCountBeforeRecovery;
+        var payloadCount = payloadCountBeforeRecovery;
         var parseCount =
             await fixture.CountAsync("evidence.source_parse_runs");
 
-        await fixture.RunRecoveryUntilQuiescentAsync();
+        Assert.True(
+            await fixture.CountCoverageStateAsync("observed") > 0);
+        Assert.True(
+            await fixture.CountCoverageStateAsync("source_not_modified") > 0);
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("source_unavailable"));
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("collector_unavailable"));
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("unknown"));
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("rejected"));
 
         Assert.Equal(
             0L,
