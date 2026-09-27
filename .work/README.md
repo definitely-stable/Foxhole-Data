@@ -55,6 +55,7 @@ Primary documents:
 - M4_COLLECTION_POLICY.md
 - M4_COMPLETION.md
 - M5_CANONICAL_WAR_REGION_REPORT.md
+- M5_COMPLETION.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
