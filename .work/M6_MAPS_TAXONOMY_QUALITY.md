@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: planned.
+Status: in progress. M6-A implemented; next slice M6-B.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1076,9 +1076,26 @@ M6 must preserve:
 
 ### M6-A — Contract, context and persistence foundation
 
+Status: complete.
+
 Goal: freeze the M6 semantic boundary before map normalization.
 
-Implement:
+Delivered:
+
+- UUIDv7 typed identities for normalized map snapshots, item/text occurrences, quality runs/findings and accepted map observations;
+- source-neutral Application contracts plus MapSnapshotKernel;
+- PostgreSQL M6 foundation schema for representation-derived snapshots/occurrences, quality evidence and accepted map observations;
+- explicit `quality` schema creation;
+- exact per-array ordinal uniqueness without value-based deduplication;
+- typed item/text occurrence references from quality findings;
+- composite database lineage preventing a runtime map observation from mixing the snapshot, WarRegion or validation Fetch of another QualityRun;
+- reusable `WarApiMapContextResolver` extracted from M5-F and adopted by war-report normalization;
+- migration round-trip, duplicate-preservation, snapshot-reuse, fail-closed constraint and architecture-boundary tests;
+- no static/dynamic map normalization, taxonomy interpretation or quality-policy behavior yet.
+
+The implementation deliberately permits representable anomalous raw values through MapSnapshotKernel. Coordinate validity, negative/changed source region values, unknown teams/icons/flags and similar semantic quality questions remain M6-E/F policy work.
+
+Original implementation plan:
 
 1. this normative M6 specification and research snapshot;
 2. typed IDs/contracts for map snapshots, source occurrences, quality runs/findings and accepted map observations;
