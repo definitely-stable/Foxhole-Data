@@ -398,11 +398,24 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
             0L,
             await fixture.CountAsync("runtime.war_report_observations"));
 
+        var parseRunsBeforeRecovery =
+            await fixture.CountAsync("evidence.source_parse_runs");
+
         var recovery = await fixture.CoverageRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
 
         Assert.True(recovery.CoverageRecorded >= 4);
         Assert.Equal(1, recovery.ContinuityApplied);
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("source_not_modified"));
+        Assert.Equal(
+            parseRunsBeforeRecovery,
+            await fixture.CountAsync("evidence.source_parse_runs"));
+        Assert.Equal(
+            1L,
+            await fixture.CountNormalizationRunsAsync(
+                WarApiVersions.RegionNormalizer));
 
         var replay = await fixture.ReportNormalization.NormalizeAsync(
             report.Id,
