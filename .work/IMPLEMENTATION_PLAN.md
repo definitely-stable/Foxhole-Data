@@ -114,7 +114,7 @@ Implementation slices:
 
 ## M5 — canonical war/region/report model
 
-Status: complete.
+Status: completed 2026-09-27. Completion record: [M5_COMPLETION.md](M5_COMPLETION.md).
 
 Detailed normative plan: [M5_CANONICAL_WAR_REGION_REPORT.md](M5_CANONICAL_WAR_REGION_REPORT.md).
 
