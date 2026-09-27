@@ -249,14 +249,11 @@ public sealed class PostgresRegionCanonicalStore(NpgsqlDataSource dataSource)
             ?? throw new CanonicalStateIntegrityException(
                 "Normalization-run uniqueness conflict was observed but the existing row was not readable.");
 
-        if (existing.Outcome != NormalizationRunOutcome.Normalized ||
-            existing.ErrorCode is not null)
-        {
-            throw new CanonicalStateIntegrityException(
-                "Repeated accepted region normalization conflicts with the durable normalization outcome.");
-        }
-
-        return existing;
+        throw new CanonicalStateIntegrityException(
+            existing.Outcome == NormalizationRunOutcome.Normalized &&
+            existing.ErrorCode is null
+                ? "Accepted region normalization already exists; replay must not mutate membership projections again."
+                : "Repeated accepted region normalization conflicts with the durable normalization outcome.");
     }
 
     private static async Task<NormalizationRunDescriptor?> GetNormalizationRunAsync(
