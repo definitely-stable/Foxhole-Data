@@ -81,6 +81,9 @@ public static class DependencyInjection
         services.AddScoped<ICanonicalEvidenceReader, PostgresCanonicalEvidenceReader>();
         services.AddScoped<IWarCanonicalStore, PostgresWarCanonicalStore>();
         services.AddScoped<WarCanonicalKernel>();
+        services.AddScoped<IWarContextReader, PostgresWarContextReader>();
+        services.AddScoped<IRegionCanonicalStore, PostgresRegionCanonicalStore>();
+        services.AddScoped<RegionCanonicalKernel>();
 
         services.AddSingleton<PostgresHealthCheck>();
 

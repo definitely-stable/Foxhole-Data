@@ -8,6 +8,7 @@ public static class WarApiVersions
     public const string BackoffPolicy = "warapi-backoff@1";
     public const string PollPolicy = "warapi-poll@1";
     public const string WarNormalizer = "warapi-war-normalizer@1";
+    public const string RegionNormalizer = "warapi-region-normalizer@1";
 
     public static string SchedulingPolicy(
         WarApiCollectionProfile collectionProfile)

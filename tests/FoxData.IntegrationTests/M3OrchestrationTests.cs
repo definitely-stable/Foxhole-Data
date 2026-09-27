@@ -896,9 +896,19 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             new PostgresNormalizationRunStore(dataSource));
         var warCanonical = new WarCanonicalKernel(
             new PostgresWarCanonicalStore(dataSource));
+        var canonicalEvidence = new PostgresCanonicalEvidenceReader(dataSource);
         var warNormalization = new WarApiWarNormalizationCoordinator(
-            new PostgresCanonicalEvidenceReader(dataSource),
+            canonicalEvidence,
             warCanonical,
+            normalization,
+            options,
+            timeProvider);
+        var regionNormalization = new WarApiRegionNormalizationCoordinator(
+            canonicalEvidence,
+            new PostgresWarContextReader(dataSource),
+            warNormalization,
+            new RegionCanonicalKernel(
+                new PostgresRegionCanonicalStore(dataSource)),
             normalization,
             options,
             timeProvider);
@@ -930,6 +940,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             WarApiCollectionProfile.Bootstrap,
             measurementProbe ?? WarApiMeasurementProbeProfile.Disabled,
             warNormalization,
+            regionNormalization,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 

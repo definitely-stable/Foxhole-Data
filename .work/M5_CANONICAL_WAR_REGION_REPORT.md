@@ -1,6 +1,6 @@
 # M5 — Canonical War / Region / Report Model
 
-Status: in progress. M5-A through M5-D implemented; next slice M5-E.
+Status: in progress. M5-A through M5-E implemented; next slice M5-F.
 Prerequisite: M4 Source Measurement completed.
 Successor: M6 maps, taxonomy and quality.
 
@@ -217,6 +217,40 @@ The normalizer receives a SourceParseRunId, not an in-memory source DTO. It reso
 
 runtime.wars is a bounded projection only. Its observation bounds and projected warNumber are rebuilt from runtime.war_observations and MUST NOT be treated as historical truth.
 
+## M5-E region-membership boundary
+
+An active-map-list payload has no `warId`. M5 therefore MUST NOT attach it to whichever war happens to be current when replay executes.
+
+For a maps parse with canonical observation boundary `mapsObservedAt`, M5-E first resolves the latest authoritative immutable War API fetch for the same shard and the `runtime-war-state / war` endpoint with:
+
+~~~text
+attempt.outcomeCode = captured_current
+AND warFetch.retrievedAt <= mapsObservedAt
+ORDER BY warFetch.retrievedAt DESC
+~~~
+
+A late/fenced-out capture is evidence but is not authoritative chronology and MUST NOT select the war context.
+
+The selected war fetch must confirm a replayable representation: either a body-bearing successful representation or a 304 linked to its prior body-bearing Fetch, with the matching versioned source parse run. M5-E does not skip a newer failed or otherwise unconfirmed authoritative war fetch to assume that an older representation remained current; such a gap is deferred because source unavailability is not proof of unchanged state.
+
+M5-E then invokes the versioned M5-D war normalizer for that exact source parse run. The resulting canonical `WarId` is used for membership, and the canonical store independently verifies the same temporal war context before commit.
+
+If no qualifying/replayable war source context exists, region membership normalization is deferred. Deferred work creates no `normalization_runs` row and remains replayable from the same durable source parse after suitable durable war evidence or parse metadata appears.
+
+Once `(sourceParseRunId, regionNormalizerVersion)` is durably normalized or rejected, that result is terminal for that version. Replay recognizes the existing run and MUST NOT resolve a new war context or mutate membership again. A new normalization policy requires a new normalizer version.
+
+This rule makes local replay independent of canonical worker order and stable across later wars, and prevents historical map evidence from being silently rebound to a future or backfilled war.
+
+`runtime.regions` is source-scoped by canonical key in M5. `runtime.war_regions` retains the exact upstream source map name and does not infer aliases, strip suffixes, case-fold, or treat absence from a later list as a deletion.
+
+## M5-E and 304 validation
+
+M5-E normalizes semantic active-map-list content from a body-bearing representation and its durable `SourceParseRun`.
+
+A `304 Not Modified` validation does not create another body-bearing source parse and MUST NOT create a second normalization run for the same representation merely to extend time coverage. The `source_not_modified` continuity record is owned by M5-G coverage.
+
+If unchanged map-list content is validated across a war boundary, M5-G MUST preserve that validation provenance and may use it to prove continuity/projection for the new war without violating the M5 normalization idempotency key or fabricating a new source payload. M5-E itself does not reinterpret a 304 as a new semantic map-list observation.
+
 ## Append-only and mutation rules
 
 Immutable:
@@ -285,9 +319,30 @@ Required behavior:
 
 ### M5-E — region discovery/membership
 
+- consume only durable `active-map-list` source parse runs and replay the exact body-bearing representation locally;
+- validate replay outcome/fingerprint/unknown counters before canonical writes;
+- preserve exact case-sensitive `sourceMapName` values; exact duplicates collapse, case variants remain distinct;
+- derive the initial canonical region key as `<sourceKey>/map/<exactSourceMapName>` so the global region table does not imply cross-source alias equivalence;
+- resolve the war context from the latest authoritative `captured_current` War API fetch for the same shard with `warFetch.retrievedAt <= maps.retrievedAt`;
+- exclude `captured_late` / fenced-out responses from context selection even though they remain durable evidence;
+- require that selected war source context to provide a replayable body-bearing representation (directly or through 304 lineage) and the matching versioned source parse run;
+- invoke M5-D for that exact war source parse so membership is independent of canonical worker ordering;
+- if the latest authoritative war fetch is missing, failed, unconfirmed, or not yet parsed, defer without writing a normalization run rather than falling back to older source state;
+- never bind earlier map evidence to a future war observation;
+- atomically commit `normalization_run + region identities + war_regions` for accepted normalization;
+- treat an existing normalization run as terminal for that normalizer version so out-of-order war backfill cannot rebind prior map evidence;
+- keep `war_regions` bounded and monotonic: `firstSeenAt=min`, `lastSeenAt=max`, optional `sourceRegionId` may enrich but not conflict;
+- absence from a later active-map-list does not delete membership or fabricate a disappearance event;
+- successful war normalization opportunistically retries the latest durable maps parse for that shard, closing the normal worker-order race without an upstream refetch.
+
 ### M5-F — war-report normalization
 
 ### M5-G — coverage, recovery and reprocessing verification
+
+- persist `observed / source_not_modified / source_unavailable / collector_unavailable / rejected / unknown` coverage independently from domain state;
+- verify 304 continuity against the exact representation lineage without creating duplicate source parses or normalization runs;
+- cover unchanged active-map-list representations across war boundaries without inventing source payloads or violating region-normalizer idempotency;
+- prove local recovery/reprocessing from durable M2/M3/M5 evidence.
 
 ### M5-H — completion gate
 
