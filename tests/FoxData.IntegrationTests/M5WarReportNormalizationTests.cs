@@ -664,6 +664,111 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
             await fixture.CountAsync("runtime.wars"));
     }
 
+    [Fact]
+    public async Task M5CompletionGateRebuildsEquivalentCanonicalGraphFromDurableEvidence()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var start = new DateTimeOffset(
+            2026, 9, 28, 3, 0, 0, TimeSpan.Zero);
+
+        _ = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "completion-old-war",
+            """{"warId":"completion-old-war","warNumber":131,"winner":"WARDENS"}""",
+            start);
+
+        var maps = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.Maps(),
+            "completion-maps",
+            """["DeadLandsHex","MarbanHollow"]""",
+            start.AddMinutes(1));
+
+        _ = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "completion-new-war",
+            """{"warId":"completion-new-war","warNumber":132,"winner":"NONE"}""",
+            start.AddMinutes(10));
+
+        await fixture.CreateValidation304Async(
+            "live-1",
+            WarApiCatalog.Maps(),
+            "completion-maps-304",
+            maps.RepresentationFetchId,
+            start.AddMinutes(10).AddSeconds(30));
+
+        _ = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.WarReport("DeadLandsHex"),
+            "completion-report",
+            """{"totalEnlistments":40,"colonialCasualties":50,"wardenCasualties":60,"dayOfWar":0}""",
+            start.AddMinutes(11));
+
+        var fetchCount =
+            await fixture.CountAsync("evidence.fetches");
+        var payloadCount =
+            await fixture.CountAsync("evidence.payloads");
+        var parseCount =
+            await fixture.CountAsync("evidence.source_parse_runs");
+
+        await fixture.RunRecoveryUntilQuiescentAsync();
+
+        Assert.Equal(
+            0L,
+            await fixture.CountM5ProvenanceViolationsAsync());
+
+        var first = await fixture.ReadM5SemanticSnapshotAsync();
+
+        Assert.Equal(2L, await fixture.CountAsync("runtime.wars"));
+        Assert.Equal(4L, await fixture.CountAsync("runtime.war_regions"));
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("runtime.war_report_observations"));
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("evidence.coverage_reprocessing_runs"));
+
+        await fixture.DeleteM5DerivedStateAsync();
+
+        Assert.Equal(
+            fetchCount,
+            await fixture.CountAsync("evidence.fetches"));
+        Assert.Equal(
+            payloadCount,
+            await fixture.CountAsync("evidence.payloads"));
+        Assert.Equal(
+            parseCount,
+            await fixture.CountAsync("evidence.source_parse_runs"));
+        Assert.Equal(0L, await fixture.CountAsync("runtime.wars"));
+        Assert.Equal(
+            0L,
+            await fixture.CountAsync("evidence.normalization_runs"));
+        Assert.Equal(
+            0L,
+            await fixture.CountAsync("evidence.coverage_observations"));
+
+        await fixture.RunRecoveryUntilQuiescentAsync();
+
+        Assert.Equal(
+            fetchCount,
+            await fixture.CountAsync("evidence.fetches"));
+        Assert.Equal(
+            payloadCount,
+            await fixture.CountAsync("evidence.payloads"));
+        Assert.Equal(
+            parseCount,
+            await fixture.CountAsync("evidence.source_parse_runs"));
+        Assert.Equal(
+            0L,
+            await fixture.CountM5ProvenanceViolationsAsync());
+
+        var rebuilt = await fixture.ReadM5SemanticSnapshotAsync();
+
+        Assert.Equal(first, rebuilt);
+    }
+
     private async Task<Fixture> CreateFixtureAsync()
     {
         await MigrateAsync();
