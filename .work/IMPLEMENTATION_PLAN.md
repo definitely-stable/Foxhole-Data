@@ -141,7 +141,7 @@ Implementation slices:
 
 ## M6 — maps, taxonomy and quality
 
-Status: planned.
+Status: in progress. M6-A complete; M6-B next.
 
 Detailed normative plan: [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
 Research evidence: [research/M6_MAP_QUALITY_2026-09.md](research/M6_MAP_QUALITY_2026-09.md).
@@ -152,14 +152,14 @@ M6 deliberately stops before objective identity and state-change inference.
 
 Implementation slices:
 
-- M6-A contract, context and persistence foundation;
-- M6-B static map normalization;
-- M6-C dynamic map normalization;
-- M6-D versioned taxonomy;
-- M6-E quality kernel and accepted-observation transaction;
-- M6-F calibrated historical anomaly rules, including warapi#92/#120;
-- M6-G static/dynamic coverage, local recovery and versioned reprocessing;
-- M6-H deterministic completion gate and M6 completion record.
+- M6-A contract, context and persistence foundation — complete;
+- M6-B static map normalization — next;
+- M6-C dynamic map normalization — pending;
+- M6-D versioned taxonomy — pending;
+- M6-E quality kernel and accepted-observation transaction — pending;
+- M6-F calibrated historical anomaly rules, including warapi#92/#120 — pending;
+- M6-G static/dynamic coverage, local recovery and versioned reprocessing — pending;
+- M6-H deterministic completion gate and M6 completion record — pending.
 
 Mandatory boundaries:
 
