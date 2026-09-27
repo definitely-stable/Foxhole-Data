@@ -21,6 +21,7 @@ public sealed class WarApiReconciler(
     WarApiCollectionProfile collectionProfile,
     WarApiMeasurementProbeProfile measurementProbe,
     WarApiWarNormalizationCoordinator warNormalization,
+    WarApiRegionNormalizationCoordinator regionNormalization,
     TimeProvider timeProvider,
     ILogger<WarApiReconciler> logger)
 {
@@ -71,16 +72,26 @@ public sealed class WarApiReconciler(
                 await warNormalization.NormalizeAsync(
                     parse.Run.Id,
                     cancellationToken);
+
+                await TryNormalizeLatestMapsAsync(
+                    context,
+                    cancellationToken);
             }
 
             if (context.SourceEndpoint.Capability ==
-                    WarApiCapabilities.ActiveMapList &&
-                parsed?.Parsed is true &&
-                parsed.Value is string[] maps)
+                    WarApiCapabilities.ActiveMapList)
             {
-                await ReconcileMapDiscoveryAsync(
-                    context,
-                    maps,
+                if (parsed?.Parsed is true &&
+                    parsed.Value is string[] maps)
+                {
+                    await ReconcileMapDiscoveryAsync(
+                        context,
+                        maps,
+                        cancellationToken);
+                }
+
+                await regionNormalization.NormalizeAsync(
+                    parse.Run.Id,
                     cancellationToken);
             }
         }
@@ -307,6 +318,45 @@ public sealed class WarApiReconciler(
             SourceTags(context, outcome));
 
         return new ParseReconciliationResult(parsed, run);
+    }
+
+    private async Task TryNormalizeLatestMapsAsync(
+        WarApiRegistryContext context,
+        CancellationToken cancellationToken)
+    {
+        var mapsEndpoint = await registry.GetEndpointBySemanticKeyAsync(
+            context.Shard.Id,
+            "maps",
+            cancellationToken);
+
+        if (mapsEndpoint is null)
+        {
+            return;
+        }
+
+        var mapsSnapshot = await evidenceReader.GetCurrentAsync(
+            mapsEndpoint.Id,
+            cancellationToken);
+        var representationFetch = mapsSnapshot?.RepresentationFetch;
+        if (representationFetch is null)
+        {
+            return;
+        }
+
+        var parseRun = await parseRunStore.GetAsync(
+            representationFetch.Id,
+            WarApiCapabilities.ActiveMapList.Key,
+            WarApiVersions.Parser,
+            cancellationToken);
+
+        if (parseRun is null)
+        {
+            return;
+        }
+
+        await regionNormalization.NormalizeAsync(
+            parseRun.Id,
+            cancellationToken);
     }
 
     private async Task ReconcileMapDiscoveryAsync(
