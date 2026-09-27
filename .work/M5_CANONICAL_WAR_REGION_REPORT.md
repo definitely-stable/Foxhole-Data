@@ -1,6 +1,6 @@
 # M5 — Canonical War / Region / Report Model
 
-Status: in progress. M5-A through M5-C implemented; next slice M5-D.
+Status: in progress. M5-A through M5-D implemented; next slice M5-E.
 Prerequisite: M4 Source Measurement completed.
 Successor: M6 maps, taxonomy and quality.
 
@@ -201,6 +201,22 @@ A 503, collector outage or other gap MUST NOT be interpreted as "state did not c
 
 The persistence representation for coverage is delivered in the later M5 coverage slice after the canonical identity/observation foundation is stable.
 
+## M5-D transaction and replay boundary
+
+Accepted war normalization uses one PostgreSQL transaction for:
+
+~~~text
+normalization_run
+    + war identity/projection
+    + immutable war_observation
+~~~
+
+A successful normalization run MUST NOT become durable without its matching canonical observation.
+
+The normalizer receives a SourceParseRunId, not an in-memory source DTO. It resolves the exact representation Fetch/Payload from durable evidence and reruns the parser version recorded by the source parse run. This keeps live reconciliation and post-crash replay on the same evidence path.
+
+runtime.wars is a bounded projection only. Its observation bounds and projected warNumber are rebuilt from runtime.war_observations and MUST NOT be treated as historical truth.
+
 ## Append-only and mutation rules
 
 Immutable:
@@ -250,11 +266,22 @@ Required behavior:
 
 ### M5-C — normalization kernel
 
-- local evidence reader;
-- idempotent normalization-run store;
-- transaction boundary joining run + canonical write.
+- idempotent normalization-run identity and outcome persistence;
+- provenance validation against durable source parse runs;
+- generic rejected/failed normalization recording.
 
 ### M5-D — war normalization
+
+- durable replay input is resolved by SourceParseRunId to its exact body-bearing representation;
+- the matching versioned War API parser is rerun locally over durable bytes;
+- replay fingerprint/outcome/unknown counters are checked against durable parse metadata;
+- source war identity remains exact, opaque and shard-scoped;
+- source lifecycle epoch milliseconds are converted to UTC without fabricated event time;
+- unknown winner values are preserved when structurally representable;
+- accepted normalization run, war identity and immutable war observation commit atomically;
+- runtime.wars is refreshed as a rebuildable projection over immutable observations;
+- replay of the same (sourceParseRunId, normalizerVersion) returns the same canonical observation;
+- rejected normalization never destroys evidence and never causes an upstream request.
 
 ### M5-E — region discovery/membership
 
