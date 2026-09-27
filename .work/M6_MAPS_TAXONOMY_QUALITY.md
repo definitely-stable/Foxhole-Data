@@ -156,7 +156,7 @@ evidence.map_item_occurrences
 evidence.map_text_occurrences
 ~~~
 
-The exact physical names MAY change before M6-A is frozen, but the semantic split is normative.
+M6-A has frozen these physical table names and the representation-versus-accepted-observation split. Later slices may extend the schema only when their owned semantics require it; they must not collapse these layers.
 
 A map snapshot is tied to:
 
@@ -197,11 +197,35 @@ validation Fetch.priorFetchId == representation Fetch
 
 The normalized snapshot and all source occurrences are reused. M6 MUST NOT duplicate thousands of occurrence rows solely because a 304 validated unchanged bytes.
 
-## 5. Planned persistence model
+### 4.1 Normalization is source-local; acceptance is context-bound
+
+A normalized map snapshot is representation-derived evidence and MUST NOT require a resolved WarId/WarRegion merely to exist.
+
+Static/dynamic M6-B/C normalization therefore requires:
+
+- exact source endpoint provenance;
+- exact sourceMapName from the endpoint semantic key;
+- exact durable representation bytes;
+- deterministic parser replay;
+- structural normalization invariants.
+
+It does **not** require current M5 war/map membership context.
+
+War/WarRegion context is required later when a validation boundary is evaluated for quality/canonical acceptance.
+
+This separation is mandatory because:
+
+- durable source content must remain locally normalizable even when M5 context is temporarily deferred;
+- one normalized representation can be reused by a later 304 validation in another WarRegion;
+- source normalization must not be blocked by canonical-context recovery ordering.
+
+`WarApiMapContextResolver`, delivered by M6-A, is therefore primarily an M6-E accepted-binding/quality-context primitive and an M6-G continuity/reprocessing primitive. M6-B/C MAY use it only for optional diagnostics; context resolution MUST NOT be required to commit the normalized representation snapshot.
+
+## 5. Persistence model — M6-A frozen foundation
 
 ### 5.1 evidence.map_snapshots
 
-Immutable normalized representation content.
+Implemented by M6-A as immutable normalized representation content.
 
 Minimum fields:
 
@@ -230,7 +254,7 @@ The raw millisecond value is retained even when a safe DateTimeOffset conversion
 
 ### 5.2 evidence.map_item_occurrences
 
-One row per element in `mapItems` of one exact representation.
+Implemented by M6-A as one row per element in `mapItems` of one exact representation.
 
 Minimum fields:
 
@@ -262,7 +286,7 @@ Exact duplicate rows are preserved.
 
 ### 5.3 evidence.map_text_occurrences
 
-One row per `mapTextItems` element.
+Implemented by M6-A as one row per `mapTextItems` element.
 
 Minimum fields:
 
@@ -278,7 +302,7 @@ Unknown marker types are preserved.
 
 ### 5.4 quality.map_quality_runs
 
-One immutable evaluation of one candidate snapshot binding.
+Implemented by M6-A as the persistence foundation for one immutable evaluation of one candidate snapshot binding. M6-E will implement evaluation behavior.
 
 Minimum fields:
 
@@ -312,7 +336,7 @@ Required evaluation identity:
 
 ### 5.5 quality.map_quality_findings
 
-Immutable rule-level evidence.
+Implemented by M6-A as immutable rule-level evidence storage. M6-E/F will define and execute the versioned rules.
 
 Minimum fields:
 
@@ -331,7 +355,7 @@ The persisted input metrics must be sufficient to explain the decision without r
 
 ### 5.6 runtime.map_observations
 
-Only a quality policy that allows canonical acceptance creates a runtime map observation.
+Implemented by M6-A as the accepted-observation binding table. Only a quality policy that allows canonical acceptance may create a row.
 
 Minimum fields:
 
@@ -354,6 +378,39 @@ qualityRunId
 M6 runtime observations are immutable.
 
 No M6 table contains ObjectiveId.
+
+### 5.7 Array-presence extension required by M6-B/C
+
+The current source DTO intentionally permits `mapItems` and `mapTextItems` to deserialize as null for tolerant parsing.
+
+M6 MUST preserve the distinction between:
+
+~~~text
+mapItems: []
+~~~
+
+and a representation in which the array was null or absent.
+
+The M6-A foundation currently stores occurrence rows plus counts, so both cases would otherwise collapse to count zero.
+
+Before M6-B is considered complete, extend the snapshot contract/schema with deterministic source-shape metadata equivalent to:
+
+- `sourceMapItemsArrayPresent`;
+- `sourceMapTextItemsArrayPresent`.
+
+Exact names may follow repository conventions, but the semantics are required.
+
+Rules:
+
+- non-null source array => corresponding flag true;
+- null/absent source array => flag false;
+- flag false requires corresponding occurrence count = 0;
+- empty-but-present array remains flag true with count = 0;
+- parser-incompatible non-array shapes remain parser rejection and do not create a snapshot.
+
+This gives M6-E quality enough information to distinguish a legitimate empty array from missing/null source structure without rereading mutable interpretation state.
+
+M6 does not need to distinguish explicit JSON null from a missing property in v1; both are structurally absent at normalization level. Raw bytes and structural fingerprint preserve the original distinction for future parser versions.
 
 ## 6. Storage and indexing constraints
 
@@ -382,7 +439,7 @@ Both static and dynamic endpoints are map-scoped but do not include canonical Wa
 
 The endpoint name alone is not historical membership evidence.
 
-M6 MUST resolve context at each validation boundary using the already proven M5 pattern:
+When M6 evaluates a validation boundary for quality/canonical acceptance, it MUST resolve context using the already proven M5 pattern:
 
 1. derive exact sourceMapName from endpoint semantic key:
    - `map-static/<mapName>`;
@@ -396,7 +453,9 @@ M6 MUST resolve context at each validation boundary using the already proven M5 
 8. require the exact M5 WarRegion;
 9. never fall back past a newer failed/unconfirmed authoritative source context.
 
-M6-A SHOULD extract the duplicated War API war/map context logic currently used by M5-F into one Worker/source composition helper such as `WarApiMapContextResolver`.
+M6-A delivered the shared Worker/source-composition `WarApiMapContextResolver` and M5-F now uses it.
+
+M6-E and M6-G MUST reuse this resolver rather than create a second War API map-context policy.
 
 The helper remains source-specific and MUST NOT leak War API types into FoxData.Application or Core.
 
@@ -553,6 +612,16 @@ A taxonomy profile entry for an icon type may contain:
 
 Taxonomy keys are interpretation keys, not ObjectiveId values.
 
+### Parser diagnostics are not taxonomy authority
+
+The existing `warapi-parser@1` persists unknown-code diagnostics as part of versioned source-parse provenance.
+
+Those diagnostics are not semantic taxonomy truth.
+
+In particular, M6 MUST NOT infer that an icon/team/flag is semantically unknown merely because the parser version counted it as an unknown code. The selected taxonomy profile is the sole authority for semantic known/unknown interpretation at the taxonomy stage.
+
+This allows taxonomy profiles to evolve independently while preserving historical parser truth and SourceParseRun reproducibility.
+
 ### Unknown icon types
 
 Unknown values remain:
@@ -688,7 +757,24 @@ Static and dynamic baselines are separate.
 
 Out-of-order replay MUST select the same baseline as chronological replay or fail closed until prerequisites exist.
 
-M6-E/F tests must include out-of-order processing.
+### Chronology barrier
+
+For one `WarRegion + capabilityKind + taxonomyVersion + qualityPolicyVersion`, candidate C MUST NOT be quality-evaluated while an earlier eligible normalized candidate lacks a terminal quality result for the same selected versions.
+
+Ordering is:
+
+~~~text
+candidate observedAt ASC
+then deterministic durable tie-breaker
+~~~
+
+A `suspect` or `quarantined` result is terminal for ordering purposes but never becomes an accepted baseline.
+
+This barrier prevents late recovery of an older snapshot from retroactively changing the baseline that a newer immutable QualityRun should have used.
+
+M6-G reprocessing MUST use the same ordering rule.
+
+M6-E/F tests must include chronological, out-of-order and concurrent processing and prove the same terminal baseline chain.
 
 ## 15. Required quality rule families
 
@@ -897,14 +983,18 @@ No recovery step requires a new upstream request for already durable work.
 Dependency order:
 
 ~~~text
-M5 war context
-    -> M5 WarRegion membership
-        -> M6 static/dynamic source parse repair
-            -> M6 map normalization
-                -> taxonomy selection
-                    -> quality evaluation
-                        -> accepted map observation
+M6 static/dynamic source parse repair
+    -> M6 source-local map normalization
+        -> normalized map snapshot
+
+M5 war context + M5 WarRegion
+    + normalized map snapshot
+        -> taxonomy selection
+            -> quality evaluation
+                -> accepted map observation
 ~~~
+
+Source parsing/normalization and M5 context recovery may progress independently until the quality/binding join point.
 
 Quality/taxonomy reprocessing MUST NOT rewrite old runs. New versions create new immutable derived results.
 
@@ -1019,6 +1109,7 @@ Cover War API DTO/parser behavior:
 - unknown flag bits;
 - duplicate occurrence;
 - missing nullable fields;
+- empty arrays versus null/missing arrays;
 - malformed shapes.
 
 ### Integration tests
@@ -1030,7 +1121,8 @@ Cover:
 - snapshot + occurrence atomicity;
 - idempotent normalization;
 - exact provenance;
-- static/dynamic context resolution;
+- static/dynamic source normalization without WarRegion context;
+- quality-time static/dynamic context resolution;
 - sourceRegionId enrichment and conflict;
 - quality-run atomic acceptance;
 - suspect/quarantine no-runtime-observation behavior;
@@ -1144,7 +1236,9 @@ Acceptance:
 - static representation changes create new snapshots;
 - duplicate items remain duplicated;
 - no item/objective identity inferred;
-- no new upstream request required for recovery.
+- no new upstream request required for recovery;
+- snapshot normalization succeeds from durable source evidence even when WarRegion context is temporarily unavailable;
+- empty source arrays remain distinguishable from null/missing arrays.
 
 ### M6-C — Dynamic map normalization
 
@@ -1153,13 +1247,14 @@ Goal: materialize dynamic/public representations with the same loss-minimizing m
 Implement:
 
 1. `warapi-dynamic-map-normalizer@1`;
-2. exact context/provenance checks;
-3. atomic snapshot + item/text occurrences;
-4. version/lastUpdated preservation;
-5. team/icon/flags/viewDirection raw preservation;
-6. unknown/additive values remain representable;
-7. Worker integration;
-8. recovery and out-of-order tests.
+2. exact representation/provenance checks without requiring WarRegion context;
+3. reuse the M6-B array-presence representation;
+4. atomic snapshot + item/text occurrences;
+5. version/lastUpdated preservation;
+6. team/icon/flags/viewDirection raw preservation;
+7. unknown/additive values remain representable;
+8. Worker integration;
+9. recovery and source-normalization-before-context tests.
 
 Acceptance:
 
@@ -1201,13 +1296,15 @@ Implement:
 1. quality policy schema/profile infrastructure;
 2. `warapi-map-quality@1` initial structural policy shell;
 3. QualityRun / finding persistence;
-4. deterministic accepted baseline resolver;
-5. PostgreSQL concurrency protection for baseline selection;
-6. decision aggregation;
-7. atomic accepted QualityRun + runtime.map_observation;
-8. first-time sourceRegionId enrichment after acceptance;
-9. suspect/quarantine persistence without runtime observation;
-10. recovery of normalization-complete / quality-missing work.
+4. M5-backed validation-boundary context resolution through `WarApiMapContextResolver`;
+5. deterministic accepted baseline resolver;
+6. PostgreSQL concurrency protection for baseline selection;
+7. chronology-barrier query preventing evaluation past unresolved earlier candidates;
+8. decision aggregation;
+9. atomic accepted QualityRun + runtime.map_observation;
+10. first-time sourceRegionId enrichment after acceptance;
+11. suspect/quarantine persistence without runtime observation;
+12. recovery of normalization-complete / quality-missing work.
 
 Initial non-calibrated rule support:
 

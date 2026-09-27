@@ -58,6 +58,10 @@ Historical War API issue 92 is a required golden fixture: raw evidence must be r
 
 M6 quality details, baseline selection, policy versioning and calibration are normative in [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
 
+### Chronological quality determinism
+
+A baseline-dependent immutable quality result MUST NOT be finalized while an earlier eligible candidate for the same quality stream still lacks a terminal quality result. M6 uses a chronology barrier so crash recovery and out-of-order replay converge to the same accepted-baseline chain as chronological processing.
+
 ## Coverage
 
 Coverage answers whether Foxhole-Data had trustworthy observation capability over a time interval.
