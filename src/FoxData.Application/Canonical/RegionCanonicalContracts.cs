@@ -4,6 +4,13 @@ using FoxData.Core.Sources;
 
 namespace FoxData.Application.Canonical;
 
+public sealed record WarSourceContextDescriptor(
+    FetchId ValidationFetchId,
+    FetchId? RepresentationFetchId,
+    SourceParseRunId? SourceParseRunId,
+    DateTimeOffset RetrievedAt,
+    int? StatusCode);
+
 public sealed record WarContextDescriptor(
     WarId WarId,
     ShardId ShardId,
@@ -55,9 +62,12 @@ public sealed record RegionCanonicalResult(
 
 public interface IWarContextReader
 {
-    Task<WarContextDescriptor?> GetAtOrBeforeAsync(
+    Task<WarSourceContextDescriptor?> GetAtOrBeforeAsync(
         ShardId shardId,
         DateTimeOffset observedAt,
+        string capabilityKey,
+        string semanticKey,
+        string parserVersion,
         CancellationToken cancellationToken);
 }
 
