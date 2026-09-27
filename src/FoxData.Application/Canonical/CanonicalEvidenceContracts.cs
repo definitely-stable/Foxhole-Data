@@ -17,7 +17,13 @@ public sealed record CanonicalEvidenceInput(
     string SemanticKey,
     string AdapterVersion,
     string ParserVersion,
+    string FingerprintAlgorithm,
+    string? StructuralFingerprint,
     string ParseOutcome,
+    int UnknownPropertyCount,
+    int UnknownCodeCount,
+    string? ParseErrorCode,
+    long? DecodedByteLength,
     string? ContentEncoding,
     DateTimeOffset RetrievedAt,
     ReadOnlyMemory<byte> Body);
