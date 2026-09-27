@@ -166,7 +166,7 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
             deferred.Status);
         Assert.Null(deferred.NormalizationRun);
         Assert.Equal(
-            "war_context_unavailable",
+            "war_evidence_unavailable",
             deferred.DeferredReason);
         Assert.Equal(
             0L,
