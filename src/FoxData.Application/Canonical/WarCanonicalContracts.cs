@@ -42,7 +42,9 @@ public sealed record WarObservationDescriptor(
 
 public sealed record WarCanonicalWrite(
     SourceParseRunId SourceParseRunId,
-    NormalizationRunId NormalizationRunId,
+    string NormalizerVersion,
+    DateTimeOffset NormalizationStartedAt,
+    DateTimeOffset NormalizationCompletedAt,
     ShardId ShardId,
     FetchId RepresentationFetchId,
     DateTimeOffset ObservedAt,
@@ -55,7 +57,7 @@ public sealed record WarCanonicalResult(
 
 public interface IWarCanonicalStore
 {
-    Task<(WarDescriptor War, WarObservationDescriptor Observation)> RecordAsync(
+    Task<WarCanonicalResult> RecordAcceptedAsync(
         WarCanonicalWrite write,
         CancellationToken cancellationToken);
 }
