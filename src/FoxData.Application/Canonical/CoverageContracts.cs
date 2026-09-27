@@ -114,6 +114,7 @@ public interface ICoverageStore
 {
     Task<IReadOnlyList<CoverageAttemptEvidence>> GetUncoveredAttemptsAsync(
         string sourceKey,
+        string parserVersion,
         int batchSize,
         CancellationToken cancellationToken);
 
