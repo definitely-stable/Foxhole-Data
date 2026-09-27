@@ -1109,6 +1109,7 @@ Cover War API DTO/parser behavior:
 - unknown flag bits;
 - duplicate occurrence;
 - missing nullable fields;
+- empty arrays versus null/missing arrays;
 - malformed shapes.
 
 ### Integration tests
@@ -1120,7 +1121,8 @@ Cover:
 - snapshot + occurrence atomicity;
 - idempotent normalization;
 - exact provenance;
-- static/dynamic context resolution;
+- static/dynamic source normalization without WarRegion context;
+- quality-time static/dynamic context resolution;
 - sourceRegionId enrichment and conflict;
 - quality-run atomic acceptance;
 - suspect/quarantine no-runtime-observation behavior;
