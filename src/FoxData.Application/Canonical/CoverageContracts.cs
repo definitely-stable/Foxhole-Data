@@ -86,6 +86,8 @@ public sealed record CoverageReprocessingRunDescriptor(
     CoverageReprocessingRunId Id,
     CoverageObservationId CoverageObservationId,
     string ProcessorVersion,
+    string Outcome,
+    string? ErrorCode,
     DateTimeOffset StartedAt,
     DateTimeOffset CompletedAt,
     DateTimeOffset CreatedAt);
@@ -130,6 +132,14 @@ public interface ICoverageStore
 
     Task<CoverageContinuityResult> RecordMapContinuityAsync(
         CoverageContinuityWrite write,
+        CancellationToken cancellationToken);
+
+    Task<CoverageReprocessingRunDescriptor> RecordMapContinuityRejectedAsync(
+        CoverageObservationId coverageObservationId,
+        string processorVersion,
+        DateTimeOffset startedAt,
+        DateTimeOffset completedAt,
+        string errorCode,
         CancellationToken cancellationToken);
 
     Task<bool> IsMapContinuityAppliedAsync(
