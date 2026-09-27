@@ -228,6 +228,92 @@ Immutable accepted observations:
 - war_report_observations
 - map_observations
 
+## M6 map representation and quality model
+
+M6 separates representation-derived normalized content from war-scoped quality-accepted observations.
+
+Planned derived evidence:
+
+`map_snapshots`:
+
+- id;
+- normalizationRunId;
+- sourceParseRunId;
+- representationFetchId;
+- capabilityKind static/dynamic;
+- exact sourceMapName;
+- sourceRegionId nullable;
+- sourceScorchedVictoryTowns nullable;
+- sourceVersion nullable;
+- sourceLastUpdatedMs nullable;
+- sourceUpdatedAt nullable;
+- itemCount;
+- textItemCount;
+- recordedAt.
+
+`map_item_occurrences`:
+
+- id;
+- mapSnapshotId;
+- sourceOrdinal;
+- rawTeamId nullable;
+- rawIconType nullable;
+- x/y nullable;
+- rawFlags nullable;
+- rawViewDirection nullable.
+
+`map_text_occurrences`:
+
+- id;
+- mapSnapshotId;
+- sourceOrdinal;
+- text nullable;
+- x/y nullable;
+- rawMapMarkerType nullable.
+
+The occurrence ordinal is representation-local provenance and MUST NOT become objective identity.
+
+Planned quality state:
+
+`map_quality_runs`:
+
+- id;
+- mapSnapshotId;
+- WarRegionId;
+- validationFetchId;
+- taxonomyVersion;
+- qualityPolicyVersion;
+- baselineMapObservationId nullable;
+- decision;
+- startedAt/completedAt/createdAt.
+
+`map_quality_findings`:
+
+- id;
+- qualityRunId;
+- ruleKey/ruleVersion;
+- configurationVersion;
+- effect/severity;
+- optional occurrence ordinal;
+- deterministic input metrics;
+- detailCode;
+- createdAt.
+
+Accepted `runtime.map_observations` bind:
+
+- WarRegionId;
+- mapSnapshotId;
+- qualityRunId;
+- validationFetchId;
+- capabilityKind;
+- observedAt;
+- sourceUpdatedAt nullable;
+- recordedAt.
+
+A 304 MAY create a new war-scoped accepted binding when versioned continuity proves the unchanged representation applies to a new WarRegion, but it MUST NOT duplicate the representation snapshot or its occurrence rows.
+
+Detailed M6 constraints are defined by [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
+
 ## Objective identity layers
 
 - source_occurrences
