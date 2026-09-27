@@ -37,6 +37,7 @@ builder.Services.AddScoped<WarApiRegistryResolver>();
 builder.Services.AddScoped<WarApiAttemptExecutor>();
 builder.Services.AddScoped<WarApiWarNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiRegionNormalizationCoordinator>();
+builder.Services.AddScoped<WarApiMapContextResolver>();
 builder.Services.AddScoped<WarApiWarReportNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiCoverageRecoveryCoordinator>();
 builder.Services.AddScoped<WarApiReconciler>();
