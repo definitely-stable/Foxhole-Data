@@ -23,6 +23,7 @@ public sealed class WarApiWarReportNormalizationCoordinator(
     ICanonicalEvidenceReader evidenceReader,
     IWarContextReader sourceContextReader,
     IWarRegionReader warRegionReader,
+    ICoverageStore coverageStore,
     WarApiWarNormalizationCoordinator warNormalization,
     WarApiRegionNormalizationCoordinator regionNormalization,
     WarReportCanonicalKernel warReportCanonical,
@@ -194,60 +195,77 @@ public sealed class WarApiWarReportNormalizationCoordinator(
                 "map_membership_unconfirmed");
         }
 
-        var mapsWar = await ResolveWarAsync(
-            evidence.ShardId,
-            mapsEvidence.RetrievedAt,
-            cancellationToken);
+        var usesValidatedContinuity =
+            mapsContext.ValidationFetchId !=
+            mapsContext.RepresentationFetchId;
 
-        if (mapsWar.Status == ContextStatus.Deferred)
+        if (usesValidatedContinuity)
         {
-            return Deferred(
-                evidence,
-                mapsWar.Reason!);
+            var continuityApplied =
+                await coverageStore.IsMapContinuityAppliedAsync(
+                    mapsContext.ValidationFetchId,
+                    WarApiVersions.CoverageReprocessor,
+                    cancellationToken);
+
+            if (!continuityApplied)
+            {
+                return Deferred(
+                    evidence,
+                    "map_continuity_requires_coverage");
+            }
         }
-
-        if (mapsWar.Status == ContextStatus.Rejected)
+        else
         {
-            return await RejectAsync(
-                sourceParseRunId,
-                startedAt,
-                "map_war_context_rejected",
+            var mapsWar = await ResolveWarAsync(
+                evidence.ShardId,
+                mapsEvidence.RetrievedAt,
                 cancellationToken);
-        }
 
-        if (mapsWar.WarId != reportWar.WarId)
-        {
-            var requiresCoverage =
-                mapsContext.ValidationFetchId !=
-                mapsContext.RepresentationFetchId;
+            if (mapsWar.Status == ContextStatus.Deferred)
+            {
+                return Deferred(
+                    evidence,
+                    mapsWar.Reason!);
+            }
 
-            return Deferred(
-                evidence,
-                requiresCoverage
-                    ? "map_continuity_requires_coverage"
-                    : "map_war_context_mismatch");
-        }
+            if (mapsWar.Status == ContextStatus.Rejected)
+            {
+                return await RejectAsync(
+                    sourceParseRunId,
+                    startedAt,
+                    "map_war_context_rejected",
+                    cancellationToken);
+            }
 
-        var regionResult = await regionNormalization.NormalizeAsync(
-            mapsContext.SourceParseRunId.Value,
-            cancellationToken);
+            if (mapsWar.WarId != reportWar.WarId)
+            {
+                return Deferred(
+                    evidence,
+                    "map_war_context_mismatch");
+            }
 
-        if (regionResult.Status ==
-            WarApiRegionNormalizationStatus.Deferred)
-        {
-            return Deferred(
-                evidence,
-                "region_context_deferred");
-        }
+            var regionResult =
+                await regionNormalization.NormalizeAsync(
+                    mapsContext.SourceParseRunId.Value,
+                    cancellationToken);
 
-        if (regionResult.Status ==
-            WarApiRegionNormalizationStatus.Rejected)
-        {
-            return await RejectAsync(
-                sourceParseRunId,
-                startedAt,
-                "region_context_rejected",
-                cancellationToken);
+            if (regionResult.Status ==
+                WarApiRegionNormalizationStatus.Deferred)
+            {
+                return Deferred(
+                    evidence,
+                    "region_context_deferred");
+            }
+
+            if (regionResult.Status ==
+                WarApiRegionNormalizationStatus.Rejected)
+            {
+                return await RejectAsync(
+                    sourceParseRunId,
+                    startedAt,
+                    "region_context_rejected",
+                    cancellationToken);
+            }
         }
 
         var warRegion = await warRegionReader.GetAsync(
