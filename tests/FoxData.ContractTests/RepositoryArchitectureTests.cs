@@ -56,6 +56,7 @@ public sealed class RepositoryArchitectureTests
         Assert.True(File.Exists(Path.Combine(root, ".work", "M4_SOURCE_MEASUREMENT.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M4_RUNBOOK.md")));
         Assert.True(File.Exists(Path.Combine(root, ".work", "M5_CANONICAL_WAR_REGION_REPORT.md")));
+        Assert.True(File.Exists(Path.Combine(root, ".work", "M6_MAPS_TAXONOMY_QUALITY.md")));
         Assert.True(
             File.Exists(
                 Path.Combine(
@@ -87,13 +88,15 @@ public sealed class RepositoryArchitectureTests
     }
 
     [Fact]
-    public void M5CanonicalCodeRemainsConsumerNeutral()
+    public void CanonicalAndQualityCodeRemainConsumerNeutral()
     {
         var root = FindRepositoryRoot();
         var canonicalRoots = new[]
         {
             Path.Combine(root, "src", "FoxData.Core", "Runtime"),
+            Path.Combine(root, "src", "FoxData.Core", "Quality"),
             Path.Combine(root, "src", "FoxData.Application", "Canonical"),
+            Path.Combine(root, "src", "FoxData.Application", "Quality"),
             Path.Combine(root, "src", "FoxData.Infrastructure", "Canonical"),
         };
 
