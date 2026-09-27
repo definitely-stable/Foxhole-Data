@@ -36,6 +36,7 @@ public sealed class PostgresCanonicalEvidenceReader(NpgsqlDataSource dataSource)
                 source.key,
                 shard.environment,
                 shard.key,
+                parse_run.capability_key,
                 endpoint.capability_key,
                 endpoint.semantic_key,
                 parse_run.adapter_version,
@@ -97,14 +98,15 @@ public sealed class PostgresCanonicalEvidenceReader(NpgsqlDataSource dataSource)
             reader.GetString(11),
             reader.GetString(12),
             reader.GetString(13),
-            reader.IsDBNull(14) ? null : reader.GetString(14),
-            reader.GetString(15),
-            reader.GetInt32(16),
+            reader.GetString(14),
+            reader.IsDBNull(15) ? null : reader.GetString(15),
+            reader.GetString(16),
             reader.GetInt32(17),
-            reader.IsDBNull(18) ? null : reader.GetString(18),
-            reader.IsDBNull(19) ? null : reader.GetInt64(19),
-            reader.IsDBNull(20) ? null : reader.GetString(20),
-            reader.GetFieldValue<DateTimeOffset>(21),
-            reader.GetFieldValue<byte[]>(22));
+            reader.GetInt32(18),
+            reader.IsDBNull(19) ? null : reader.GetString(19),
+            reader.IsDBNull(20) ? null : reader.GetInt64(20),
+            reader.IsDBNull(21) ? null : reader.GetString(21),
+            reader.GetFieldValue<DateTimeOffset>(22),
+            reader.GetFieldValue<byte[]>(23));
     }
 }
