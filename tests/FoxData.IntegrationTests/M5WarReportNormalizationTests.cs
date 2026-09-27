@@ -1321,6 +1321,313 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 reader.GetFieldValue<DateTimeOffset>(7));
         }
 
+        public async Task RunRecoveryUntilQuiescentAsync()
+        {
+            for (var pass = 0; pass < 8; pass++)
+            {
+                var result = await CoverageRecovery.RunOnceAsync(
+                    TestContext.Current.CancellationToken);
+
+                if (result.ProgressCount == 0)
+                {
+                    return;
+                }
+            }
+
+            throw new InvalidOperationException(
+                "M5 recovery did not reach a quiescent state within eight deterministic passes.");
+        }
+
+        public async Task DeleteM5DerivedStateAsync()
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    DELETE FROM runtime.war_report_observations;
+                    DELETE FROM runtime.war_observations;
+                    DELETE FROM runtime.war_regions;
+                    DELETE FROM runtime.regions;
+                    DELETE FROM runtime.wars;
+                    DELETE FROM evidence.coverage_reprocessing_runs;
+                    DELETE FROM evidence.coverage_observations;
+                    DELETE FROM evidence.normalization_runs;
+                    """);
+
+            await command.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken);
+        }
+
+        public async Task<string> ReadM5SemanticSnapshotAsync()
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    SELECT jsonb_build_object(
+                        'wars',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'shard', shard.key,
+                                        'sourceWarId', war.source_war_id,
+                                        'warNumber', war.war_number,
+                                        'firstObservedAt', war.first_observed_at,
+                                        'lastObservedAt', war.last_observed_at)
+                                    ORDER BY shard.key, war.source_war_id)
+                                FROM runtime.wars AS war
+                                INNER JOIN sources.shards AS shard
+                                    ON shard.id = war.shard_id
+                            ),
+                            '[]'::jsonb),
+                        'warObservations',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'shard', shard.key,
+                                        'sourceWarId', war.source_war_id,
+                                        'sourceParseRunId', normalization.source_parse_run_id,
+                                        'normalizerVersion', normalization.normalizer_version,
+                                        'representationFetchId', observation.representation_fetch_id,
+                                        'observedAt', observation.observed_at,
+                                        'warNumber', observation.war_number,
+                                        'winner', observation.winner,
+                                        'conquestStartTime', observation.conquest_start_time,
+                                        'conquestEndTime', observation.conquest_end_time,
+                                        'resistanceStartTime', observation.resistance_start_time,
+                                        'scheduledConquestEndTime', observation.scheduled_conquest_end_time,
+                                        'requiredVictoryTowns', observation.required_victory_towns,
+                                        'shortRequiredVictoryTowns', observation.short_required_victory_towns)
+                                    ORDER BY
+                                        shard.key,
+                                        war.source_war_id,
+                                        observation.observed_at,
+                                        observation.representation_fetch_id)
+                                FROM runtime.war_observations AS observation
+                                INNER JOIN runtime.wars AS war
+                                    ON war.id = observation.war_id
+                                INNER JOIN sources.shards AS shard
+                                    ON shard.id = war.shard_id
+                                INNER JOIN evidence.normalization_runs AS normalization
+                                    ON normalization.id = observation.normalization_run_id
+                            ),
+                            '[]'::jsonb),
+                        'regions',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'canonicalKey', region.canonical_key,
+                                        'displayName', region.display_name)
+                                    ORDER BY region.canonical_key)
+                                FROM runtime.regions AS region
+                            ),
+                            '[]'::jsonb),
+                        'warRegions',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'shard', shard.key,
+                                        'sourceWarId', war.source_war_id,
+                                        'canonicalKey', region.canonical_key,
+                                        'sourceMapName', membership.source_map_name,
+                                        'sourceRegionId', membership.source_region_id,
+                                        'firstSeenAt', membership.first_seen_at,
+                                        'lastSeenAt', membership.last_seen_at)
+                                    ORDER BY
+                                        shard.key,
+                                        war.source_war_id,
+                                        membership.source_map_name)
+                                FROM runtime.war_regions AS membership
+                                INNER JOIN runtime.wars AS war
+                                    ON war.id = membership.war_id
+                                INNER JOIN sources.shards AS shard
+                                    ON shard.id = war.shard_id
+                                INNER JOIN runtime.regions AS region
+                                    ON region.id = membership.region_id
+                            ),
+                            '[]'::jsonb),
+                        'warReports',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'shard', shard.key,
+                                        'sourceWarId', war.source_war_id,
+                                        'sourceMapName', membership.source_map_name,
+                                        'sourceParseRunId', normalization.source_parse_run_id,
+                                        'normalizerVersion', normalization.normalizer_version,
+                                        'representationFetchId', observation.representation_fetch_id,
+                                        'observedAt', observation.observed_at,
+                                        'totalEnlistments', observation.total_enlistments,
+                                        'colonialCasualties', observation.colonial_casualties,
+                                        'wardenCasualties', observation.warden_casualties,
+                                        'dayOfWar', observation.day_of_war)
+                                    ORDER BY
+                                        shard.key,
+                                        war.source_war_id,
+                                        membership.source_map_name,
+                                        observation.observed_at,
+                                        observation.representation_fetch_id)
+                                FROM runtime.war_report_observations AS observation
+                                INNER JOIN runtime.war_regions AS membership
+                                    ON membership.id = observation.war_region_id
+                                INNER JOIN runtime.wars AS war
+                                    ON war.id = membership.war_id
+                                INNER JOIN sources.shards AS shard
+                                    ON shard.id = war.shard_id
+                                INNER JOIN evidence.normalization_runs AS normalization
+                                    ON normalization.id = observation.normalization_run_id
+                            ),
+                            '[]'::jsonb),
+                        'normalizationRuns',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'sourceParseRunId', normalization.source_parse_run_id,
+                                        'normalizerVersion', normalization.normalizer_version,
+                                        'outcome', normalization.outcome,
+                                        'errorCode', normalization.error_code)
+                                    ORDER BY
+                                        normalization.source_parse_run_id,
+                                        normalization.normalizer_version)
+                                FROM evidence.normalization_runs AS normalization
+                            ),
+                            '[]'::jsonb),
+                        'coverage',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'attemptId', coverage.attempt_id,
+                                        'validationFetchId', coverage.validation_fetch_id,
+                                        'representationFetchId', coverage.representation_fetch_id,
+                                        'sourceParseRunId', coverage.source_parse_run_id,
+                                        'state', coverage.state,
+                                        'boundaryAt', coverage.boundary_at,
+                                        'detailCode', coverage.detail_code)
+                                    ORDER BY coverage.attempt_id)
+                                FROM evidence.coverage_observations AS coverage
+                            ),
+                            '[]'::jsonb),
+                        'coverageReprocessing',
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'attemptId', coverage.attempt_id,
+                                        'processorVersion', run.processor_version,
+                                        'outcome', run.outcome,
+                                        'errorCode', run.error_code)
+                                    ORDER BY
+                                        coverage.attempt_id,
+                                        run.processor_version)
+                                FROM evidence.coverage_reprocessing_runs AS run
+                                INNER JOIN evidence.coverage_observations AS coverage
+                                    ON coverage.id = run.coverage_observation_id
+                            ),
+                            '[]'::jsonb)
+                    )::text;
+                    """);
+
+            return (string)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
+        public async Task<long> CountM5ProvenanceViolationsAsync()
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    SELECT
+                        (
+                            SELECT COUNT(*)
+                            FROM runtime.war_observations AS observation
+                            LEFT JOIN evidence.normalization_runs AS normalization
+                                ON normalization.id = observation.normalization_run_id
+                            LEFT JOIN evidence.source_parse_runs AS parse_run
+                                ON parse_run.id = normalization.source_parse_run_id
+                            LEFT JOIN evidence.fetches AS representation_fetch
+                                ON representation_fetch.id = parse_run.representation_fetch_id
+                            LEFT JOIN evidence.payloads AS payload
+                                ON payload.id = representation_fetch.payload_id
+                            WHERE normalization.id IS NULL
+                               OR normalization.outcome <> 'normalized'
+                               OR parse_run.id IS NULL
+                               OR representation_fetch.id IS NULL
+                               OR payload.id IS NULL
+                               OR observation.representation_fetch_id <> parse_run.representation_fetch_id
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM runtime.war_report_observations AS observation
+                            LEFT JOIN evidence.normalization_runs AS normalization
+                                ON normalization.id = observation.normalization_run_id
+                            LEFT JOIN evidence.source_parse_runs AS parse_run
+                                ON parse_run.id = normalization.source_parse_run_id
+                            LEFT JOIN evidence.fetches AS representation_fetch
+                                ON representation_fetch.id = parse_run.representation_fetch_id
+                            LEFT JOIN evidence.payloads AS payload
+                                ON payload.id = representation_fetch.payload_id
+                            WHERE normalization.id IS NULL
+                               OR normalization.outcome <> 'normalized'
+                               OR parse_run.id IS NULL
+                               OR representation_fetch.id IS NULL
+                               OR payload.id IS NULL
+                               OR observation.representation_fetch_id <> parse_run.representation_fetch_id
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM evidence.coverage_observations AS coverage
+                            LEFT JOIN evidence.fetches AS validation_fetch
+                                ON validation_fetch.id = coverage.validation_fetch_id
+                            LEFT JOIN evidence.fetches AS representation_fetch
+                                ON representation_fetch.id = coverage.representation_fetch_id
+                            LEFT JOIN evidence.payloads AS payload
+                                ON payload.id = representation_fetch.payload_id
+                            LEFT JOIN evidence.source_parse_runs AS parse_run
+                                ON parse_run.id = coverage.source_parse_run_id
+                            WHERE
+                                (
+                                    coverage.state = 'observed'
+                                    AND (
+                                        validation_fetch.id IS NULL
+                                        OR validation_fetch.id <> representation_fetch.id
+                                        OR payload.id IS NULL
+                                        OR parse_run.id IS NULL
+                                        OR parse_run.representation_fetch_id <> representation_fetch.id)
+                                )
+                                OR
+                                (
+                                    coverage.state = 'source_not_modified'
+                                    AND (
+                                        validation_fetch.id IS NULL
+                                        OR validation_fetch.status_code <> 304
+                                        OR validation_fetch.prior_fetch_id <> representation_fetch.id
+                                        OR payload.id IS NULL
+                                        OR parse_run.id IS NULL
+                                        OR parse_run.representation_fetch_id <> representation_fetch.id)
+                                )
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM evidence.coverage_reprocessing_runs AS run
+                            LEFT JOIN evidence.coverage_observations AS coverage
+                                ON coverage.id = run.coverage_observation_id
+                            WHERE coverage.id IS NULL
+                               OR coverage.state <> 'source_not_modified'
+                        );
+                    """);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
         public async Task<long> CountCoverageStateAsync(
             string state)
         {
