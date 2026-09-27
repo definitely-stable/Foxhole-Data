@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<IWarRegionReader, PostgresWarRegionReader>();
         services.AddScoped<IWarReportCanonicalStore, PostgresWarReportCanonicalStore>();
         services.AddScoped<WarReportCanonicalKernel>();
+        services.AddScoped<ICoverageStore, PostgresCoverageStore>();
 
         services.AddSingleton<PostgresHealthCheck>();
 
