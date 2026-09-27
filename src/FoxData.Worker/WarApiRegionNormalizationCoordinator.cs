@@ -31,6 +31,30 @@ public sealed class WarApiRegionNormalizationCoordinator(
         SourceParseRunId sourceParseRunId,
         CancellationToken cancellationToken)
     {
+        var existingRun = await normalization.GetAsync(
+            sourceParseRunId,
+            WarApiVersions.RegionNormalizer,
+            cancellationToken);
+
+        if (existingRun is not null)
+        {
+            return existingRun.Outcome switch
+            {
+                NormalizationRunOutcome.Normalized =>
+                    new WarApiRegionNormalizationResult(
+                        WarApiRegionNormalizationStatus.Normalized,
+                        existingRun,
+                        null),
+                NormalizationRunOutcome.Rejected =>
+                    new WarApiRegionNormalizationResult(
+                        WarApiRegionNormalizationStatus.Rejected,
+                        existingRun,
+                        null),
+                _ => throw new CanonicalStateIntegrityException(
+                    $"Region normalization run {existingRun.Id} has terminal outcome {existingRun.Outcome} and cannot be replayed as accepted work."),
+            };
+        }
+
         var startedAt = timeProvider.GetUtcNow();
 
         var evidence = await evidenceReader.GetAsync(
