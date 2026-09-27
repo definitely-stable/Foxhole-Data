@@ -232,3 +232,71 @@ The research supports the following M6 decisions:
 10. calibrate mass-NONE thresholds against fixtures/evidence before freezing policy v1;
 11. keep issue-92/#120 as permanent regressions even though upstream marked them fixed;
 12. defer objective matching and event/change inference to M7/M8.
+
+
+## PostgreSQL concurrency options for quality baselines
+
+M6 quality acceptance introduces a race: two candidates for the same WarRegion/capability must not select inconsistent accepted baselines.
+
+PostgreSQL 18 provides viable primitives including:
+
+- row-level locking;
+- transaction-level advisory locks such as `pg_advisory_xact_lock`;
+- SERIALIZABLE transactions with serialization-failure retry.
+
+Official PostgreSQL 18 references:
+
+- https://www.postgresql.org/docs/18/functions-admin.html
+- https://www.postgresql.org/docs/18/transaction-iso.html
+- https://www.postgresql.org/docs/18/applevel-consistency.html
+
+M6 planning intentionally does not freeze one primitive yet.
+
+M6-E must compare:
+
+- correctness across two Worker processes;
+- crash cleanup semantics;
+- contention at measured update rate;
+- retry behavior;
+- implementation complexity;
+- whether serialization must be scoped by WarRegion + capability.
+
+An in-process `lock`, semaphore or singleton is insufficient.
+
+## Out-of-order replay and chronology barrier
+
+Quality rules often compare candidate `tN` with the latest earlier accepted observation.
+
+If `t2` is evaluated before a durable candidate `t1 < t2` receives a terminal quality result, processing t1 later can change what t2's correct baseline should have been.
+
+M6 therefore needs a chronology barrier.
+
+Recommended v1 behavior:
+
+1. order quality candidates by observedAt plus a deterministic durable tie-breaker;
+2. before evaluating candidate C, check whether an earlier eligible normalized candidate for the same WarRegion + capability lacks a terminal quality result under the selected taxonomy/policy versions;
+3. if one exists, defer C;
+4. serialize concurrent quality evaluation for the same WarRegion + capability;
+5. suspect/quarantined candidates are terminal for ordering but never accepted baselines;
+6. the next candidate uses the latest earlier accepted observation.
+
+This makes chronological execution and crash/out-of-order replay converge to the same baseline chain without rewriting old immutable QualityRuns.
+
+## Parser diagnostics versus taxonomy authority
+
+The current `warapi-parser@1` treats iconType values above the currently documented icon table as unknown-code diagnostics.
+
+This is historical parser metadata only.
+
+M6 MUST NOT use `SourceParseRun.unknownCodeCount` as semantic taxonomy authority because:
+
+- the official list is additive and can lag live values;
+- upstream warapi#137 already demonstrates iconType 97 beyond the current README list;
+- taxonomy can evolve without changing the structural parser contract.
+
+Therefore:
+
+- parser unknown counts remain reproducible diagnostics;
+- normalized raw icon/team/flag values are preserved;
+- the selected taxonomy profile alone determines semantic known/unknown interpretation;
+- a taxonomy update does not require rewriting historical SourceParseRuns.
