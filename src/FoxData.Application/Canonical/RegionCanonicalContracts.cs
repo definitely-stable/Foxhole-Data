@@ -39,6 +39,7 @@ public sealed record RegionMembershipDescriptor(
 public sealed record RegionCanonicalWrite(
     SourceParseRunId SourceParseRunId,
     string NormalizerVersion,
+    string CapabilityKey,
     DateTimeOffset NormalizationStartedAt,
     DateTimeOffset NormalizationCompletedAt,
     ShardId ShardId,
