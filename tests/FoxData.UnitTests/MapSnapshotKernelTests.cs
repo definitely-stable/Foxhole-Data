@@ -41,7 +41,9 @@ public sealed class MapSnapshotKernelTests
             ],
             []);
 
-        _ = await kernel.RecordAcceptedAsync(write);
+        _ = await kernel.RecordAcceptedAsync(
+            write,
+            TestContext.Current.CancellationToken);
 
         Assert.Same(write, store.RecordedWrite);
         Assert.Equal(2, store.RecordedWrite!.Items.Count);
@@ -83,7 +85,9 @@ public sealed class MapSnapshotKernelTests
             []);
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => kernel.RecordAcceptedAsync(write));
+            () => kernel.RecordAcceptedAsync(
+                write,
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -119,7 +123,9 @@ public sealed class MapSnapshotKernelTests
             ],
             []);
 
-        _ = await kernel.RecordAcceptedAsync(qualityDeferred);
+        _ = await kernel.RecordAcceptedAsync(
+            qualityDeferred,
+            TestContext.Current.CancellationToken);
         Assert.Same(
             qualityDeferred,
             store.RecordedWrite);
@@ -130,7 +136,9 @@ public sealed class MapSnapshotKernelTests
         };
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => kernel.RecordAcceptedAsync(invalidIdentity));
+            () => kernel.RecordAcceptedAsync(
+                invalidIdentity,
+                TestContext.Current.CancellationToken));
     }
 
     private sealed class RecordingStore : IMapSnapshotStore
