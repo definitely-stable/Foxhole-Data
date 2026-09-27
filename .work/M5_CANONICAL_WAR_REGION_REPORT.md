@@ -1,6 +1,6 @@
 # M5 — Canonical War / Region / Report Model
 
-Status: in progress. M5-A through M5-F implemented; next slice M5-G.
+Status: in progress. M5-A through M5-G implemented; next slice M5-H.
 Prerequisite: M4 Source Measurement completed.
 Successor: M6 maps, taxonomy and quality.
 
@@ -392,10 +392,11 @@ Required behavior:
 - derive exact case-sensitive map identity from `war-report/<mapName>` provenance;
 - resolve report war context from authoritative source chronology and invoke M5-D on the exact selected war parse;
 - resolve the latest authoritative active-map-list context at the report boundary, replay it, and require exact map membership;
-- require the map-list representation's war context to equal the report war context rather than interpolating across a war boundary;
-- invoke M5-E for the exact map-list parse and bind to the exact `(WarId, sourceMapName)` WarRegion;
+- for a body-bearing map-list validation, require the representation's war context to equal the report war context rather than interpolating across a war boundary;
+- invoke M5-E for a body-bearing map-list validation and bind to the exact `(WarId, sourceMapName)` WarRegion;
+- for a 304 map-list validation, require an applied M5-G continuity proof for that exact validation Fetch before binding the report to the WarRegion valid at the report war;
 - defer incomplete/unconfirmed temporal context without burning the report normalizer identity;
-- defer cross-war 304 map continuity to M5-G rather than fabricating membership;
+- defer unprocessed cross-war 304 map continuity to M5-G rather than fabricating membership;
 - preserve nullable report fields and reject only structurally invalid negative numeric values;
 - preserve source corrections/regressions as immutable observations without monotonicity assumptions;
 - keep `dayOfWar` as source data, never as a fabricated canonical clock;
@@ -406,10 +407,96 @@ Required behavior:
 
 ### M5-G — coverage, recovery and reprocessing verification
 
-- persist `observed / source_not_modified / source_unavailable / collector_unavailable / rejected / unknown` coverage independently from domain state;
-- verify 304 continuity against the exact representation lineage without creating duplicate source parses or normalization runs;
-- cover unchanged active-map-list representations across war boundaries without inventing source payloads or violating region-normalizer idempotency;
-- prove local recovery/reprocessing from durable M2/M3/M5 evidence.
+M5-G introduces an immutable source-coverage ledger over durable M2/M3 attempt boundaries. Coverage is independent of canonical Foxhole state and MUST NOT be reconstructed from the presence or absence of a canonical observation.
+
+Each terminal durable attempt for the M5 capabilities `runtime-war-state`, `active-map-list` and `region-war-report` is classified exactly once as one of:
+
+| state | meaning |
+| --- | --- |
+| `observed` | authoritative current body-bearing representation was durably captured and successfully parsed |
+| `source_not_modified` | authoritative 304 validated an exact prior body-bearing representation and that representation has a successful source parse |
+| `source_unavailable` | an authoritative HTTP response did not provide the expected successful source representation, such as 4xx/5xx |
+| `collector_unavailable` | FoxData could not establish a usable observation because collection failed before exchange or while capturing an otherwise successful body |
+| `rejected` | source representation exists but the versioned source parser rejected it |
+| `unknown` | durable evidence cannot prove source state, including uncertain exchanges, late/superseded captures and orphan 304s |
+
+A missing attempt is not a coverage observation. M5-G MUST NOT manufacture a `collector_unavailable` row for time in which no durable Attempt exists.
+
+For `observed`, provenance is:
+
+~~~text
+Attempt
+  -> validation Fetch == representation Fetch
+  -> body-bearing Payload
+  -> versioned SourceParseRun
+~~~ 
+
+For `source_not_modified`, provenance is:
+
+~~~text
+Attempt
+  -> 304 validation Fetch
+  -> prior_fetch_id
+  -> exact body-bearing representation Fetch
+  -> existing or locally repaired versioned SourceParseRun
+~~~ 
+
+The 304 validation Fetch and representation Fetch are both retained. A 304 never creates a duplicate Payload or duplicate semantic SourceParseRun.
+
+Coverage `boundaryAt` is the source Fetch `retrievedAt` when a Fetch exists. For collector/uncertain terminal attempts without a Fetch it is the durable attempt completion boundary, falling back only to the attempt start boundary when completion is absent. These local failure boundaries are not source event times.
+
+#### Local parse recovery
+
+If an authoritative 200/304 lineage has durable representation bytes but the expected current parser run is missing, M5-G reruns the exact current parser locally and records the ordinary idempotent SourceParseRun for the same representation Fetch. No upstream request is issued.
+
+The replay uses the same adapter version, parser version, structural fingerprint algorithm, decoding limits and tolerant parsing contract as M3. Reprocessing never mutates raw bytes.
+
+#### 304 active-map continuity
+
+A successful `source_not_modified` observation for `active-map-list / maps` proves that the exact prior map-list representation remained valid at the validation boundary. M5-G may therefore project that unchanged membership set at the 304 boundary, including across a war boundary, provided that:
+
+1. the 304 points directly to the exact body-bearing representation Fetch;
+2. the stored SourceParseRun belongs to that representation and is `parsed` or `parsed_with_unknowns`;
+3. deterministic parser replay matches outcome, fingerprint, unknown counters and decoded length;
+4. every source map name remains a valid exact opaque War API identifier;
+5. authoritative `/war` evidence at the 304 validation boundary resolves to a normalized WarId.
+
+This projection reuses the exact representation bytes and exact source parse. It MUST NOT create a synthetic Fetch, Payload, SourceParseRun or region-normalization run.
+
+Instead M5-G transactionally updates the bounded `WarRegion` membership projection for the WarId valid at the validation boundary and records a versioned `coverage_reprocessing_run`. The projection is idempotent on `(coverageObservationId, processorVersion)`.
+
+A successful continuity run has outcome `applied`. Deterministically invalid continuity input such as an invalid source map name or rejected war context records terminal outcome `rejected`. Missing prerequisite war evidence remains deferred and records no terminal run.
+
+M5-F may bind a report through a 304 map context only when the matching validation Fetch has an `applied` M5-G continuity run for the current processor version. Without that durable proof the report remains `map_continuity_requires_coverage`.
+
+#### Canonical reprocessing
+
+M5-G scans durable current source parse runs for the three M5 capabilities whose expected current normalizer version has no terminal normalization run. Candidates are processed in dependency order:
+
+~~~text
+runtime-war-state
+    -> active-map-list
+    -> region-war-report
+~~~ 
+
+The existing M5-D/E/F coordinators are invoked by SourceParseRunId. Their versioned idempotency and rejection/defer semantics remain authoritative.
+
+A normalized or rejected result is terminal for that normalizer version. A deferred result creates no replacement identity and remains eligible for a later local pass once its prerequisite durable evidence is available.
+
+The scanner does not issue HTTP requests, does not advance M3 poll state and does not reinterpret late/non-authoritative Fetches as current evidence.
+
+#### Recovery verification requirements
+
+M5-G integration/recovery tests MUST prove at least:
+
+- raw durable 200 with no SourceParseRun can be parsed and normalized locally with no new Fetch;
+- repeated recovery is idempotent;
+- HTTP source failure, pre-exchange collector failure and uncertain exchange map to distinct coverage states;
+- malformed/incompatible source representations become `rejected` coverage and terminal normalizer rejection where applicable;
+- 304 stores exact validation-to-representation lineage;
+- cross-war map-list 304 first leaves M5-F deferred, then creates the new-war WarRegion through M5-G and permits the same durable report parse to normalize;
+- 304 continuity does not create a second source parse or region normalization run;
+- report/map/war recovery never depends on current wall-clock state or a new upstream exchange.
 
 ### M5-H — completion gate
 

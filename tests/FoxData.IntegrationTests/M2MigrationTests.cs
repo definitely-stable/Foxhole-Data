@@ -31,6 +31,8 @@ public sealed class M2MigrationTests(PostgresFixture postgres) : IClassFixture<P
 
         Assert.Equal(
             [
+                "evidence.coverage_observations",
+                "evidence.coverage_reprocessing_runs",
                 "evidence.fetches",
                 "evidence.normalization_runs",
                 "evidence.payloads",

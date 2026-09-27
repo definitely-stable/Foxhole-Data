@@ -27,3 +27,18 @@ public readonly record struct NormalizationRunId(Guid Value)
 
     public override string ToString() => Value.ToString("D");
 }
+
+
+public readonly record struct CoverageObservationId(Guid Value)
+{
+    public static CoverageObservationId New() => new(Guid.CreateVersion7());
+
+    public override string ToString() => Value.ToString("D");
+}
+
+public readonly record struct CoverageReprocessingRunId(Guid Value)
+{
+    public static CoverageReprocessingRunId New() => new(Guid.CreateVersion7());
+
+    public override string ToString() => Value.ToString("D");
+}
