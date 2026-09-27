@@ -686,37 +686,37 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
 
         var jobId = new CollectionJobId(reader.GetGuid(0));
         var endpointId = new EndpointId(reader.GetGuid(1));
-        var durableValidationFetchId =
+        FetchId? durableValidationFetchId =
             reader.IsDBNull(2)
                 ? null
                 : new FetchId(reader.GetGuid(2));
-        var validationEndpointId =
+        EndpointId? validationEndpointId =
             reader.IsDBNull(3)
                 ? null
                 : new EndpointId(reader.GetGuid(3));
-        var validationStatus =
+        int? validationStatus =
             reader.IsDBNull(4) ? null : reader.GetInt32(4);
-        var priorFetchId =
+        FetchId? priorFetchId =
             reader.IsDBNull(5)
                 ? null
                 : new FetchId(reader.GetGuid(5));
-        var representationFetchId =
+        FetchId? representationFetchId =
             reader.IsDBNull(6)
                 ? null
                 : new FetchId(reader.GetGuid(6));
-        var representationEndpointId =
+        EndpointId? representationEndpointId =
             reader.IsDBNull(7)
                 ? null
                 : new EndpointId(reader.GetGuid(7));
-        var representationPayloadId =
+        PayloadId? representationPayloadId =
             reader.IsDBNull(8)
                 ? null
                 : new PayloadId(reader.GetGuid(8));
-        var sourceParseRunId =
+        SourceParseRunId? sourceParseRunId =
             reader.IsDBNull(9)
                 ? null
                 : new SourceParseRunId(reader.GetGuid(9));
-        var parseRepresentationFetchId =
+        FetchId? parseRepresentationFetchId =
             reader.IsDBNull(10)
                 ? null
                 : new FetchId(reader.GetGuid(10));
