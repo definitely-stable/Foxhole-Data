@@ -29,7 +29,7 @@ public sealed class PostgresCanonicalEvidenceReader(NpgsqlDataSource dataSource)
             SELECT
                 parse_run.id,
                 parse_run.representation_fetch_id,
-                fetch.payload_id,
+                representation_fetch.payload_id,
                 source.id,
                 shard.id,
                 endpoint.id,
@@ -47,16 +47,16 @@ public sealed class PostgresCanonicalEvidenceReader(NpgsqlDataSource dataSource)
                 parse_run.unknown_code_count,
                 parse_run.error_code,
                 parse_run.decoded_byte_length,
-                fetch.content_encoding,
-                fetch.retrieved_at,
+                representation_fetch.content_encoding,
+                representation_fetch.retrieved_at,
                 payload.body
             FROM evidence.source_parse_runs AS parse_run
-            INNER JOIN evidence.fetches AS fetch
-                ON fetch.id = parse_run.representation_fetch_id
+            INNER JOIN evidence.fetches AS representation_fetch
+                ON representation_fetch.id = parse_run.representation_fetch_id
             INNER JOIN evidence.payloads AS payload
-                ON payload.id = fetch.payload_id
+                ON payload.id = representation_fetch.payload_id
             INNER JOIN sources.endpoints AS endpoint
-                ON endpoint.id = fetch.endpoint_id
+                ON endpoint.id = representation_fetch.endpoint_id
             INNER JOIN sources.shards AS shard
                 ON shard.id = endpoint.shard_id
             INNER JOIN sources.sources AS source
