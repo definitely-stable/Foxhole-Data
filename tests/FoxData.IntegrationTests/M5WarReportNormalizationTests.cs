@@ -510,6 +510,138 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
             await fixture.CountAsync("runtime.war_report_observations"));
     }
 
+    [Fact]
+    public async Task CoverageRecoveryRepairsMissingParseAndCanonicalWorkWithoutNewFetch()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var observedAt = new DateTimeOffset(
+            2026, 9, 28, 0, 0, 0, TimeSpan.Zero);
+
+        _ = await fixture.CreateRawAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "coverage-raw-war",
+            """{"warId":"coverage-war","warNumber":131,"winner":"NONE"}""",
+            observedAt);
+
+        Assert.Equal(
+            0L,
+            await fixture.CountAsync("evidence.source_parse_runs"));
+        Assert.Equal(
+            0L,
+            await fixture.CountAsync("runtime.wars"));
+        var fetchCount =
+            await fixture.CountAsync("evidence.fetches");
+
+        var result = await fixture.CoverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ParseRunsRepaired);
+        Assert.Equal(1, result.CoverageRecorded);
+        Assert.Equal(1, result.CanonicalCompleted);
+        Assert.Equal(
+            fetchCount,
+            await fixture.CountAsync("evidence.fetches"));
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("evidence.source_parse_runs"));
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("runtime.wars"));
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("observed"));
+
+        var replay = await fixture.CoverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, replay.CoverageRecorded);
+        Assert.Equal(0, replay.ParseRunsRepaired);
+        Assert.Equal(0, replay.CanonicalCompleted);
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("observed"));
+    }
+
+    [Fact]
+    public async Task CoverageRecoveryClassifiesSourceCollectorAndUncertainGaps()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var start = new DateTimeOffset(
+            2026, 9, 28, 1, 0, 0, TimeSpan.Zero);
+
+        await fixture.CreateHttpStatusAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "coverage-source-unavailable",
+            503,
+            start);
+
+        await fixture.CreateDeferredAttemptAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "coverage-collector-unavailable",
+            authorizeExchange: false,
+            start.AddMinutes(1));
+
+        await fixture.CreateDeferredAttemptAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "coverage-uncertain",
+            authorizeExchange: true,
+            start.AddMinutes(2));
+
+        var result = await fixture.CoverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, result.CoverageRecorded);
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("source_unavailable"));
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("collector_unavailable"));
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("unknown"));
+        Assert.Equal(
+            0L,
+            await fixture.CountAsync("runtime.wars"));
+    }
+
+    [Fact]
+    public async Task CoverageRecoveryClassifiesMalformedRepresentationAsRejected()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var observedAt = new DateTimeOffset(
+            2026, 9, 28, 2, 0, 0, TimeSpan.Zero);
+
+        _ = await fixture.CreateRawAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "coverage-malformed-war",
+            """{"warId":""",
+            observedAt);
+
+        var result = await fixture.CoverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ParseRunsRepaired);
+        Assert.Equal(1, result.CoverageRecorded);
+        Assert.Equal(1, result.CanonicalCompleted);
+        Assert.Equal(
+            1L,
+            await fixture.CountCoverageStateAsync("rejected"));
+        Assert.Equal(
+            1L,
+            await fixture.CountNormalizationOutcomeAsync(
+                WarApiVersions.WarNormalizer,
+                "rejected"));
+        Assert.Equal(
+            0L,
+            await fixture.CountAsync("runtime.wars"));
+    }
+
     private async Task<Fixture> CreateFixtureAsync()
     {
         await MigrateAsync();
@@ -683,6 +815,155 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 $"{keyPrefix}-maps",
                 $"[\"{sourceMapName}\"]",
                 start.AddMinutes(1));
+        }
+
+        public async Task<FetchId> CreateRawAsync(
+            string shardKey,
+            SourceEndpoint sourceEndpoint,
+            string idempotencyKey,
+            string json,
+            DateTimeOffset retrievedAt)
+        {
+            var shard = await registry.RegisterShardAsync(
+                sourceId,
+                shardKey,
+                shardKey,
+                "live",
+                TestContext.Current.CancellationToken);
+            var endpoint = await registry.RegisterEndpointAsync(
+                shard.Resource.Id,
+                sourceEndpoint.Capability.Key,
+                sourceEndpoint.SemanticKey,
+                TestContext.Current.CancellationToken);
+
+            var capture = await CaptureAsync(
+                endpoint.Resource.Id,
+                idempotencyKey,
+                retrievedAt,
+                statusCode: 200,
+                Encoding.UTF8.GetBytes(json),
+                priorFetchId: null);
+
+            return capture.Fetch!.Id;
+        }
+
+        public async Task CreateHttpStatusAsync(
+            string shardKey,
+            SourceEndpoint sourceEndpoint,
+            string idempotencyKey,
+            int statusCode,
+            DateTimeOffset retrievedAt)
+        {
+            var shard = await registry.RegisterShardAsync(
+                sourceId,
+                shardKey,
+                shardKey,
+                "live",
+                TestContext.Current.CancellationToken);
+            var endpoint = await registry.RegisterEndpointAsync(
+                shard.Resource.Id,
+                sourceEndpoint.Capability.Key,
+                sourceEndpoint.SemanticKey,
+                TestContext.Current.CancellationToken);
+
+            _ = await CaptureAsync(
+                endpoint.Resource.Id,
+                idempotencyKey,
+                retrievedAt,
+                statusCode,
+                body: null,
+                priorFetchId: null);
+        }
+
+        public async Task CreateDeferredAttemptAsync(
+            string shardKey,
+            SourceEndpoint sourceEndpoint,
+            string idempotencyKey,
+            bool authorizeExchange,
+            DateTimeOffset observedAt)
+        {
+            var shard = await registry.RegisterShardAsync(
+                sourceId,
+                shardKey,
+                shardKey,
+                "live",
+                TestContext.Current.CancellationToken);
+            var endpoint = await registry.RegisterEndpointAsync(
+                shard.Resource.Id,
+                sourceEndpoint.Capability.Key,
+                sourceEndpoint.SemanticKey,
+                TestContext.Current.CancellationToken);
+
+            var scheduledAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+            var queued = await ingestion.EnqueueAsync(
+                endpoint.Resource.Id,
+                idempotencyKey,
+                scheduledAt,
+                scheduledAt,
+                cancellationToken:
+                    TestContext.Current.CancellationToken);
+            Assert.Equal(JobEnqueueStatus.Created, queued.Status);
+
+            var workerId = WorkerInstanceId.New();
+            var claim = await ingestion.ClaimNextAsync(
+                workerId,
+                TimeSpan.FromMinutes(5),
+                TestContext.Current.CancellationToken);
+            Assert.True(claim.Claimed);
+
+            var attemptId = IngestionAttemptId.New();
+            var begun = await ingestion.BeginAttemptAsync(
+                attemptId,
+                claim.Job!.Id,
+                workerId,
+                claim.Job.LeaseGeneration,
+                TestContext.Current.CancellationToken);
+            Assert.Equal(BeginAttemptStatus.Started, begun.Status);
+
+            var fenced = await ingestion.AcquireEndpointFenceAsync(
+                attemptId,
+                workerId,
+                claim.Job.LeaseGeneration,
+                TestContext.Current.CancellationToken);
+            Assert.Equal(FenceAcquireStatus.AcquiredNow, fenced.Status);
+
+            if (authorizeExchange)
+            {
+                var authorized = await ingestion.AuthorizeExchangeAsync(
+                    attemptId,
+                    workerId,
+                    claim.Job.LeaseGeneration,
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(
+                    ExchangeAuthorizationStatus.AuthorizedNow,
+                    authorized.Status);
+
+                var deferred = await ingestion.DeferUncertainExchangeAsync(
+                    attemptId,
+                    workerId,
+                    claim.Job.LeaseGeneration,
+                    observedAt,
+                    "test",
+                    "test_uncertain",
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(
+                    AttemptDeferralStatus.Deferred,
+                    deferred.Status);
+            }
+            else
+            {
+                var deferred = await ingestion.DeferBeforeExchangeAsync(
+                    attemptId,
+                    workerId,
+                    claim.Job.LeaseGeneration,
+                    observedAt,
+                    "test",
+                    "test_collector_unavailable",
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(
+                    AttemptDeferralStatus.Deferred,
+                    deferred.Status);
+            }
         }
 
         public async Task<SourceParseRunDescriptor> CreateParsedAsync(
@@ -911,6 +1192,43 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 reader.GetFieldValue<DateTimeOffset>(5),
                 reader.GetFieldValue<DateTimeOffset>(6),
                 reader.GetFieldValue<DateTimeOffset>(7));
+        }
+
+        public async Task<long> CountCoverageStateAsync(
+            string state)
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    SELECT COUNT(*)
+                    FROM evidence.coverage_observations
+                    WHERE state = @state;
+                    """);
+            command.Parameters.AddWithValue("state", state);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
+        public async Task<long> CountNormalizationOutcomeAsync(
+            string normalizerVersion,
+            string outcome)
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    SELECT COUNT(*)
+                    FROM evidence.normalization_runs
+                    WHERE normalizer_version = @normalizer_version
+                      AND outcome = @outcome;
+                    """);
+            command.Parameters.AddWithValue(
+                "normalizer_version",
+                normalizerVersion);
+            command.Parameters.AddWithValue("outcome", outcome);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
         }
 
         public async Task<long> CountNormalizationRunsAsync(
