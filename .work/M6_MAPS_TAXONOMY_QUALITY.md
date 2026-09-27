@@ -553,6 +553,16 @@ A taxonomy profile entry for an icon type may contain:
 
 Taxonomy keys are interpretation keys, not ObjectiveId values.
 
+### Parser diagnostics are not taxonomy authority
+
+The existing `warapi-parser@1` persists unknown-code diagnostics as part of versioned source-parse provenance.
+
+Those diagnostics are not semantic taxonomy truth.
+
+In particular, M6 MUST NOT infer that an icon/team/flag is semantically unknown merely because the parser version counted it as an unknown code. The selected taxonomy profile is the sole authority for semantic known/unknown interpretation at the taxonomy stage.
+
+This allows taxonomy profiles to evolve independently while preserving historical parser truth and SourceParseRun reproducibility.
+
 ### Unknown icon types
 
 Unknown values remain:
@@ -688,7 +698,24 @@ Static and dynamic baselines are separate.
 
 Out-of-order replay MUST select the same baseline as chronological replay or fail closed until prerequisites exist.
 
-M6-E/F tests must include out-of-order processing.
+### Chronology barrier
+
+For one `WarRegion + capabilityKind + taxonomyVersion + qualityPolicyVersion`, candidate C MUST NOT be quality-evaluated while an earlier eligible normalized candidate lacks a terminal quality result for the same selected versions.
+
+Ordering is:
+
+~~~text
+candidate observedAt ASC
+then deterministic durable tie-breaker
+~~~
+
+A `suspect` or `quarantined` result is terminal for ordering purposes but never becomes an accepted baseline.
+
+This barrier prevents late recovery of an older snapshot from retroactively changing the baseline that a newer immutable QualityRun should have used.
+
+M6-G reprocessing MUST use the same ordering rule.
+
+M6-E/F tests must include chronological, out-of-order and concurrent processing and prove the same terminal baseline chain.
 
 ## 15. Required quality rule families
 
@@ -1203,11 +1230,12 @@ Implement:
 3. QualityRun / finding persistence;
 4. deterministic accepted baseline resolver;
 5. PostgreSQL concurrency protection for baseline selection;
-6. decision aggregation;
-7. atomic accepted QualityRun + runtime.map_observation;
-8. first-time sourceRegionId enrichment after acceptance;
-9. suspect/quarantine persistence without runtime observation;
-10. recovery of normalization-complete / quality-missing work.
+6. chronology-barrier query preventing evaluation past unresolved earlier candidates;
+7. decision aggregation;
+8. atomic accepted QualityRun + runtime.map_observation;
+9. first-time sourceRegionId enrichment after acceptance;
+10. suspect/quarantine persistence without runtime observation;
+11. recovery of normalization-complete / quality-missing work.
 
 Initial non-calibrated rule support:
 
