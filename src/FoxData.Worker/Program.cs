@@ -38,10 +38,12 @@ builder.Services.AddScoped<WarApiAttemptExecutor>();
 builder.Services.AddScoped<WarApiWarNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiRegionNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiWarReportNormalizationCoordinator>();
+builder.Services.AddScoped<WarApiCoverageRecoveryCoordinator>();
 builder.Services.AddScoped<WarApiReconciler>();
 
 builder.Services.AddHostedService<BootstrapWorker>();
 builder.Services.AddHostedService<IngestionRecoveryWorker>();
+builder.Services.AddHostedService<WarApiCoverageRecoveryWorker>();
 builder.Services.AddHostedService<WarApiPlannerWorker>();
 builder.Services.AddHostedService<WarApiExecutorWorker>();
 
