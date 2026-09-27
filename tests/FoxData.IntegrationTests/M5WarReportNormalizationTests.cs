@@ -947,7 +947,7 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                     "test_uncertain",
                     TestContext.Current.CancellationToken);
                 Assert.Equal(
-                    AttemptDeferralStatus.Deferred,
+                    AttemptDeferralStatus.DeferredNow,
                     deferred.Status);
             }
             else
@@ -961,7 +961,7 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                     "test_collector_unavailable",
                     TestContext.Current.CancellationToken);
                 Assert.Equal(
-                    AttemptDeferralStatus.Deferred,
+                    AttemptDeferralStatus.DeferredNow,
                     deferred.Status);
             }
         }
