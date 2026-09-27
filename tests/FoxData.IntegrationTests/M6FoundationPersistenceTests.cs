@@ -271,6 +271,86 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
         Assert.Equal(
             "ck_map_quality_runs_decision",
             qualityException.ConstraintName);
+
+        var validQualityRunId = Guid.CreateVersion7();
+        await using (var validQuality =
+            fixture.DataSource.CreateCommand(
+                """
+                INSERT INTO quality.map_quality_runs
+                    (id, map_snapshot_id, war_region_id,
+                     validation_fetch_id, taxonomy_version,
+                     quality_policy_version, decision,
+                     started_at, completed_at)
+                VALUES
+                    (@id, @map_snapshot_id, @war_region_id,
+                     @validation_fetch_id,
+                     'warapi-map-taxonomy@1',
+                     'warapi-map-quality@1',
+                     'accepted', @at, @at);
+                """))
+        {
+            validQuality.Parameters.AddWithValue(
+                "id",
+                validQualityRunId);
+            validQuality.Parameters.AddWithValue(
+                "map_snapshot_id",
+                snapshotId);
+            validQuality.Parameters.AddWithValue(
+                "war_region_id",
+                fixture.FirstWarRegionId);
+            validQuality.Parameters.AddWithValue(
+                "validation_fetch_id",
+                fixture.RepresentationFetchId);
+            validQuality.Parameters.AddWithValue(
+                "at",
+                fixture.RepresentationRetrievedAt);
+
+            await validQuality.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var mismatchedObservation =
+            fixture.DataSource.CreateCommand(
+                """
+                INSERT INTO runtime.map_observations
+                    (id, war_region_id, map_snapshot_id,
+                     quality_run_id, validation_fetch_id,
+                     capability_kind, observed_at)
+                VALUES
+                    (@id, @war_region_id, @map_snapshot_id,
+                     @quality_run_id, @validation_fetch_id,
+                     'dynamic', @observed_at);
+                """);
+        mismatchedObservation.Parameters.AddWithValue(
+            "id",
+            Guid.CreateVersion7());
+        mismatchedObservation.Parameters.AddWithValue(
+            "war_region_id",
+            fixture.SecondWarRegionId);
+        mismatchedObservation.Parameters.AddWithValue(
+            "map_snapshot_id",
+            snapshotId);
+        mismatchedObservation.Parameters.AddWithValue(
+            "quality_run_id",
+            validQualityRunId);
+        mismatchedObservation.Parameters.AddWithValue(
+            "validation_fetch_id",
+            fixture.RepresentationFetchId);
+        mismatchedObservation.Parameters.AddWithValue(
+            "observed_at",
+            fixture.RepresentationRetrievedAt);
+
+        var bindingException =
+            await Assert.ThrowsAsync<PostgresException>(
+                () => mismatchedObservation.ExecuteNonQueryAsync(
+                    TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            PostgresErrorCodes.ForeignKeyViolation,
+            bindingException.SqlState);
+        Assert.Equal(
+            "FK_map_observations_map_quality_runs_binding",
+            bindingException.ConstraintName);
     }
 
     private async Task<Fixture> CreateFixtureAsync()
