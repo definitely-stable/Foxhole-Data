@@ -4,11 +4,10 @@ using FoxData.Core.Sources;
 namespace FoxData.Application.Canonical;
 
 public sealed class WarCanonicalKernel(
-    NormalizationKernel normalization,
     IWarCanonicalStore store,
     TimeProvider timeProvider)
 {
-    public async Task<WarCanonicalResult> RecordAcceptedAsync(
+    public Task<WarCanonicalResult> RecordAcceptedAsync(
         SourceParseRunId sourceParseRunId,
         ShardId shardId,
         FetchId representationFetchId,
@@ -27,39 +26,30 @@ public sealed class WarCanonicalKernel(
         var startedAt = timeProvider.GetUtcNow();
         var completedAt = timeProvider.GetUtcNow();
 
-        var normalizationRun = await normalization.RecordAsync(
-            new NormalizationRunWrite(
-                sourceParseRunId,
-                normalizerVersion,
-                NormalizationRunOutcome.Normalized,
-                null,
-                startedAt,
-                completedAt),
-            cancellationToken);
-
-        var recorded = await store.RecordAsync(
+        return store.RecordAcceptedAsync(
             new WarCanonicalWrite(
                 sourceParseRunId,
-                normalizationRun.Id,
+                normalizerVersion,
+                startedAt,
+                completedAt,
                 shardId,
                 representationFetchId,
                 observedAt,
                 snapshot),
             cancellationToken);
-
-        return new WarCanonicalResult(
-            recorded.War,
-            recorded.Observation,
-            normalizationRun);
     }
 
     private static void ValidateSnapshot(CanonicalWarSnapshot snapshot)
     {
         if (string.IsNullOrWhiteSpace(snapshot.SourceWarId) ||
-            snapshot.SourceWarId.Length > 256)
+            snapshot.SourceWarId.Length > 256 ||
+            !string.Equals(
+                snapshot.SourceWarId,
+                snapshot.SourceWarId.Trim(),
+                StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                "SourceWarId must be non-empty and at most 256 characters.",
+                "SourceWarId must be non-empty, already trimmed, and at most 256 characters.",
                 nameof(snapshot));
         }
 
