@@ -1,4 +1,4 @@
-using FoxData.Infrastructure.Persistence;
+﻿using FoxData.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
