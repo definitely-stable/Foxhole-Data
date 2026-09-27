@@ -1,7 +1,5 @@
-using System.Net;
 using FoxData.Application.Canonical;
 using FoxData.Core.Evidence;
-using FoxData.Core.Runtime;
 using FoxData.Sources.WarApi;
 
 namespace FoxData.Worker;
@@ -21,11 +19,7 @@ public sealed record WarApiWarReportNormalizationResult(
 
 public sealed class WarApiWarReportNormalizationCoordinator(
     ICanonicalEvidenceReader evidenceReader,
-    IWarContextReader sourceContextReader,
-    IWarRegionReader warRegionReader,
-    ICoverageStore coverageStore,
-    WarApiWarNormalizationCoordinator warNormalization,
-    WarApiRegionNormalizationCoordinator regionNormalization,
+    WarApiMapContextResolver mapContextResolver,
     WarReportCanonicalKernel warReportCanonical,
     NormalizationKernel normalization,
     WarApiWorkerOptions options,
@@ -98,182 +92,34 @@ public sealed class WarApiWarReportNormalizationCoordinator(
                 cancellationToken);
         }
 
-        var reportWar = await ResolveWarAsync(
+        var mapContext = await mapContextResolver.ResolveAsync(
             evidence.ShardId,
-            evidence.RetrievedAt,
-            cancellationToken);
-
-        if (reportWar.Status == ContextStatus.Deferred)
-        {
-            return Deferred(
-                evidence,
-                reportWar.Reason!);
-        }
-
-        if (reportWar.Status == ContextStatus.Rejected)
-        {
-            return await RejectAsync(
-                sourceParseRunId,
-                startedAt,
-                reportWar.Reason!,
-                cancellationToken);
-        }
-
-        var mapsContext = await sourceContextReader.GetAtOrBeforeAsync(
-            evidence.ShardId,
-            evidence.RetrievedAt,
-            WarApiCapabilities.ActiveMapList.Key,
-            "maps",
-            WarApiVersions.Parser,
-            cancellationToken);
-
-        if (mapsContext is null)
-        {
-            return Deferred(
-                evidence,
-                "map_list_evidence_unavailable");
-        }
-
-        if (mapsContext.StatusCode is not (
-                (int)HttpStatusCode.OK or
-                (int)HttpStatusCode.NotModified) ||
-            mapsContext.RepresentationFetchId is null)
-        {
-            return Deferred(
-                evidence,
-                "map_list_context_unconfirmed");
-        }
-
-        if (mapsContext.SourceParseRunId is null)
-        {
-            return Deferred(
-                evidence,
-                "map_list_parse_unavailable");
-        }
-
-        var mapsEvidence = await evidenceReader.GetAsync(
-            mapsContext.SourceParseRunId.Value,
-            cancellationToken)
-            ?? throw new CanonicalStateIntegrityException(
-                $"Active-map-list parse run {mapsContext.SourceParseRunId.Value} has no replayable representation.");
-
-        ValidateMapsReplayContext(mapsEvidence);
-
-        if (mapsEvidence.ParseOutcome is not ("parsed" or "parsed_with_unknowns"))
-        {
-            return await RejectAsync(
-                sourceParseRunId,
-                startedAt,
-                "map_list_parse_unsuccessful",
-                cancellationToken);
-        }
-
-        var mapsDecoded = await DecodeDurableRepresentationAsync(
-            mapsEvidence,
-            cancellationToken);
-        var mapsParsed = _parser.Parse(
-            WarApiCapabilities.ActiveMapList,
-            mapsDecoded);
-
-        VerifyReplay(
-            mapsEvidence,
-            mapsParsed,
-            mapsDecoded.LongLength);
-
-        if (mapsParsed.Value is not string[] sourceMapNames)
-        {
-            throw new CanonicalStateIntegrityException(
-                "Successful active-map-list replay did not produce a map-name array.");
-        }
-
-        if (!sourceMapNames.Contains(
-                sourceMapName,
-                StringComparer.Ordinal))
-        {
-            return Deferred(
-                evidence,
-                "map_membership_unconfirmed");
-        }
-
-        var usesValidatedContinuity =
-            mapsContext.ValidationFetchId !=
-            mapsContext.RepresentationFetchId;
-
-        if (usesValidatedContinuity)
-        {
-            var continuityApplied =
-                await coverageStore.IsMapContinuityAppliedAsync(
-                    mapsContext.ValidationFetchId,
-                    WarApiVersions.CoverageReprocessor,
-                    cancellationToken);
-
-            if (!continuityApplied)
-            {
-                return Deferred(
-                    evidence,
-                    "map_continuity_requires_coverage");
-            }
-        }
-        else
-        {
-            var mapsWar = await ResolveWarAsync(
-                evidence.ShardId,
-                mapsEvidence.RetrievedAt,
-                cancellationToken);
-
-            if (mapsWar.Status == ContextStatus.Deferred)
-            {
-                return Deferred(
-                    evidence,
-                    mapsWar.Reason!);
-            }
-
-            if (mapsWar.Status == ContextStatus.Rejected)
-            {
-                return await RejectAsync(
-                    sourceParseRunId,
-                    startedAt,
-                    "map_war_context_rejected",
-                    cancellationToken);
-            }
-
-            if (mapsWar.WarId != reportWar.WarId)
-            {
-                return Deferred(
-                    evidence,
-                    "map_war_context_mismatch");
-            }
-
-            var regionResult =
-                await regionNormalization.NormalizeAsync(
-                    mapsContext.SourceParseRunId.Value,
-                    cancellationToken);
-
-            if (regionResult.Status ==
-                WarApiRegionNormalizationStatus.Deferred)
-            {
-                return Deferred(
-                    evidence,
-                    "region_context_deferred");
-            }
-
-            if (regionResult.Status ==
-                WarApiRegionNormalizationStatus.Rejected)
-            {
-                return await RejectAsync(
-                    sourceParseRunId,
-                    startedAt,
-                    "region_context_rejected",
-                    cancellationToken);
-            }
-        }
-
-        var warRegion = await warRegionReader.GetAsync(
-            reportWar.WarId!.Value,
             sourceMapName,
-            cancellationToken)
+            evidence.RetrievedAt,
+            cancellationToken);
+
+        if (mapContext.Status == WarApiMapContextStatus.Deferred)
+        {
+            return Deferred(
+                evidence,
+                mapContext.Reason!);
+        }
+
+        if (mapContext.Status == WarApiMapContextStatus.Rejected)
+        {
+            return await RejectAsync(
+                sourceParseRunId,
+                startedAt,
+                mapContext.Reason!,
+                cancellationToken);
+        }
+
+        var warId = mapContext.WarId
             ?? throw new CanonicalStateIntegrityException(
-                $"Normalized active-map-list evidence contains '{sourceMapName}' but no matching war-region exists for war {reportWar.WarId.Value}.");
+                "Resolved map context did not provide a war identity.");
+        var warRegion = mapContext.WarRegion
+            ?? throw new CanonicalStateIntegrityException(
+                "Resolved map context did not provide a war-region membership.");
 
         var completedAt = timeProvider.GetUtcNow();
         var canonical = await warReportCanonical.RecordAcceptedAsync(
@@ -284,7 +130,7 @@ public sealed class WarApiWarReportNormalizationCoordinator(
             completedAt,
             evidence.ShardId,
             evidence.RepresentationFetchId,
-            reportWar.WarId.Value,
+            warId,
             warRegion.Id,
             sourceMapName,
             evidence.RetrievedAt,
@@ -346,57 +192,6 @@ public sealed class WarApiWarReportNormalizationCoordinator(
             WarApiWarReportNormalizationStatus.Normalized,
             existingRun,
             canonical);
-    }
-
-    private async Task<ResolvedWarContext> ResolveWarAsync(
-        FoxData.Core.Sources.ShardId shardId,
-        DateTimeOffset observedAt,
-        CancellationToken cancellationToken)
-    {
-        var sourceWarContext =
-            await sourceContextReader.GetAtOrBeforeAsync(
-                shardId,
-                observedAt,
-                WarApiCapabilities.RuntimeWarState.Key,
-                "war",
-                WarApiVersions.Parser,
-                cancellationToken);
-
-        if (sourceWarContext is null)
-        {
-            return ResolvedWarContext.Deferred(
-                "war_evidence_unavailable");
-        }
-
-        if (sourceWarContext.StatusCode is not (
-                (int)HttpStatusCode.OK or
-                (int)HttpStatusCode.NotModified) ||
-            sourceWarContext.RepresentationFetchId is null)
-        {
-            return ResolvedWarContext.Deferred(
-                "war_context_unconfirmed");
-        }
-
-        if (sourceWarContext.SourceParseRunId is null)
-        {
-            return ResolvedWarContext.Deferred(
-                "war_parse_unavailable");
-        }
-
-        var warResult = await warNormalization.NormalizeAsync(
-            sourceWarContext.SourceParseRunId.Value,
-            cancellationToken);
-
-        if (warResult.Status !=
-                WarApiWarNormalizationStatus.Normalized ||
-            warResult.Canonical is null)
-        {
-            return ResolvedWarContext.Rejected(
-                "war_context_rejected");
-        }
-
-        return ResolvedWarContext.Normalized(
-            warResult.Canonical.War.Id);
     }
 
     private static bool TryMapSnapshot(
@@ -598,39 +393,6 @@ public sealed class WarApiWarReportNormalizationCoordinator(
         }
     }
 
-    private static void ValidateMapsReplayContext(
-        CanonicalEvidenceInput evidence)
-    {
-        if (!string.Equals(
-                evidence.SourceKey,
-                WarApiCatalog.SourceKey,
-                StringComparison.Ordinal) ||
-            !string.Equals(
-                evidence.ParseCapabilityKey,
-                WarApiCapabilities.ActiveMapList.Key,
-                StringComparison.Ordinal) ||
-            !string.Equals(
-                evidence.EndpointCapabilityKey,
-                WarApiCapabilities.ActiveMapList.Key,
-                StringComparison.Ordinal) ||
-            !string.Equals(
-                evidence.ParseCapabilityKey,
-                evidence.EndpointCapabilityKey,
-                StringComparison.Ordinal) ||
-            !string.Equals(
-                evidence.SemanticKey,
-                "maps",
-                StringComparison.Ordinal))
-        {
-            throw new CanonicalStateIntegrityException(
-                "War-report normalization resolved invalid active-map-list provenance.");
-        }
-
-        ValidateReplayVersions(
-            evidence,
-            WarApiVersions.WarReportNormalizer);
-    }
-
     private static void ValidateReplayVersions(
         CanonicalEvidenceInput evidence,
         string normalizerVersion)
@@ -690,27 +452,5 @@ public sealed class WarApiWarReportNormalizationCoordinator(
             throw new CanonicalStateIntegrityException(
                 $"Deterministic parser replay for source parse run {evidence.SourceParseRunId} did not match its durable parse metadata.");
         }
-    }
-
-    private enum ContextStatus
-    {
-        Normalized,
-        Rejected,
-        Deferred,
-    }
-
-    private sealed record ResolvedWarContext(
-        ContextStatus Status,
-        WarId? WarId,
-        string? Reason)
-    {
-        public static ResolvedWarContext Normalized(WarId warId) =>
-            new(ContextStatus.Normalized, warId, null);
-
-        public static ResolvedWarContext Rejected(string reason) =>
-            new(ContextStatus.Rejected, null, reason);
-
-        public static ResolvedWarContext Deferred(string reason) =>
-            new(ContextStatus.Deferred, null, reason);
     }
 }
