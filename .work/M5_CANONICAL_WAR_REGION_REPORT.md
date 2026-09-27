@@ -1,6 +1,6 @@
 # M5 — Canonical War / Region / Report Model
 
-Status: in progress. M5-A through M5-E implemented; next slice M5-F.
+Status: in progress. M5-A through M5-F implemented; next slice M5-G.
 Prerequisite: M4 Source Measurement completed.
 Successor: M6 maps, taxonomy and quality.
 
@@ -251,6 +251,56 @@ A `304 Not Modified` validation does not create another body-bearing source pars
 
 If unchanged map-list content is validated across a war boundary, M5-G MUST preserve that validation provenance and may use it to prove continuity/projection for the new war without violating the M5 normalization idempotency key or fabricating a new source payload. M5-E itself does not reinterpret a 304 as a new semantic map-list observation.
 
+## M5-F war-report normalization boundary
+
+The Official War API `warReport/{mapName}` payload contains report metrics only. It does not carry `warId`, canonical region identity, or a source region identifier. M5-F therefore MUST recover both war and map-membership context from durable source evidence before accepting a report.
+
+For a body-bearing report representation observed at `reportObservedAt`:
+
+1. replay the exact durable `region-war-report` source parse and verify parser outcome, structural fingerprint, unknown counters and decoded length;
+2. derive the exact case-sensitive `sourceMapName` from the durable endpoint semantic key `war-report/<mapName>`;
+3. resolve the latest authoritative `captured_current` `runtime-war-state / war` Fetch with `warFetch.retrievedAt <= reportObservedAt`;
+4. require its replayable representation and matching versioned source parse, then invoke M5-D for that exact parse to obtain the canonical `WarId`;
+5. resolve the latest authoritative `captured_current` active-map-list Fetch with `mapsFetch.retrievedAt <= reportObservedAt`;
+6. replay that exact map-list representation and require an ordinal exact match for `sourceMapName`;
+7. resolve the war context at the map-list representation boundary and require it to match the report's `WarId`;
+8. invoke M5-E for that exact active-map-list parse and require the exact `(WarId, sourceMapName)` WarRegion;
+9. atomically commit the report normalization run and immutable war-report observation.
+
+M5-F does not infer map membership from the existence of a report endpoint alone. Registry discovery proves only that the endpoint was discovered at some earlier point; it is not historical membership evidence.
+
+If the latest authoritative war or map-list context is absent, failed, not yet parsed, or otherwise unconfirmed, normalization is deferred without consuming the report normalizer identity. M5-F does not skip a newer failed source observation to assume an older state remained current.
+
+If the latest replayable map-list representation belongs to a different war than the report war, M5-F defers rather than interpolating membership between independently polled endpoints. When the latest map-list validation is a 304 whose body-bearing representation belongs to the prior war, the result is specifically deferred to M5-G coverage. M5-F MUST NOT fabricate a new map-list payload, source parse, normalization run or WarRegion merely because a 304 proves that the representation bytes were unchanged.
+
+Accepted report observation fields are:
+
+- `totalEnlistments`;
+- `colonialCasualties`;
+- `wardenCasualties`;
+- `dayOfWar`.
+
+All four fields remain nullable because M5 preserves structurally representable source values. Negative values are structurally invalid and are rejected. M5-F does not impose monotonicity or cross-field arithmetic invariants: source corrections/regressions remain valid new immutable observations if individually representable.
+
+`dayOfWar` is source data only. It is not a canonical global war clock, must not replace `observedAt`, and must not be used to fabricate an event timestamp between polls.
+
+A report observation uses the body-bearing report representation Fetch `retrievedAt` as its initial `observedAt`. `recordedAt` remains the local durable database time.
+
+A report observation MUST NOT mutate `runtime.war_regions.first_seen_at`, `last_seen_at`, `source_region_id`, region identity or war identity. Those projections are owned by their respective source evidence.
+
+Accepted M5-F persistence is atomic:
+
+~~~text
+normalization_run
+    + immutable war_report_observation
+~~~
+
+The referenced WarRegion must already be proven through M5-E. A successful normalization run cannot exist without its matching immutable report observation.
+
+Once `(sourceParseRunId, warReportNormalizerVersion)` is durably normalized or rejected, that result is terminal for that version. Replay of a normalized run returns the same durable observation and does not re-resolve a different war or membership context.
+
+A report `304 Not Modified` does not create another body-bearing source parse and therefore does not create a duplicate semantic report observation. Its `source_not_modified` continuity is M5-G coverage work.
+
 ## Append-only and mutation rules
 
 Immutable:
@@ -336,6 +386,23 @@ Required behavior:
 - successful war normalization opportunistically retries the latest durable maps parse for that shard, closing the normal worker-order race without an upstream refetch.
 
 ### M5-F — war-report normalization
+
+- consume only durable body-bearing `region-war-report` source parse runs and replay exact bytes locally;
+- verify parser identity, replay outcome, structural fingerprint, unknown counters and decoded length before canonical writes;
+- derive exact case-sensitive map identity from `war-report/<mapName>` provenance;
+- resolve report war context from authoritative source chronology and invoke M5-D on the exact selected war parse;
+- resolve the latest authoritative active-map-list context at the report boundary, replay it, and require exact map membership;
+- require the map-list representation's war context to equal the report war context rather than interpolating across a war boundary;
+- invoke M5-E for the exact map-list parse and bind to the exact `(WarId, sourceMapName)` WarRegion;
+- defer incomplete/unconfirmed temporal context without burning the report normalizer identity;
+- defer cross-war 304 map continuity to M5-G rather than fabricating membership;
+- preserve nullable report fields and reject only structurally invalid negative numeric values;
+- preserve source corrections/regressions as immutable observations without monotonicity assumptions;
+- keep `dayOfWar` as source data, never as a fabricated canonical clock;
+- atomically commit `normalization_run + war_report_observation`;
+- never mutate WarRegion discovery bounds from report evidence;
+- make normalized/rejected `(sourceParseRunId, normalizerVersion)` terminal and replay-stable;
+- opportunistically retry latest durable report parses after successful map-list normalization so ordinary worker ordering does not require an upstream refetch.
 
 ### M5-G — coverage, recovery and reprocessing verification
 

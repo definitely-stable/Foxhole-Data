@@ -903,15 +903,28 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             normalization,
             options,
             timeProvider);
+        var sourceContextReader = new PostgresWarContextReader(dataSource);
         var regionNormalization = new WarApiRegionNormalizationCoordinator(
             canonicalEvidence,
-            new PostgresWarContextReader(dataSource),
+            sourceContextReader,
             warNormalization,
             new RegionCanonicalKernel(
                 new PostgresRegionCanonicalStore(dataSource)),
             normalization,
             options,
             timeProvider);
+        var warReportNormalization =
+            new WarApiWarReportNormalizationCoordinator(
+                canonicalEvidence,
+                sourceContextReader,
+                new PostgresWarRegionReader(dataSource),
+                warNormalization,
+                regionNormalization,
+                new WarReportCanonicalKernel(
+                    new PostgresWarReportCanonicalStore(dataSource)),
+                normalization,
+                options,
+                timeProvider);
 
         var resolver = new WarApiRegistryResolver(registry);
         var rateGovernor = new WarApiOutboundRateGovernor(
@@ -941,6 +954,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             measurementProbe ?? WarApiMeasurementProbeProfile.Disabled,
             warNormalization,
             regionNormalization,
+            warReportNormalization,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
