@@ -9,6 +9,7 @@ public sealed class RegionCanonicalKernel(IRegionCanonicalStore store)
     public Task<RegionCanonicalResult> RecordAcceptedAsync(
         SourceParseRunId sourceParseRunId,
         string normalizerVersion,
+        string capabilityKey,
         DateTimeOffset normalizationStartedAt,
         DateTimeOffset normalizationCompletedAt,
         ShardId shardId,
@@ -23,6 +24,7 @@ public sealed class RegionCanonicalKernel(IRegionCanonicalStore store)
         ValidateId(representationFetchId.Value, nameof(representationFetchId));
         ValidateId(warId.Value, nameof(warId));
         ValidateRequiredText(normalizerVersion, 128, nameof(normalizerVersion));
+        ValidateRequiredText(capabilityKey, 128, nameof(capabilityKey));
         ArgumentNullException.ThrowIfNull(memberships);
 
         if (normalizationCompletedAt < normalizationStartedAt)
@@ -77,6 +79,7 @@ public sealed class RegionCanonicalKernel(IRegionCanonicalStore store)
             new RegionCanonicalWrite(
                 sourceParseRunId,
                 normalizerVersion,
+                capabilityKey,
                 normalizationStartedAt,
                 normalizationCompletedAt,
                 shardId,
