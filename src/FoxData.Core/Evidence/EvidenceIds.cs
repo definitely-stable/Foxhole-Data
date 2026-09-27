@@ -42,3 +42,24 @@ public readonly record struct CoverageReprocessingRunId(Guid Value)
 
     public override string ToString() => Value.ToString("D");
 }
+
+public readonly record struct MapSnapshotId(Guid Value)
+{
+    public static MapSnapshotId New() => new(Guid.CreateVersion7());
+
+    public override string ToString() => Value.ToString("D");
+}
+
+public readonly record struct MapItemOccurrenceId(Guid Value)
+{
+    public static MapItemOccurrenceId New() => new(Guid.CreateVersion7());
+
+    public override string ToString() => Value.ToString("D");
+}
+
+public readonly record struct MapTextOccurrenceId(Guid Value)
+{
+    public static MapTextOccurrenceId New() => new(Guid.CreateVersion7());
+
+    public override string ToString() => Value.ToString("D");
+}
