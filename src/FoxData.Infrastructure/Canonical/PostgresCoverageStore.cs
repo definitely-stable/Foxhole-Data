@@ -272,6 +272,7 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
                 endpoint.semantic_key,
                 payload.body,
                 representation_fetch.content_encoding,
+                parse_run.adapter_version,
                 parse_run.parser_version,
                 parse_run.fingerprint_algorithm,
                 parse_run.structural_fingerprint,
@@ -333,11 +334,12 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
                     reader.IsDBNull(17) ? null : reader.GetString(17),
                     reader.GetString(18),
                     reader.GetString(19),
-                    reader.IsDBNull(20) ? null : reader.GetString(20),
-                    reader.GetString(21),
-                    reader.GetInt32(22),
+                    reader.GetString(20),
+                    reader.IsDBNull(21) ? null : reader.GetString(21),
+                    reader.GetString(22),
                     reader.GetInt32(23),
-                    reader.IsDBNull(24) ? null : reader.GetInt64(24)));
+                    reader.GetInt32(24),
+                    reader.IsDBNull(25) ? null : reader.GetInt64(25)));
         }
 
         return results;
