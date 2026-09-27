@@ -918,6 +918,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 canonicalEvidence,
                 sourceContextReader,
                 new PostgresWarRegionReader(dataSource),
+                new PostgresCoverageStore(dataSource),
                 warNormalization,
                 regionNormalization,
                 new WarReportCanonicalKernel(
