@@ -397,6 +397,30 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
         Assert.Equal(
             0L,
             await fixture.CountAsync("runtime.war_report_observations"));
+
+        var recovery = await fixture.CoverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.True(recovery.CoverageRecorded >= 4);
+        Assert.Equal(1, recovery.ContinuityApplied);
+
+        var replay = await fixture.ReportNormalization.NormalizeAsync(
+            report.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            WarApiWarReportNormalizationStatus.Normalized,
+            replay.Status);
+        Assert.NotNull(replay.Canonical);
+        Assert.Equal(
+            start.AddMinutes(10).AddSeconds(30),
+            replay.Canonical.WarRegion.FirstSeenAt);
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("runtime.war_report_observations"));
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("evidence.coverage_reprocessing_runs"));
     }
 
     [Fact]
@@ -524,17 +548,28 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 normalization,
                 options,
                 TimeProvider.System);
+        var coverageStore = new PostgresCoverageStore(dataSource);
         var reportNormalization =
             new WarApiWarReportNormalizationCoordinator(
                 canonicalEvidence,
                 sourceContextReader,
                 new PostgresWarRegionReader(dataSource),
-                new PostgresCoverageStore(dataSource),
+                coverageStore,
                 warNormalization,
                 regionNormalization,
                 new WarReportCanonicalKernel(
                     new PostgresWarReportCanonicalStore(dataSource)),
                 normalization,
+                options,
+                TimeProvider.System);
+        var coverageRecovery =
+            new WarApiCoverageRecoveryCoordinator(
+                coverageStore,
+                new PostgresSourceParseRunStore(dataSource),
+                sourceContextReader,
+                warNormalization,
+                regionNormalization,
+                reportNormalization,
                 options,
                 TimeProvider.System);
 
@@ -547,7 +582,8 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
             new EvidenceKernel(
                 new PostgresEvidenceKernelStore(dataSource)),
             new PostgresSourceParseRunStore(dataSource),
-            reportNormalization);
+            reportNormalization,
+            coverageRecovery);
     }
 
     private async Task MigrateAsync()
@@ -620,11 +656,15 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
         IngestionKernel ingestion,
         EvidenceKernel evidence,
         ISourceParseRunStore parseRuns,
-        WarApiWarReportNormalizationCoordinator reportNormalization)
+        WarApiWarReportNormalizationCoordinator reportNormalization,
+        WarApiCoverageRecoveryCoordinator coverageRecovery)
         : IAsyncDisposable
     {
         public WarApiWarReportNormalizationCoordinator ReportNormalization { get; } =
             reportNormalization;
+
+        public WarApiCoverageRecoveryCoordinator CoverageRecovery { get; } =
+            coverageRecovery;
 
         public async Task CreateBaseContextAsync(
             DateTimeOffset start,
