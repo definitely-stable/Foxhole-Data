@@ -247,6 +247,57 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task LateFencedWarFetchDoesNotOverrideAuthoritativeWarContext()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var start = new DateTimeOffset(
+            2026, 9, 27, 11, 10, 0, TimeSpan.Zero);
+
+        var authoritativeWar = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "authoritative-war",
+            """{"warId":"authoritative-war","warNumber":129,"winner":"WARDENS"}""",
+            start);
+        var authoritativeCanonical =
+            await fixture.WarNormalization.NormalizeAsync(
+                authoritativeWar.Id,
+                TestContext.Current.CancellationToken);
+        Assert.NotNull(authoritativeCanonical.Canonical);
+
+        var lateWar = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "synthetic-late-war",
+            """{"warId":"late-war","warNumber":130,"winner":"NONE"}""",
+            start.AddMinutes(5));
+        await fixture.MarkParseAttemptOutcomeAsync(
+            lateWar.Id,
+            "captured_late");
+
+        var maps = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.Maps(),
+            "maps-after-late-war",
+            """["DeadLandsHex"]""",
+            start.AddMinutes(6));
+
+        var membership = await fixture.RegionNormalization.NormalizeAsync(
+            maps.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            WarApiRegionNormalizationStatus.Normalized,
+            membership.Status);
+        Assert.NotNull(membership.Canonical);
+
+        var region = Assert.Single(membership.Canonical.Memberships);
+        Assert.Equal(
+            authoritativeCanonical.Canonical.War.Id,
+            region.Membership.WarId);
+    }
+
+    [Fact]
     public async Task LatestDurableWarParseWinsEvenWhenCanonicalWarNormalizationIsDelayed()
     {
         await using var fixture = await CreateFixtureAsync();
