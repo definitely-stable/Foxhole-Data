@@ -1,6 +1,6 @@
 # M5 — Canonical War / Region / Report Model
 
-Status: in progress. M5-A through M5-D implemented; next slice M5-E.
+Status: in progress. M5-A through M5-E implemented; next slice M5-F.
 Prerequisite: M4 Source Measurement completed.
 Successor: M6 maps, taxonomy and quality.
 
@@ -217,6 +217,24 @@ The normalizer receives a SourceParseRunId, not an in-memory source DTO. It reso
 
 runtime.wars is a bounded projection only. Its observation bounds and projected warNumber are rebuilt from runtime.war_observations and MUST NOT be treated as historical truth.
 
+## M5-E region-membership boundary
+
+An active-map-list payload has no `warId`. M5 therefore MUST NOT attach it to whichever war happens to be current when replay executes.
+
+For a maps parse with canonical observation boundary `mapsObservedAt`, the eligible war context is:
+
+~~~text
+same shard
+AND warObservation.observedAt <= mapsObservedAt
+ORDER BY warObservation.observedAt DESC
+~~~
+
+If no qualifying war observation exists, region membership normalization is deferred. Deferred work creates no `normalization_runs` row and remains replayable from the same durable source parse after suitable war evidence is normalized.
+
+This rule makes local replay stable across later wars and prevents historical map evidence from being silently rebound to a future war.
+
+`runtime.regions` is source-scoped by canonical key in M5. `runtime.war_regions` retains the exact upstream source map name and does not infer aliases, strip suffixes, case-fold, or treat absence from a later list as a deletion.
+
 ## Append-only and mutation rules
 
 Immutable:
@@ -284,6 +302,18 @@ Required behavior:
 - rejected normalization never destroys evidence and never causes an upstream request.
 
 ### M5-E — region discovery/membership
+
+- consume only durable `active-map-list` source parse runs and replay the exact body-bearing representation locally;
+- validate replay outcome/fingerprint/unknown counters before canonical writes;
+- preserve exact case-sensitive `sourceMapName` values; exact duplicates collapse, case variants remain distinct;
+- derive the initial canonical region key as `<sourceKey>/map/<exactSourceMapName>` so the global region table does not imply cross-source alias equivalence;
+- bind map membership only to the latest durable war observation for the same shard with `war.observedAt <= maps.retrievedAt`;
+- if no such war context exists, defer without writing a normalization run so replay can succeed later when qualifying durable war evidence appears;
+- never bind earlier map evidence to a future war observation;
+- atomically commit `normalization_run + region identities + war_regions` for accepted normalization;
+- keep `war_regions` bounded and monotonic: `firstSeenAt=min`, `lastSeenAt=max`, optional `sourceRegionId` may enrich but not conflict;
+- absence from a later active-map-list does not delete membership or fabricate a disappearance event;
+- successful war normalization opportunistically retries the latest durable maps parse for that shard, closing the normal worker-order race without an upstream refetch.
 
 ### M5-F — war-report normalization
 
