@@ -512,7 +512,13 @@ The executable completion gate MUST prove all of the following:
 6. Every `observed` / `source_not_modified` coverage row retains the required exact Fetch/representation/parse lineage, and every coverage reprocessing run points to source-not-modified coverage.
 7. The M5 canonical Core/Application/Infrastructure boundary remains consumer-neutral: no API, Worker, WarApi source-adapter or Chronicle/UI dependency may enter canonical contracts or persistence.
 8. Recovery behavior is independently exercised from the RecoveryTests project, not only through normal integration orchestration.
+9. Completion convergence is fail-closed: a recovery pass with zero newly completed work is not quiescent while any canonical item remains deferred.
+10. No terminal M5 collection Attempt may remain without a coverage observation, no authoritative current M5 SourceParseRun may remain without the expected versioned normalization result, and no active-map-list source-not-modified coverage item may remain without its current versioned continuity-processing result.
+11. Provenance completeness is checked in both directions where M5 promises an immutable observation: accepted war/report observations must resolve back to exact evidence, and every normalized war/report normalization run must resolve forward to its required canonical observation.
+12. Rebuildable bounded projections are independently audited against immutable history: war first/last observation bounds and projected warNumber must equal their observation-derived values; WarRegion source identity/bounds must satisfy the M5 source-scoped identity contract.
 
 The completion rebuild compares semantic snapshots and intentionally excludes generated storage IDs and local recording timestamps. Public stability for a future externally exposed identifier is a separate contract and MUST be designed explicitly before M9 rather than inferred from M5 surrogate keys.
+
+A completion fixture MUST NOT hide unresolved dependency cycles by calling a state quiescent merely because the current pass made no progress. Deferred work is permitted during ordinary runtime operation, but an M5 completion proof must either resolve it from the preserved evidence graph or fail the gate explicitly.
 
 Passing M5-H closes the canonical war/region/report milestone. M6 may consume these contracts but MUST NOT retroactively change M5 evidence, time or identity semantics without a new versioned contract/ADR.
