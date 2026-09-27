@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IWarApiTransport>(
 builder.Services.AddScoped<WarApiRegistryResolver>();
 builder.Services.AddScoped<WarApiAttemptExecutor>();
 builder.Services.AddScoped<WarApiWarNormalizationCoordinator>();
+builder.Services.AddScoped<WarApiRegionNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiReconciler>();
 
 builder.Services.AddHostedService<BootstrapWorker>();
