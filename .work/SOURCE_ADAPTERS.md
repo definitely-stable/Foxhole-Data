@@ -68,6 +68,7 @@ The adapter does not own durable lease/fence correctness. It operates through Ap
 - additive unknown JSON properties are retained where practical;
 - unknown enum/code values do not make raw capture impossible;
 - semantic helpers that can change meaning have independent algorithm versions;
+- Parser unknown-code counters are versioned diagnostics and MUST NOT be reused as later taxonomy authority; raw source codes remain available for independently versioned interpretation;
 - source identifiers such as War API mapName remain exact/opaque unless a later semantic layer explicitly maps aliases;
 - adapters do not write evidence/canonical tables directly.
 
