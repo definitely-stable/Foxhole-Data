@@ -86,10 +86,10 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
                 parse_run.outcome,
                 shard.id
             FROM evidence.source_parse_runs AS parse_run
-            INNER JOIN evidence.fetches AS fetch
-                ON fetch.id = parse_run.representation_fetch_id
+            INNER JOIN evidence.fetches AS representation_fetch
+                ON representation_fetch.id = parse_run.representation_fetch_id
             INNER JOIN sources.endpoints AS endpoint
-                ON endpoint.id = fetch.endpoint_id
+                ON endpoint.id = representation_fetch.endpoint_id
             INNER JOIN sources.shards AS shard
                 ON shard.id = endpoint.shard_id
             WHERE parse_run.id = @source_parse_run_id;
