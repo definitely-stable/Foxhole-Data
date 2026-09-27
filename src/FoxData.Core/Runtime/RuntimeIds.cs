@@ -36,3 +36,10 @@ public readonly record struct WarReportObservationId(Guid Value)
 
     public override string ToString() => Value.ToString("D");
 }
+
+public readonly record struct MapObservationId(Guid Value)
+{
+    public static MapObservationId New() => new(Guid.CreateVersion7());
+
+    public override string ToString() => Value.ToString("D");
+}
