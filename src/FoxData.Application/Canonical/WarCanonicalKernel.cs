@@ -3,9 +3,7 @@ using FoxData.Core.Sources;
 
 namespace FoxData.Application.Canonical;
 
-public sealed class WarCanonicalKernel(
-    IWarCanonicalStore store,
-    TimeProvider timeProvider)
+public sealed class WarCanonicalKernel(IWarCanonicalStore store)
 {
     public Task<WarCanonicalResult> RecordAcceptedAsync(
         SourceParseRunId sourceParseRunId,
@@ -14,6 +12,8 @@ public sealed class WarCanonicalKernel(
         DateTimeOffset observedAt,
         CanonicalWarSnapshot snapshot,
         string normalizerVersion,
+        DateTimeOffset normalizationStartedAt,
+        DateTimeOffset normalizationCompletedAt,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -23,15 +23,19 @@ public sealed class WarCanonicalKernel(
         ValidateSnapshot(snapshot);
         ValidateVersion(normalizerVersion);
 
-        var startedAt = timeProvider.GetUtcNow();
-        var completedAt = timeProvider.GetUtcNow();
+        if (normalizationCompletedAt < normalizationStartedAt)
+        {
+            throw new ArgumentException(
+                "Normalization completion must not be earlier than its start.",
+                nameof(normalizationCompletedAt));
+        }
 
         return store.RecordAcceptedAsync(
             new WarCanonicalWrite(
                 sourceParseRunId,
                 normalizerVersion,
-                startedAt,
-                completedAt,
+                normalizationStartedAt,
+                normalizationCompletedAt,
                 shardId,
                 representationFetchId,
                 observedAt,
