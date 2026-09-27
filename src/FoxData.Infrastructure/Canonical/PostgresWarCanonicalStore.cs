@@ -11,7 +11,13 @@ namespace FoxData.Infrastructure.Canonical;
 public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
     : IWarCanonicalStore
 {
-    public async Task<(WarDescriptor War, WarObservationDescriptor Observation)> RecordAsync(
+    private const string NormalizationColumns =
+        """
+        id, source_parse_run_id, normalizer_version, outcome, error_code,
+        started_at, completed_at, created_at
+        """;
+
+    public async Task<WarCanonicalResult> RecordAcceptedAsync(
         WarCanonicalWrite write,
         CancellationToken cancellationToken)
     {
@@ -25,7 +31,13 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
                 IsolationLevel.ReadCommitted,
                 cancellationToken);
 
-        await EnsureProvenanceAsync(
+        await EnsureParseProvenanceAsync(
+            connection,
+            transaction,
+            write,
+            cancellationToken);
+
+        var normalizationRun = await RecordNormalizationRunAsync(
             connection,
             transaction,
             write,
@@ -41,14 +53,25 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
             connection,
             transaction,
             war,
+            normalizationRun,
             write,
             cancellationToken);
 
+        war = await RefreshWarProjectionAsync(
+            connection,
+            transaction,
+            war.Id,
+            cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
-        return (war, observation);
+
+        return new WarCanonicalResult(
+            war,
+            observation,
+            normalizationRun);
     }
 
-    private static async Task EnsureProvenanceAsync(
+    private static async Task EnsureParseProvenanceAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         WarCanonicalWrite write,
@@ -59,23 +82,20 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
         command.CommandText =
             """
             SELECT
-                normalization.source_parse_run_id,
-                normalization.outcome,
                 parse_run.representation_fetch_id,
+                parse_run.outcome,
                 shard.id
-            FROM evidence.normalization_runs AS normalization
-            INNER JOIN evidence.source_parse_runs AS parse_run
-                ON parse_run.id = normalization.source_parse_run_id
+            FROM evidence.source_parse_runs AS parse_run
             INNER JOIN evidence.fetches AS fetch
                 ON fetch.id = parse_run.representation_fetch_id
             INNER JOIN sources.endpoints AS endpoint
                 ON endpoint.id = fetch.endpoint_id
             INNER JOIN sources.shards AS shard
                 ON shard.id = endpoint.shard_id
-            WHERE normalization.id = @normalization_run_id;
+            WHERE parse_run.id = @source_parse_run_id;
             """;
 
-        AddUuid(command, "normalization_run_id", write.NormalizationRunId.Value);
+        AddUuid(command, "source_parse_run_id", write.SourceParseRunId.Value);
 
         await using var reader = await command.ExecuteReaderAsync(
             CommandBehavior.SingleRow,
@@ -84,23 +104,143 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
         if (!await reader.ReadAsync(cancellationToken))
         {
             throw new CanonicalStateIntegrityException(
-                $"Normalization run {write.NormalizationRunId} does not exist.");
+                $"Source parse run {write.SourceParseRunId} does not exist.");
         }
 
-        var sourceParseRunId = new SourceParseRunId(reader.GetGuid(0));
-        var outcome = reader.GetString(1);
-        var representationFetchId = new FetchId(reader.GetGuid(2));
-        var shardId = new ShardId(reader.GetGuid(3));
+        var representationFetchId = new FetchId(reader.GetGuid(0));
+        var parseOutcome = reader.GetString(1);
+        var shardId = new ShardId(reader.GetGuid(2));
 
-        if (sourceParseRunId != write.SourceParseRunId ||
-            representationFetchId != write.RepresentationFetchId ||
-            shardId != write.ShardId ||
-            !string.Equals(outcome, "normalized", StringComparison.Ordinal))
+        if (representationFetchId != write.RepresentationFetchId ||
+            shardId != write.ShardId)
         {
             throw new CanonicalStateIntegrityException(
-                "War canonical write does not match its durable normalization provenance.");
+                "War canonical write does not match its durable source-parse provenance.");
+        }
+
+        if (parseOutcome is not ("parsed" or "parsed_with_unknowns"))
+        {
+            throw new CanonicalStateIntegrityException(
+                $"Source parse run {write.SourceParseRunId} is not a successful parse.");
         }
     }
+
+    private static async Task<NormalizationRunDescriptor> RecordNormalizationRunAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        WarCanonicalWrite write,
+        CancellationToken cancellationToken)
+    {
+        var proposedId = NormalizationRunId.New();
+
+        await using var insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText =
+            $"""
+            INSERT INTO evidence.normalization_runs
+                (id, source_parse_run_id, normalizer_version, outcome, error_code,
+                 started_at, completed_at)
+            VALUES
+                (@id, @source_parse_run_id, @normalizer_version, 'normalized', NULL,
+                 @started_at, @completed_at)
+            ON CONFLICT (source_parse_run_id, normalizer_version)
+            DO NOTHING
+            RETURNING {NormalizationColumns};
+            """;
+
+        AddUuid(insert, "id", proposedId.Value);
+        AddUuid(insert, "source_parse_run_id", write.SourceParseRunId.Value);
+        AddText(insert, "normalizer_version", write.NormalizerVersion);
+        AddTimestamp(insert, "started_at", write.NormalizationStartedAt);
+        AddTimestamp(insert, "completed_at", write.NormalizationCompletedAt);
+
+        var created = await ReadNormalizationRunAsync(
+            insert,
+            cancellationToken);
+
+        if (created is not null)
+        {
+            return created;
+        }
+
+        var existing = await GetNormalizationRunAsync(
+            connection,
+            transaction,
+            write.SourceParseRunId,
+            write.NormalizerVersion,
+            cancellationToken)
+            ?? throw new CanonicalStateIntegrityException(
+                "Normalization-run uniqueness conflict was observed but the existing row was not readable.");
+
+        if (existing.Outcome != NormalizationRunOutcome.Normalized ||
+            existing.ErrorCode is not null)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Repeated accepted war normalization conflicts with the durable normalization outcome.");
+        }
+
+        return existing;
+    }
+
+    private static async Task<NormalizationRunDescriptor?> GetNormalizationRunAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        SourceParseRunId sourceParseRunId,
+        string normalizerVersion,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            $"""
+            SELECT {NormalizationColumns}
+            FROM evidence.normalization_runs
+            WHERE source_parse_run_id = @source_parse_run_id
+              AND normalizer_version = @normalizer_version;
+            """;
+
+        AddUuid(command, "source_parse_run_id", sourceParseRunId.Value);
+        AddText(command, "normalizer_version", normalizerVersion);
+
+        return await ReadNormalizationRunAsync(
+            command,
+            cancellationToken);
+    }
+
+    private static async Task<NormalizationRunDescriptor?> ReadNormalizationRunAsync(
+        NpgsqlCommand command,
+        CancellationToken cancellationToken)
+    {
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SingleRow,
+            cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new NormalizationRunDescriptor(
+            new NormalizationRunId(reader.GetGuid(0)),
+            new SourceParseRunId(reader.GetGuid(1)),
+            reader.GetString(2),
+            ParseNormalizationOutcome(reader.GetString(3)),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.GetFieldValue<DateTimeOffset>(5),
+            reader.GetFieldValue<DateTimeOffset>(6),
+            reader.GetFieldValue<DateTimeOffset>(7));
+    }
+
+    private static NormalizationRunOutcome ParseNormalizationOutcome(
+        string value) =>
+        value switch
+        {
+            "normalized" => NormalizationRunOutcome.Normalized,
+            "rejected" => NormalizationRunOutcome.Rejected,
+            "failed" => NormalizationRunOutcome.Failed,
+            _ => throw new CanonicalStateIntegrityException(
+                $"Unknown durable normalization outcome '{value}'."),
+        };
 
     private static async Task<WarDescriptor> GetOrCreateWarAsync(
         NpgsqlConnection connection,
@@ -141,83 +281,32 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
             }
         }
 
-        WarDescriptor existing;
-        await using (var select = connection.CreateCommand())
-        {
-            select.Transaction = transaction;
-            select.CommandText =
-                """
-                SELECT
-                    id, shard_id, source_war_id, war_number,
-                    first_observed_at, last_observed_at, created_at
-                FROM runtime.wars
-                WHERE shard_id = @shard_id
-                  AND source_war_id = @source_war_id
-                FOR UPDATE;
-                """;
-
-            AddUuid(select, "shard_id", write.ShardId.Value);
-            AddText(select, "source_war_id", write.Snapshot.SourceWarId);
-
-            existing = await ReadWarAsync(select, cancellationToken)
-                ?? throw new CanonicalStateIntegrityException(
-                    "War uniqueness conflict was observed but the existing row was not readable.");
-        }
-
-        if (existing.WarNumber is { } existingNumber &&
-            write.Snapshot.WarNumber is { } suppliedNumber &&
-            existingNumber != suppliedNumber)
-        {
-            throw new CanonicalStateIntegrityException(
-                $"Source war '{write.Snapshot.SourceWarId}' changed warNumber from {existingNumber} to {suppliedNumber}.");
-        }
-
-        var effectiveWarNumber = existing.WarNumber ?? write.Snapshot.WarNumber;
-        var firstObservedAt =
-            existing.FirstObservedAt <= write.ObservedAt
-                ? existing.FirstObservedAt
-                : write.ObservedAt;
-        var lastObservedAt =
-            existing.LastObservedAt >= write.ObservedAt
-                ? existing.LastObservedAt
-                : write.ObservedAt;
-
-        if (effectiveWarNumber == existing.WarNumber &&
-            firstObservedAt == existing.FirstObservedAt &&
-            lastObservedAt == existing.LastObservedAt)
-        {
-            return existing;
-        }
-
-        await using var update = connection.CreateCommand();
-        update.Transaction = transaction;
-        update.CommandText =
+        await using var select = connection.CreateCommand();
+        select.Transaction = transaction;
+        select.CommandText =
             """
-            UPDATE runtime.wars
-            SET
-                war_number = @war_number,
-                first_observed_at = @first_observed_at,
-                last_observed_at = @last_observed_at
-            WHERE id = @id
-            RETURNING
+            SELECT
                 id, shard_id, source_war_id, war_number,
-                first_observed_at, last_observed_at, created_at;
+                first_observed_at, last_observed_at, created_at
+            FROM runtime.wars
+            WHERE shard_id = @shard_id
+              AND source_war_id = @source_war_id
+            FOR UPDATE;
             """;
 
-        AddUuid(update, "id", existing.Id.Value);
-        AddNullableInteger(update, "war_number", effectiveWarNumber);
-        AddTimestamp(update, "first_observed_at", firstObservedAt);
-        AddTimestamp(update, "last_observed_at", lastObservedAt);
+        AddUuid(select, "shard_id", write.ShardId.Value);
+        AddText(select, "source_war_id", write.Snapshot.SourceWarId);
 
-        return await ReadWarAsync(update, cancellationToken)
+        return await ReadWarAsync(select, cancellationToken)
             ?? throw new CanonicalStateIntegrityException(
-                "War row disappeared while updating observation bounds.");
+                "War uniqueness conflict was observed but the existing row was not readable.");
     }
 
     private static async Task<WarObservationDescriptor> RecordObservationAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         WarDescriptor war,
+        NormalizationRunDescriptor normalizationRun,
         WarCanonicalWrite write,
         CancellationToken cancellationToken)
     {
@@ -251,7 +340,7 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
 
         AddUuid(insert, "id", proposedId.Value);
         AddUuid(insert, "war_id", war.Id.Value);
-        AddUuid(insert, "normalization_run_id", write.NormalizationRunId.Value);
+        AddUuid(insert, "normalization_run_id", normalizationRun.Id.Value);
         AddUuid(insert, "representation_fetch_id", write.RepresentationFetchId.Value);
         AddTimestamp(insert, "observed_at", write.ObservedAt);
         AddNullableInteger(insert, "war_number", write.Snapshot.WarNumber);
@@ -281,13 +370,58 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
         var existing = await GetObservationByNormalizationRunAsync(
             connection,
             transaction,
-            write.NormalizationRunId,
+            normalizationRun.Id,
             cancellationToken)
             ?? throw new CanonicalStateIntegrityException(
                 "War-observation uniqueness conflict was observed but the existing row was not readable.");
 
-        EnsureEquivalent(existing, war, write);
+        EnsureEquivalent(existing, war, normalizationRun, write);
         return existing;
+    }
+
+    private static async Task<WarDescriptor> RefreshWarProjectionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        WarId warId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            WITH bounds AS
+            (
+                SELECT
+                    MIN(observed_at) AS first_observed_at,
+                    MAX(observed_at) AS last_observed_at
+                FROM runtime.war_observations
+                WHERE war_id = @war_id
+            ),
+            latest AS
+            (
+                SELECT war_number
+                FROM runtime.war_observations
+                WHERE war_id = @war_id
+                ORDER BY observed_at DESC, representation_fetch_id DESC
+                LIMIT 1
+            )
+            UPDATE runtime.wars AS war
+            SET
+                war_number = latest.war_number,
+                first_observed_at = bounds.first_observed_at,
+                last_observed_at = bounds.last_observed_at
+            FROM bounds, latest
+            WHERE war.id = @war_id
+            RETURNING
+                war.id, war.shard_id, war.source_war_id, war.war_number,
+                war.first_observed_at, war.last_observed_at, war.created_at;
+            """;
+
+        AddUuid(command, "war_id", warId.Value);
+
+        return await ReadWarAsync(command, cancellationToken)
+            ?? throw new CanonicalStateIntegrityException(
+                "War projection could not be rebuilt from its durable observations.");
     }
 
     private static async Task<WarObservationDescriptor?> GetObservationByNormalizationRunAsync(
@@ -370,12 +504,13 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
     private static void EnsureEquivalent(
         WarObservationDescriptor existing,
         WarDescriptor war,
+        NormalizationRunDescriptor normalizationRun,
         WarCanonicalWrite supplied)
     {
         var snapshot = supplied.Snapshot;
 
         if (existing.WarId != war.Id ||
-            existing.NormalizationRunId != supplied.NormalizationRunId ||
+            existing.NormalizationRunId != normalizationRun.Id ||
             existing.RepresentationFetchId != supplied.RepresentationFetchId ||
             existing.ObservedAt != supplied.ObservedAt ||
             existing.WarNumber != snapshot.WarNumber ||
@@ -395,15 +530,37 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
     private static void Validate(WarCanonicalWrite write)
     {
         ValidateId(write.SourceParseRunId.Value, nameof(write.SourceParseRunId));
-        ValidateId(write.NormalizationRunId.Value, nameof(write.NormalizationRunId));
         ValidateId(write.ShardId.Value, nameof(write.ShardId));
         ValidateId(write.RepresentationFetchId.Value, nameof(write.RepresentationFetchId));
 
-        if (string.IsNullOrWhiteSpace(write.Snapshot.SourceWarId) ||
-            write.Snapshot.SourceWarId.Length > 256)
+        if (string.IsNullOrWhiteSpace(write.NormalizerVersion) ||
+            write.NormalizerVersion.Length > 128 ||
+            !string.Equals(
+                write.NormalizerVersion,
+                write.NormalizerVersion.Trim(),
+                StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                "SourceWarId must be non-empty and at most 256 characters.",
+                "NormalizerVersion must be non-empty, already trimmed, and at most 128 characters.",
+                nameof(write));
+        }
+
+        if (write.NormalizationCompletedAt < write.NormalizationStartedAt)
+        {
+            throw new ArgumentException(
+                "NormalizationCompletedAt must not be earlier than NormalizationStartedAt.",
+                nameof(write));
+        }
+
+        if (string.IsNullOrWhiteSpace(write.Snapshot.SourceWarId) ||
+            write.Snapshot.SourceWarId.Length > 256 ||
+            !string.Equals(
+                write.Snapshot.SourceWarId,
+                write.Snapshot.SourceWarId.Trim(),
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "SourceWarId must be non-empty, already trimmed, and at most 256 characters.",
                 nameof(write));
         }
 
@@ -412,6 +569,15 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
             throw new ArgumentException(
                 "Winner must be at most 128 characters.",
                 nameof(write));
+        }
+
+        if (write.Snapshot.WarNumber is < 0 ||
+            write.Snapshot.RequiredVictoryTowns is < 0 ||
+            write.Snapshot.ShortRequiredVictoryTowns is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(write),
+                "War number and victory-town counts must not be negative.");
         }
     }
 
@@ -443,12 +609,6 @@ public sealed class PostgresWarCanonicalStore(NpgsqlDataSource dataSource)
         string? value) =>
         command.Parameters.Add(name, NpgsqlDbType.Text).Value =
             value is null ? DBNull.Value : value;
-
-    private static void AddInteger(
-        NpgsqlCommand command,
-        string name,
-        int value) =>
-        command.Parameters.Add(name, NpgsqlDbType.Integer).Value = value;
 
     private static void AddNullableInteger(
         NpgsqlCommand command,
