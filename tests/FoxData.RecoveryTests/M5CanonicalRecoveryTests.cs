@@ -150,14 +150,19 @@ public sealed class M5CanonicalRecoveryTests(
                 TimeProvider.System);
         var coverageStore =
             new PostgresCoverageStore(dataSource);
-        var reportNormalization =
-            new WarApiWarReportNormalizationCoordinator(
-                canonicalEvidence,
+        var mapContextResolver =
+            new WarApiMapContextResolver(
                 sourceContext,
+                canonicalEvidence,
                 new PostgresWarRegionReader(dataSource),
                 coverageStore,
                 warNormalization,
                 regionNormalization,
+                options);
+        var reportNormalization =
+            new WarApiWarReportNormalizationCoordinator(
+                canonicalEvidence,
+                mapContextResolver,
                 new WarReportCanonicalKernel(
                     new PostgresWarReportCanonicalStore(dataSource)),
                 normalization,
