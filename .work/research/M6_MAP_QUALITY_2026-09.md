@@ -2,233 +2,498 @@
 
 Status: research evidence only. Not normative.
 
-Purpose: record the source facts and historical incidents used to design M6.
+Normative decisions live in [../M6_MAPS_TAXONOMY_QUALITY.md](../M6_MAPS_TAXONOMY_QUALITY.md).
 
-## Official source contract
+## Purpose
+
+This snapshot records the external and internal evidence used to design M6.
+
+It deliberately separates:
+
+1. current documented Official War API behavior;
+2. historical/open upstream incidents;
+3. FoxData measurements and architecture constraints;
+4. implementation conclusions.
+
+An upstream issue is evidence that a failure mode has existed. It is not treated as a permanent guarantee that the source still behaves that way.
+
+## Current Official War API documentation
 
 Primary source:
 
 - https://github.com/clapfoot/warapi
 - https://github.com/clapfoot/warapi/blob/master/README.md
 
-Observed current documented behavior:
+The current documentation exposes:
 
-- map list: `GET /worldconquest/maps`;
-- static map: `GET /worldconquest/maps/:mapName/static`;
-- dynamic public map: `GET /worldconquest/maps/:mapName/dynamic/public`;
-- static and dynamic endpoints share the map-data response shape;
-- documented map-level fields:
-  - regionId;
-  - scorchedVictoryTowns;
-  - mapItems;
-  - mapTextItems;
-  - lastUpdated;
-  - version;
-- documented item fields:
-  - teamId;
-  - iconType;
-  - x;
-  - y;
-  - flags;
-- documented text fields:
-  - text;
-  - x;
-  - y;
-  - mapMarkerType;
-- version is documented as a version index that increments when map data changes and is used for caching;
-- lastUpdated is documented as a map timestamp;
-- static is described as slow/stable data and dynamic as lifecycle-changing public icon data;
-- dynamic may update every three seconds;
-- ETag / If-None-Match / 304 is the documented cache-validation mechanism;
-- current documented icon list extends through icon code 92;
-- documented public flag bits are 0x01, 0x02 legacy, 0x04, 0x10 and 0x20;
-- unlisted flag bits are explicitly described as internal and not stable for consumers.
+~~~text
+GET /worldconquest/maps/:mapName/static
+GET /worldconquest/maps/:mapName/dynamic/public
+~~~
 
-Design consequence: FoxData preserves raw values and versions its interpretation. The source documentation is not a safe closed enum contract.
+The shared map-data shape documents:
 
-## warapi#77 — static data changed during a war
+- regionId;
+- scorchedVictoryTowns;
+- mapItems;
+- mapTextItems;
+- lastUpdated;
+- version.
+
+Map items document:
+
+- teamId;
+- iconType;
+- normalized x/y;
+- flags.
+
+Map text items document:
+
+- text;
+- normalized x/y;
+- mapMarkerType.
+
+The README documents `version` as a cache/version index that increments when map data changes and `lastUpdated` as map-level epoch-millisecond metadata.
+
+Design consequence:
+
+- `version` is revision/cache metadata, not time;
+- `lastUpdated` is map-level source time, not item-event time;
+- neither is item/objective identity.
+
+### Static map documentation
+
+The README describes static data as things that never change over the lifecycle of a map and says callers normally need it once per map between World Conquests.
+
+FoxData does **not** elevate this wording into an immutability invariant because upstream issue #77 observed static-map version changes during a war.
+
+Design consequence:
+
+- static data is a low-change snapshot stream;
+- every changed body-bearing representation remains durable evidence;
+- a changed static representation is not automatically a quality failure.
+
+### Dynamic map documentation
+
+The README describes dynamic/public map data as public map icons that can change over the lifecycle of a map and says the data may update every three seconds.
+
+Design consequence:
+
+- dynamic payload = source snapshot;
+- dynamic payload != change event;
+- Fetch time != exact capture/change time;
+- M6 does not emit objective-change events.
+
+### HomeRegion behavior
+
+The README states that `HomeRegionC` and `HomeRegionW` are returned by the active map list but do not have ordinary map data available in this API version.
+
+Related issue:
+
+- https://github.com/clapfoot/warapi/issues/127
+
+Design consequence:
+
+- missing static/dynamic endpoints for HomeRegion are source capability asymmetry;
+- that absence is not itself an M6 collection/quality gap;
+- M6 must not fabricate map observations for unsupported endpoint families.
+
+### Teams
+
+The current README documents:
+
+~~~text
+NONE
+WARDENS
+COLONIALS
+~~~
+
+FoxData retains the raw string and treats the set as open for forward compatibility.
+
+### Icons
+
+The current README icon table ends at iconType 92.
+
+This is taxonomy evidence, not a safe closed parser enum.
+
+Design consequence:
+
+- parser accepts integer icon codes;
+- normalization preserves raw values;
+- taxonomy interprets only codes defined by the selected versioned profile;
+- unknown codes remain unknown, not rejected.
+
+### Flags
+
+The README documents public bits:
+
+~~~text
+0x01 IsVictoryBase
+0x02 IsHomeBase (legacy/removed)
+0x04 IsBuildSite
+0x10 IsScorched
+0x20 IsTownClaimed
+~~~
+
+The README explicitly warns that unlisted bits are internal and should not be relied upon.
+
+Design consequence:
+
+- always retain raw flag bitmask;
+- interpret only documented bits in taxonomy@1;
+- retain all other bits as unknownBits;
+- never invent semantics for an unknown bit.
+
+### ETag and 304
+
+The README documents ETag support and states that a 304 means the cached data remains the latest representation.
+
+Design consequence:
+
+- validation Fetch and body-bearing representation Fetch remain distinct;
+- 304 does not create duplicate Payload/SourceParseRun/map snapshot;
+- later war-scoped binding of unchanged bytes requires explicit continuity/context proof.
+
+## Upstream issue evidence
+
+### warapi#77 — static data changed during a war
 
 Source:
 
 - https://github.com/clapfoot/warapi/issues/77
+- created 2020-11-18;
+- closed 2020-12-17.
 
-The report records static map data for DeadLandsHex with a version indicating multiple changes during the same war.
+The report observed a static map response whose version had advanced during an ongoing war.
 
-Design consequences:
+Use in M6:
 
-- M6 must not model static data as immutable configuration;
-- every body-bearing static representation is durable evidence;
-- static remains long-cadence/conditionally revalidated under the M4 policy;
-- a static representation change is not automatically a quality failure.
+- regression evidence against treating static bytes as immutable;
+- changed static representations remain append-only normalized snapshots.
 
-## warapi#92 — restart/mass-NONE malformed dynamic state
+Do not infer:
+
+- current frequency of static changes;
+- a specific source-side cause.
+
+### warapi#92 — restart/mass-NONE malformed dynamic state
 
 Source:
 
 - https://github.com/clapfoot/warapi/issues/92
+- created 2021-10-11;
+- closed 2025-03-20;
+- labels include `API Issue` and `Fixed For Next Update`.
 
-Historical behavior:
+The reported Fisherman's Row dynamic representation contained a sharply truncated subset of items and returned `teamId = NONE` for those items. The reporter described false event-log changes during server restarts.
 
-- dynamic data became severely truncated during region-server restart behavior;
-- returned items carried teamId NONE;
-- consumers generated large numbers of false apparent ownership events;
-- the issue was closed in March 2025 as fixed for an update.
+Use in M6:
 
-The example payload contained a small subset of structures, all with teamId NONE, and version 1.
+- mandatory historical regression fixture;
+- proof that parser-valid JSON can still be unsafe as accepted canonical state;
+- input to the composite mass-NONE/representation-collapse rule family.
 
-Design consequences:
+Do not infer:
 
-- the incident remains a mandatory regression fixture even though upstream reports it fixed;
-- a single NONE item cannot be treated as anomalous;
-- M6 needs baseline-relative aggregate signals;
-- a quarantine must block the representation from replacing the last accepted baseline;
-- raw evidence must remain available for future reprocessing.
+- that the exact bug still occurs in 2026;
+- that any high NONE share is invalid;
+- that NONE alone is a rejection signal.
 
-## warapi#120 — restart flag request / false recent changes
+Because the issue is closed, M6 uses it as regression evidence rather than as a claim about current source reliability.
+
+### warapi#120 — restart-state enhancement request
 
 Source:
 
 - https://github.com/clapfoot/warapi/issues/120
+- created 2023-11-20;
+- closed 2025-03-20;
+- labels include `API Issue` and `Fixed For Next Update`.
 
-The issue describes restart periods producing misleading apparent town ownership transitions and asks for an explicit restart flag. It was closed in March 2025.
+The report describes misleading apparent town ownership changes during region reboot/cooldown and asks for an explicit restarting flag.
 
-Design consequences:
+Use in M6:
 
-- FoxData cannot depend on a restart flag that is not part of the documented current payload;
-- anomaly protection must be evidence-based and versioned locally;
-- M6 quality must distinguish source snapshots from inferred change events;
-- exact event generation remains M8 work.
+- corroborates #92 as a historical class of restart-related false state;
+- supports a multi-signal quality rule rather than a single-field heuristic.
 
-## warapi#137 — undocumented iconType 97 and viewDirection
+Do not infer:
 
-Source:
+- that a restart flag exists in every current payload;
+- that FoxData may depend on an undocumented restart field.
 
-- https://github.com/clapfoot/warapi/issues/137
-
-Current status at this research snapshot: open.
-
-The issue records a Live-1 dynamic item with:
-
-- iconType 97, beyond the README list ending at 92;
-- additive viewDirection.
-
-Design consequences:
-
-- iconType is an open integer;
-- a C# closed enum is unsafe as the durable source representation;
-- viewDirection is preserved as raw source data;
-- M6 taxonomy v1 must not guess semantic meaning for 97 without an accepted taxonomy source;
-- unknown icon values alone must not quarantine an otherwise representable snapshot.
-
-## warapi#134 — region/API name inconsistencies
-
-Source:
-
-- https://github.com/clapfoot/warapi/issues/134
-
-Current status at this research snapshot: open.
-
-Examples include API/asset spelling/suffix inconsistencies.
-
-Design consequences:
-
-- exact sourceMapName remains opaque and case-sensitive;
-- M6 must not strip/append Hex or infer API names from assets;
-- any later human/asset alias layer is versioned interpretation, not source identity.
-
-## warapi#127 — Home Region capability asymmetry
-
-Source:
-
-- https://github.com/clapfoot/warapi/issues/127
-
-Current status at this research snapshot: open.
-
-The issue records that HomeRegionW/HomeRegionC war-report routes exist while ordinary static/dynamic public routes do not.
-
-Design consequences:
-
-- absence of static/dynamic data for Home Regions is not automatically a collection or quality failure;
-- endpoint capability planning remains source-specific;
-- M6 must not fabricate map observations for unsupported endpoint families.
-
-## warapi#115 — duplicate Rocket Target occurrence
+### warapi#115 — duplicate Rocket Target entries
 
 Source:
 
 - https://github.com/clapfoot/warapi/issues/115
+- created 2023-10-16;
+- open as reviewed in September 2026.
 
-Current status at this research snapshot: open.
+The issue reports two Rocket Target entries at the same location while only one nearby site was visible.
 
-The issue records duplicate Rocket Target entries at the same location.
+Use in M6:
 
-Design consequences:
+- mandatory occurrence-multiplicity regression;
+- evidence against deduplication by equal coordinate/icon/team/flags;
+- evidence against coordinate/icon hashes as ObjectiveId.
 
-- field equality is not a safe deduplication rule;
-- source array occurrences must be preserved independently;
-- source ordinal may be retained as representation-local provenance but never promoted to stable objective identity;
-- a duplicate-occurrence quality signal may be recorded without deleting either row.
+Do not infer:
+
+- whether the duplicate is corruption or two legitimate source records;
+- stable identity between either occurrence and later representations.
+
+### warapi#134 — API/map naming inconsistencies
+
+Source:
+
+- https://github.com/clapfoot/warapi/issues/134
+- created 2026-02-02;
+- open as reviewed in September 2026.
+
+The report describes API/asset spelling, case and suffix inconsistencies.
+
+Use in M6:
+
+- reinforces M5 exact/opaque sourceMapName identity;
+- prohibits heuristic case folding or suffix stripping in normalization.
+
+Any later human/asset alias mapping must be a versioned interpretation layer.
+
+### warapi#137 — iconType 97 and additive viewDirection
+
+Source:
+
+- https://github.com/clapfoot/warapi/issues/137
+- created 2026-07-07;
+- open as reviewed in September 2026.
+
+The issue shows a live dynamic item with:
+
+~~~text
+iconType = 97
+viewDirection = 0
+~~~
+
+while 97 is not present in the current README icon table.
+
+Use in M6:
+
+- mandatory open-icon taxonomy fixture;
+- mandatory additive-field fixture;
+- direct evidence that "current documented maximum icon number" is not a safe closed schema.
+
+FoxData's current parser already preserves `viewDirection`.
+
+The current `warapi-parser@1` also counts `iconType > 92` as an unknown-code diagnostic.
+
+That parser diagnostic is historical parse metadata only. M6 MUST NOT use `UnknownCodeCount` as taxonomy authority. Semantic known/unknown status is determined by the selected taxonomy version.
+
+A future taxonomy update should not require rewriting historical parser truth unless the parser contract itself changes.
 
 ## Coordinate/origin documentation gap
 
-Relevant upstream issues:
+Relevant historical issues:
 
 - https://github.com/clapfoot/warapi/issues/90
 - https://github.com/clapfoot/warapi/issues/91
 
-The official README documents normalized coordinates and constant world extents, but historical issues requested additional region-position/origin clarification.
+The README documents normalized coordinates and constant world extents, while historical issues requested additional origin/position clarification.
 
-Design consequences:
+Design consequence:
 
-- M6 stores source-normalized x/y without strengthening undocumented orientation semantics;
-- world-coordinate conversion may be a pure helper;
-- coordinates are matching evidence for M7, not M6 identity.
+- M6 stores source-normalized x/y exactly;
+- M6 does not strengthen undocumented orientation/origin semantics;
+- coordinate conversion can remain a pure helper;
+- coordinates are evidence for M7 matching, not identity in M6.
 
 ## M4 FoxData measurement evidence
 
-FoxData M4 measured a deterministic three-region Live-1 high-resolution cohort.
+M4 measured a deterministic three-region Live-1 high-resolution cohort.
 
-For dynamic-map-state:
+For dynamic-map-state the recorded probe included:
 
-- 15-second probe baseline;
+- 15-second high-resolution baseline;
 - 26 observed representation episodes across the three-region eight-hour cohort;
-- the simulated 30-second cadence retained 26/26 observed representation episodes in that cohort;
-- 60/120-second candidates increased observation delay;
-- source version gaps were treated as evidence signals, not counts of proven missed semantic states.
+- 30-second simulation retaining all 26 observed episodes in that cohort;
+- increasing delay at 60/120 seconds;
+- source version gaps treated as evidence signals, not counts of proven missed semantic events.
 
 M4 retained:
 
-- recommended dynamic target 30 seconds;
-- recommended static target 6 hours with conditional validation;
+- recommended dynamic target around 30 seconds;
+- recommended static target around six hours with conditional validation;
 - executor concurrency 1;
 - ETag/cache safety constraints.
 
-Design consequences:
+Design consequence:
 
-- M6 storage planning must use changed representation count, not request count;
+- M6 storage planning uses changed representation count, not request count;
 - 304 validation must not duplicate normalized snapshots;
-- static must remain revalidated;
-- M6 quality calibration may reuse M4 raw evidence where available, but those observations are not universal thresholds.
+- static remains conditionally revalidated;
+- M4 data may calibrate M6 rules but does not define universal thresholds.
 
-## External-client corroboration
+## M5 completion constraints
 
-Generated/open-source War API clients mirror the documented endpoint split between static and dynamic map data. They are useful corroboration but are not source authority.
+M5 proves:
 
-Source authority remains clapfoot/warapi.
+- exact durable Fetch/Payload/SourceParseRun provenance;
+- exact case-sensitive sourceMapName;
+- WarId and WarRegion context;
+- explicit coverage states;
+- 304 lineage;
+- deterministic local recovery.
 
-## Design conclusions
+M6 must consume these guarantees rather than create a second context model.
 
-The research supports the following M6 decisions:
+Any M6 coverage-store generalization must keep M5-H green.
 
-1. persist source occurrences, not pseudo-objective IDs;
-2. preserve duplicates;
-3. preserve unknown icon/team/flag/additive values;
-4. keep static and dynamic streams separate;
-5. normalize one body-bearing representation once;
-6. use 304 as validation/coverage, not duplicate source content;
-7. separate taxonomy from normalization;
-8. separate quality from taxonomy;
-9. use accepted prior observations as deterministic anomaly baselines;
-10. calibrate mass-NONE thresholds against fixtures/evidence before freezing policy v1;
-11. keep issue-92/#120 as permanent regressions even though upstream marked them fixed;
-12. defer objective matching and event/change inference to M7/M8.
+## PostgreSQL concurrency options for quality baselines
+
+M6 quality acceptance introduces a race: two candidates for the same WarRegion/capability must not select inconsistent accepted baselines.
+
+PostgreSQL 18 provides viable primitives including:
+
+- row-level locking;
+- transaction-level advisory locks such as `pg_advisory_xact_lock`;
+- SERIALIZABLE transactions with serialization-failure retry.
+
+Official PostgreSQL 18 references:
+
+- https://www.postgresql.org/docs/18/functions-admin.html
+- https://www.postgresql.org/docs/18/transaction-iso.html
+- https://www.postgresql.org/docs/18/applevel-consistency.html
+
+M6 planning intentionally does not freeze one primitive yet.
+
+M6-E must compare:
+
+- correctness across two Worker processes;
+- crash cleanup semantics;
+- contention at measured update rate;
+- retry behavior;
+- implementation complexity;
+- whether serialization must be scoped by WarRegion + capability.
+
+An in-process `lock`, semaphore or singleton is insufficient.
+
+## Out-of-order replay and the chronology barrier
+
+Quality often compares candidate `tN` against the latest prior accepted observation.
+
+If `t2` is evaluated before a durable `t1 < t2` candidate has a terminal quality result, processing t1 later can change what t2's correct baseline should have been.
+
+M6 therefore needs a chronology barrier.
+
+Recommended v1 behavior:
+
+1. order quality candidates by observedAt plus a deterministic durable tie-breaker;
+2. before evaluating candidate C, check whether an earlier eligible normalized candidate for the same WarRegion + capability lacks a terminal quality result under the selected taxonomy/policy versions;
+3. if one exists, defer C;
+4. serialize concurrent evaluation for the same WarRegion + capability;
+5. suspect/quarantined candidates are terminal and no longer block later candidates, but never become accepted baselines;
+6. the next candidate uses the latest earlier accepted observation.
+
+This makes chronological execution and crash/out-of-order replay converge to the same baseline chain without rewriting old immutable QualityRuns.
+
+## Quality-design conclusions
+
+### Separate parser, normalization, taxonomy and quality
+
+Parser asks:
+
+> Can the source JSON be represented by the current source parser?
+
+Normalization asks:
+
+> Can the parsed source values be losslessly stored under the M6 structural contract?
+
+Taxonomy asks:
+
+> What does this selected interpretation version know about these raw codes?
+
+Quality asks:
+
+> Is this normalized snapshot safe to admit as accepted canonical map state?
+
+A representation may therefore be:
+
+- successfully parsed;
+- successfully normalized;
+- partly unknown to taxonomy;
+- quarantined by quality;
+
+without losing source evidence.
+
+### Composite restart anomaly
+
+A robust mass-NONE rule uses multiple signals.
+
+Candidate features:
+
+- NONE share;
+- owned-team share delta;
+- total item-count ratio versus accepted baseline;
+- icon/family composition collapse;
+- source version regression/reset;
+- source lastUpdated behavior;
+- coverage/context status.
+
+Exact thresholds are M6-F work and must be calibrated against golden fixtures and measured evidence.
+
+### Do not repair source data
+
+M6 must not:
+
+- clamp invalid coordinates into range;
+- replace unknown team with NONE;
+- remap unknown icon types to a nearby known type;
+- delete duplicate occurrences;
+- rewrite a conflicting regionId;
+- synthesize missing items from an older snapshot.
+
+Quality can suspect/quarantine a candidate while preserving it intact.
+
+## Golden-fixture inventory required before M6-F completion
+
+At minimum:
+
+1. healthy dynamic baseline before the historical restart anomaly;
+2. warapi#92 malformed/restart representation;
+3. healthy recovery representation;
+4. iconType 97 + viewDirection example from #137;
+5. duplicate Rocket Target regression inspired by #115;
+6. static representation change regression inspired by #77;
+7. unknown flag bits;
+8. unknown team value;
+9. coordinate boundary and out-of-range fixtures;
+10. regionId conflict fixture;
+11. no-baseline/war-start neutral fixture;
+12. HomeRegion capability-asymmetry fixture.
+
+If an upstream issue contains only partial JSON or screenshots, a FoxData fixture must be marked synthetic/minimized rather than being presented as an original complete upstream payload.
+
+## Evidence quality and limitations
+
+Authority/evidence hierarchy:
+
+1. Official War API README for documented source semantics;
+2. preserved FoxData source evidence and M4 measurements;
+3. upstream issue reports as operational regression evidence;
+4. no semantic inference from screenshots or naming conventions alone.
+
+GitHub issues may be:
+
+- historical;
+- fixed;
+- incomplete;
+- environment-specific;
+- observational rather than contractual.
+
+Therefore M6 defaults to:
+
+- preserve raw evidence;
+- keep unknown-but-representable values;
+- version semantic interpretation;
+- calibrate quality from evidence;
+- fail closed only where automatic acceptance would fabricate trustworthy canonical state.
