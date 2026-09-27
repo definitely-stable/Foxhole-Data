@@ -697,6 +697,33 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
                 TestContext.Current.CancellationToken);
         }
 
+        public async Task MarkParseAttemptOutcomeAsync(
+            SourceParseRunId sourceParseRunId,
+            string outcomeCode)
+        {
+            await using var command = dataSource.CreateCommand(
+                """
+                UPDATE ingest.attempts AS attempt
+                SET outcome_code = @outcome_code
+                FROM evidence.fetches AS source_fetch
+                INNER JOIN evidence.source_parse_runs AS parse_run
+                    ON parse_run.representation_fetch_id = source_fetch.id
+                WHERE parse_run.id = @source_parse_run_id
+                  AND attempt.id = source_fetch.attempt_id;
+                """);
+            command.Parameters.AddWithValue(
+                "outcome_code",
+                outcomeCode);
+            command.Parameters.AddWithValue(
+                "source_parse_run_id",
+                sourceParseRunId.Value);
+
+            Assert.Equal(
+                1,
+                await command.ExecuteNonQueryAsync(
+                    TestContext.Current.CancellationToken));
+        }
+
         public async Task<WarRegionDescriptor> ReadWarRegionAsync(
             string sourceMapName)
         {
