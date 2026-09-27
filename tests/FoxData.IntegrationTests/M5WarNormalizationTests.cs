@@ -69,6 +69,28 @@ public sealed class M5WarNormalizationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task ParseCapabilityMismatchFailsClosedWithoutCanonicalRows()
+    {
+        await using var fixture = await CreateFixtureAsync();
+
+        var parseRun = await fixture.CreateParsedWarAsync(
+            "live-1",
+            "capability-mismatch",
+            """{"warId":"mismatch-war","warNumber":129,"winner":"NONE"}""",
+            DateTimeOffset.UtcNow,
+            parseCapabilityKey: WarApiCapabilities.ActiveMapList.Key);
+
+        await Assert.ThrowsAsync<CanonicalStateIntegrityException>(
+            () => fixture.Coordinator.NormalizeAsync(
+                parseRun.Id,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(0L, await fixture.CountAsync("evidence.normalization_runs"));
+        Assert.Equal(0L, await fixture.CountAsync("runtime.wars"));
+        Assert.Equal(0L, await fixture.CountAsync("runtime.war_observations"));
+    }
+
+    [Fact]
     public async Task InvalidWarIdentityIsRejectedWithoutCanonicalRows()
     {
         await using var fixture = await CreateFixtureAsync();
@@ -272,7 +294,8 @@ public sealed class M5WarNormalizationTests(PostgresFixture postgres)
             string shardKey,
             string idempotencyKey,
             string json,
-            DateTimeOffset retrievedAt)
+            DateTimeOffset retrievedAt,
+            string? parseCapabilityKey = null)
         {
             var shard = await registry.RegisterShardAsync(
                 sourceId,
@@ -361,7 +384,7 @@ public sealed class M5WarNormalizationTests(PostgresFixture postgres)
             return await parseRuns.RecordAsync(
                 new SourceParseRunWrite(
                     capture.Fetch!.Id,
-                    WarApiCapabilities.RuntimeWarState.Key,
+                    parseCapabilityKey ?? WarApiCapabilities.RuntimeWarState.Key,
                     WarApiVersions.Adapter,
                     WarApiVersions.Parser,
                     JsonStructuralFingerprinter.Algorithm,
