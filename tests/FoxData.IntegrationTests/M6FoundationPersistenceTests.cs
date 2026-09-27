@@ -569,6 +569,12 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
             ExchangeAuthorizationStatus.AuthorizedNow,
             authorized.Status);
 
+        ReadOnlyMemory<byte>? capturedBody = null;
+        if (body is not null)
+        {
+            capturedBody = new ReadOnlyMemory<byte>(body);
+        }
+
         var capture = await evidence.CaptureSourceResponseAsync(
             attemptId,
             endpointId,
@@ -587,9 +593,7 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
                 "max-age=60",
                 retrievedAt.AddMinutes(1),
                 2),
-            body is null
-                ? null
-                : new ReadOnlyMemory<byte>(body),
+            capturedBody,
             priorFetchId,
             TestContext.Current.CancellationToken);
 
