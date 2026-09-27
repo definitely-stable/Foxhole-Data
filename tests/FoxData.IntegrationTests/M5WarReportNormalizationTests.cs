@@ -718,6 +718,12 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
         Assert.Equal(
             0L,
             await fixture.CountM5ProvenanceViolationsAsync());
+        Assert.Equal(
+            0L,
+            await fixture.CountM5OutstandingWorkAsync());
+        Assert.Equal(
+            0L,
+            await fixture.CountM5ProjectionViolationsAsync());
 
         var first = await fixture.ReadM5SemanticSnapshotAsync();
 
@@ -763,10 +769,41 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
         Assert.Equal(
             0L,
             await fixture.CountM5ProvenanceViolationsAsync());
+        Assert.Equal(
+            0L,
+            await fixture.CountM5OutstandingWorkAsync());
+        Assert.Equal(
+            0L,
+            await fixture.CountM5ProjectionViolationsAsync());
 
         var rebuilt = await fixture.ReadM5SemanticSnapshotAsync();
 
         Assert.Equal(first, rebuilt);
+    }
+
+    [Fact]
+    public async Task M5CompletionGateDoesNotTreatDeferredCanonicalWorkAsQuiescent()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var observedAt = new DateTimeOffset(
+            2026, 9, 28, 5, 0, 0, TimeSpan.Zero);
+
+        _ = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.Maps(),
+            "completion-deferred-maps",
+            """["DeadLandsHex"]""",
+            observedAt);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.RunRecoveryUntilQuiescentAsync());
+
+        Assert.Contains(
+            "deferred",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(
+            await fixture.CountM5OutstandingWorkAsync() > 0);
     }
 
     private async Task<Fixture> CreateFixtureAsync()
@@ -1330,6 +1367,12 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
 
                 if (result.ProgressCount == 0)
                 {
+                    if (result.CanonicalDeferred > 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"M5 recovery made no progress with {result.CanonicalDeferred} deferred canonical item(s) still unresolved.");
+                    }
+
                     return;
                 }
             }
@@ -1553,17 +1596,26 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                                 ON representation_fetch.id = parse_run.representation_fetch_id
                             LEFT JOIN evidence.payloads AS payload
                                 ON payload.id = representation_fetch.payload_id
+                            LEFT JOIN sources.endpoints AS endpoint
+                                ON endpoint.id = representation_fetch.endpoint_id
                             WHERE normalization.id IS NULL
                                OR normalization.outcome <> 'normalized'
+                               OR normalization.normalizer_version <> 'warapi-war-normalizer@1'
                                OR parse_run.id IS NULL
+                               OR parse_run.capability_key <> 'runtime-war-state'
                                OR representation_fetch.id IS NULL
                                OR payload.id IS NULL
+                               OR endpoint.id IS NULL
+                               OR endpoint.capability_key <> 'runtime-war-state'
+                               OR endpoint.semantic_key <> 'war'
                                OR observation.representation_fetch_id <> parse_run.representation_fetch_id
                         )
                         +
                         (
                             SELECT COUNT(*)
                             FROM runtime.war_report_observations AS observation
+                            INNER JOIN runtime.war_regions AS membership
+                                ON membership.id = observation.war_region_id
                             LEFT JOIN evidence.normalization_runs AS normalization
                                 ON normalization.id = observation.normalization_run_id
                             LEFT JOIN evidence.source_parse_runs AS parse_run
@@ -1572,17 +1624,48 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                                 ON representation_fetch.id = parse_run.representation_fetch_id
                             LEFT JOIN evidence.payloads AS payload
                                 ON payload.id = representation_fetch.payload_id
+                            LEFT JOIN sources.endpoints AS endpoint
+                                ON endpoint.id = representation_fetch.endpoint_id
                             WHERE normalization.id IS NULL
                                OR normalization.outcome <> 'normalized'
+                               OR normalization.normalizer_version <> 'warapi-war-report-normalizer@1'
                                OR parse_run.id IS NULL
+                               OR parse_run.capability_key <> 'region-war-report'
                                OR representation_fetch.id IS NULL
                                OR payload.id IS NULL
+                               OR endpoint.id IS NULL
+                               OR endpoint.capability_key <> 'region-war-report'
+                               OR endpoint.semantic_key <> 'war-report/' || membership.source_map_name
                                OR observation.representation_fetch_id <> parse_run.representation_fetch_id
                         )
                         +
                         (
                             SELECT COUNT(*)
+                            FROM evidence.normalization_runs AS normalization
+                            WHERE normalization.outcome = 'normalized'
+                              AND normalization.normalizer_version = 'warapi-war-normalizer@1'
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM runtime.war_observations AS observation
+                                  WHERE observation.normalization_run_id = normalization.id)
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM evidence.normalization_runs AS normalization
+                            WHERE normalization.outcome = 'normalized'
+                              AND normalization.normalizer_version = 'warapi-war-report-normalizer@1'
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM runtime.war_report_observations AS observation
+                                  WHERE observation.normalization_run_id = normalization.id)
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
                             FROM evidence.coverage_observations AS coverage
+                            LEFT JOIN sources.endpoints AS endpoint
+                                ON endpoint.id = coverage.endpoint_id
                             LEFT JOIN evidence.fetches AS validation_fetch
                                 ON validation_fetch.id = coverage.validation_fetch_id
                             LEFT JOIN evidence.fetches AS representation_fetch
@@ -1597,9 +1680,12 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                                     AND (
                                         validation_fetch.id IS NULL
                                         OR validation_fetch.id <> representation_fetch.id
+                                        OR validation_fetch.endpoint_id <> coverage.endpoint_id
+                                        OR representation_fetch.endpoint_id <> coverage.endpoint_id
                                         OR payload.id IS NULL
                                         OR parse_run.id IS NULL
-                                        OR parse_run.representation_fetch_id <> representation_fetch.id)
+                                        OR parse_run.representation_fetch_id <> representation_fetch.id
+                                        OR parse_run.capability_key <> endpoint.capability_key)
                                 )
                                 OR
                                 (
@@ -1607,7 +1693,19 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                                     AND (
                                         validation_fetch.id IS NULL
                                         OR validation_fetch.status_code <> 304
+                                        OR validation_fetch.endpoint_id <> coverage.endpoint_id
                                         OR validation_fetch.prior_fetch_id <> representation_fetch.id
+                                        OR representation_fetch.endpoint_id <> coverage.endpoint_id
+                                        OR payload.id IS NULL
+                                        OR parse_run.id IS NULL
+                                        OR parse_run.representation_fetch_id <> representation_fetch.id
+                                        OR parse_run.capability_key <> endpoint.capability_key)
+                                )
+                                OR
+                                (
+                                    coverage.state = 'rejected'
+                                    AND (
+                                        representation_fetch.id IS NULL
                                         OR payload.id IS NULL
                                         OR parse_run.id IS NULL
                                         OR parse_run.representation_fetch_id <> representation_fetch.id)
@@ -1619,8 +1717,145 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                             FROM evidence.coverage_reprocessing_runs AS run
                             LEFT JOIN evidence.coverage_observations AS coverage
                                 ON coverage.id = run.coverage_observation_id
+                            LEFT JOIN evidence.fetches AS validation_fetch
+                                ON validation_fetch.id = coverage.validation_fetch_id
+                            LEFT JOIN evidence.fetches AS representation_fetch
+                                ON representation_fetch.id = coverage.representation_fetch_id
                             WHERE coverage.id IS NULL
                                OR coverage.state <> 'source_not_modified'
+                               OR validation_fetch.status_code <> 304
+                               OR validation_fetch.prior_fetch_id <> representation_fetch.id
+                        );
+                    """);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
+        public async Task<long> CountM5OutstandingWorkAsync()
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    SELECT
+                        (
+                            SELECT COUNT(*)
+                            FROM ingest.attempts AS attempt
+                            INNER JOIN ingest.collection_jobs AS job
+                                ON job.id = attempt.job_id
+                            INNER JOIN sources.endpoints AS endpoint
+                                ON endpoint.id = job.endpoint_id
+                            INNER JOIN sources.shards AS shard
+                                ON shard.id = endpoint.shard_id
+                            INNER JOIN sources.sources AS source
+                                ON source.id = shard.source_id
+                            LEFT JOIN evidence.coverage_observations AS coverage
+                                ON coverage.attempt_id = attempt.id
+                            WHERE source.key = 'official-war-api'
+                              AND endpoint.capability_key IN
+                                  ('runtime-war-state', 'active-map-list', 'region-war-report')
+                              AND attempt.state IN
+                                  ('completed', 'failed', 'uncertain', 'superseded', 'captured_late')
+                              AND coverage.id IS NULL
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM evidence.source_parse_runs AS parse_run
+                            INNER JOIN evidence.fetches AS representation_fetch
+                                ON representation_fetch.id = parse_run.representation_fetch_id
+                            INNER JOIN ingest.attempts AS attempt
+                                ON attempt.id = representation_fetch.attempt_id
+                            INNER JOIN sources.endpoints AS endpoint
+                                ON endpoint.id = representation_fetch.endpoint_id
+                            INNER JOIN sources.shards AS shard
+                                ON shard.id = endpoint.shard_id
+                            INNER JOIN sources.sources AS source
+                                ON source.id = shard.source_id
+                            LEFT JOIN evidence.normalization_runs AS normalization
+                                ON normalization.source_parse_run_id = parse_run.id
+                               AND normalization.normalizer_version =
+                                   CASE endpoint.capability_key
+                                       WHEN 'runtime-war-state' THEN 'warapi-war-normalizer@1'
+                                       WHEN 'active-map-list' THEN 'warapi-region-normalizer@1'
+                                       WHEN 'region-war-report' THEN 'warapi-war-report-normalizer@1'
+                                       ELSE ''
+                                   END
+                            WHERE source.key = 'official-war-api'
+                              AND parse_run.parser_version = 'warapi-parser@1'
+                              AND endpoint.capability_key IN
+                                  ('runtime-war-state', 'active-map-list', 'region-war-report')
+                              AND attempt.outcome_code = 'captured_current'
+                              AND normalization.id IS NULL
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM evidence.coverage_observations AS coverage
+                            INNER JOIN sources.endpoints AS endpoint
+                                ON endpoint.id = coverage.endpoint_id
+                            LEFT JOIN evidence.coverage_reprocessing_runs AS processed
+                                ON processed.coverage_observation_id = coverage.id
+                               AND processed.processor_version = 'warapi-coverage-reprocessor@1'
+                            WHERE coverage.state = 'source_not_modified'
+                              AND endpoint.capability_key = 'active-map-list'
+                              AND endpoint.semantic_key = 'maps'
+                              AND processed.id IS NULL
+                        );
+                    """);
+
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
+        }
+
+        public async Task<long> CountM5ProjectionViolationsAsync()
+        {
+            await using var command =
+                dataSource.CreateCommand(
+                    """
+                    SELECT
+                        (
+                            SELECT COUNT(*)
+                            FROM runtime.wars AS war
+                            LEFT JOIN LATERAL (
+                                SELECT
+                                    MIN(observation.observed_at) AS first_observed_at,
+                                    MAX(observation.observed_at) AS last_observed_at
+                                FROM runtime.war_observations AS observation
+                                WHERE observation.war_id = war.id
+                            ) AS bounds ON TRUE
+                            LEFT JOIN LATERAL (
+                                SELECT observation.war_number
+                                FROM runtime.war_observations AS observation
+                                WHERE observation.war_id = war.id
+                                ORDER BY
+                                    observation.observed_at DESC,
+                                    observation.representation_fetch_id DESC
+                                LIMIT 1
+                            ) AS latest ON TRUE
+                            WHERE bounds.first_observed_at IS NULL
+                               OR war.first_observed_at <> bounds.first_observed_at
+                               OR war.last_observed_at <> bounds.last_observed_at
+                               OR war.war_number IS DISTINCT FROM latest.war_number
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM runtime.war_regions AS membership
+                            INNER JOIN runtime.regions AS region
+                                ON region.id = membership.region_id
+                            WHERE membership.first_seen_at > membership.last_seen_at
+                               OR region.canonical_key <>
+                                  'official-war-api/map/' || membership.source_map_name
+                               OR region.display_name <> membership.source_map_name
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM runtime.war_report_observations AS report
+                            INNER JOIN runtime.war_regions AS membership
+                                ON membership.id = report.war_region_id
+                            WHERE report.observed_at < membership.first_seen_at
                         );
                     """);
 
