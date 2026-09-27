@@ -622,8 +622,8 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
         WarApiWarReportNormalizationCoordinator reportNormalization)
         : IAsyncDisposable
     {
-        public WarApiWarReportNormalizationCoordinator ReportNormalization
-            { get; } = reportNormalization;
+        public WarApiWarReportNormalizationCoordinator ReportNormalization { get; } =
+            reportNormalization;
 
         public async Task CreateBaseContextAsync(
             DateTimeOffset start,
@@ -814,7 +814,7 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                         "application/json",
                         null,
                         body?.LongLength,
-                        ""m5-f"",
+                        "\"m5-f\"",
                         "max-age=60",
                         retrievedAt.AddMinutes(1),
                         2),
