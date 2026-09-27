@@ -906,6 +906,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var regionNormalization = new WarApiRegionNormalizationCoordinator(
             canonicalEvidence,
             new PostgresWarContextReader(dataSource),
+            warNormalization,
             new RegionCanonicalKernel(
                 new PostgresRegionCanonicalStore(dataSource)),
             normalization,
