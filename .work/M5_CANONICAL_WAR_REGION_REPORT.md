@@ -392,10 +392,11 @@ Required behavior:
 - derive exact case-sensitive map identity from `war-report/<mapName>` provenance;
 - resolve report war context from authoritative source chronology and invoke M5-D on the exact selected war parse;
 - resolve the latest authoritative active-map-list context at the report boundary, replay it, and require exact map membership;
-- require the map-list representation's war context to equal the report war context rather than interpolating across a war boundary;
-- invoke M5-E for the exact map-list parse and bind to the exact `(WarId, sourceMapName)` WarRegion;
+- for a body-bearing map-list validation, require the representation's war context to equal the report war context rather than interpolating across a war boundary;
+- invoke M5-E for a body-bearing map-list validation and bind to the exact `(WarId, sourceMapName)` WarRegion;
+- for a 304 map-list validation, require an applied M5-G continuity proof for that exact validation Fetch before binding the report to the WarRegion valid at the report war;
 - defer incomplete/unconfirmed temporal context without burning the report normalizer identity;
-- defer cross-war 304 map continuity to M5-G rather than fabricating membership;
+- defer unprocessed cross-war 304 map continuity to M5-G rather than fabricating membership;
 - preserve nullable report fields and reject only structurally invalid negative numeric values;
 - preserve source corrections/regressions as immutable observations without monotonicity assumptions;
 - keep `dayOfWar` as source data, never as a fabricated canonical clock;
