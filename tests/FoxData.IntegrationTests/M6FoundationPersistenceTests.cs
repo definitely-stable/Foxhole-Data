@@ -341,9 +341,9 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
                 null,
                 parseStartedAt,
                 parseStartedAt.AddMilliseconds(1),
-                sourceVersion: 1,
-                sourceLastUpdated: null,
-                decodedByteLength: 2),
+                SourceVersion: 1,
+                SourceLastUpdated: null,
+                DecodedByteLength: 2),
             TestContext.Current.CancellationToken);
 
         var normalization = new NormalizationKernel(
@@ -427,7 +427,7 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
             endpoint.Resource.Id,
             parse.Id.Value,
             normalizationRun.Id.Value,
-            representation.Fetch.Id.Value,
+            representation.Fetch!.Id.Value,
             representationRetrievedAt,
             firstWarRegionId,
             secondWarRegionId);
@@ -493,7 +493,7 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
             attemptId,
             endpointId,
             claim.Job.LeaseGeneration,
-            fenced.Attempt.FenceToken!.Value,
+            fenced.Attempt!.FenceToken!.Value,
             new SourceResponseObservation(
                 retrievedAt.AddMilliseconds(-2),
                 retrievedAt.AddMilliseconds(-1),
@@ -705,7 +705,7 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
                 retrievedAt,
                 304,
                 body: null,
-                new FetchId(priorFetchId));
+                priorFetchId: new FetchId(priorFetchId));
 
             Assert.Null(capture.Fetch!.PayloadId);
             Assert.Equal(
