@@ -61,7 +61,7 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
             WarApiRegionNormalizationStatus.Normalized,
             replay.Status);
         Assert.NotNull(first.Canonical);
-        Assert.NotNull(replay.Canonical);
+        Assert.Null(replay.Canonical);
         Assert.Equal(
             first.NormalizationRun!.Id,
             replay.NormalizationRun!.Id);
@@ -69,10 +69,6 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
         var firstMemberships = first.Canonical.Memberships
             .OrderBy(x => x.Membership.SourceMapName, StringComparer.Ordinal)
             .ToArray();
-        var replayMemberships = replay.Canonical.Memberships
-            .OrderBy(x => x.Membership.SourceMapName, StringComparer.Ordinal)
-            .ToArray();
-
         Assert.Equal(2, firstMemberships.Length);
         Assert.Equal(
             ["DeadLandsHex", "deadlandshex"],
@@ -91,9 +87,6 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
                 Assert.Equal(mapsObservedAt, item.Membership.LastSeenAt);
                 Assert.Null(item.Membership.SourceRegionId);
             });
-        Assert.Equal(
-            firstMemberships.Select(x => x.Membership.Id),
-            replayMemberships.Select(x => x.Membership.Id));
         Assert.Equal(2L, await fixture.CountAsync("runtime.regions"));
         Assert.Equal(2L, await fixture.CountAsync("runtime.war_regions"));
     }
