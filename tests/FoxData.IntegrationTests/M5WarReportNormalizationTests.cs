@@ -529,6 +529,7 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 canonicalEvidence,
                 sourceContextReader,
                 new PostgresWarRegionReader(dataSource),
+                new PostgresCoverageStore(dataSource),
                 warNormalization,
                 regionNormalization,
                 new WarReportCanonicalKernel(
