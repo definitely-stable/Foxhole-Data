@@ -503,7 +503,7 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
                 "application/json",
                 null,
                 body?.LongLength,
-                ""m6-foundation"",
+                null,
                 "max-age=60",
                 retrievedAt.AddMinutes(1),
                 2),
