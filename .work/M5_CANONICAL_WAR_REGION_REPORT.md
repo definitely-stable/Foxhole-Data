@@ -1,6 +1,6 @@
 # M5 — Canonical War / Region / Report Model
 
-Status: in progress. M5-A through M5-G implemented; next slice M5-H.
+Status: complete. M5-A through M5-H implemented; successor M6.
 Prerequisite: M4 Source Measurement completed.
 Successor: M6 maps, taxonomy and quality.
 
@@ -501,3 +501,18 @@ M5-G integration/recovery tests MUST prove at least:
 ### M5-H — completion gate
 
 M5 is complete only after canonical reconstruction from durable M2/M3 evidence is deterministic, provenance-complete, consumer-neutral and independently covered by integration/recovery tests.
+
+The executable completion gate MUST prove all of the following:
+
+1. A representative M5 evidence graph containing war, active-map membership, war report and cross-war 304 continuity can be fully materialized through M5-G.
+2. Deleting only M5-derived rows — normalization runs, coverage rows/reprocessing rows and runtime war/region/report state — while preserving M2/M3 Fetch/Payload/Attempt/SourceParseRun evidence does not require another upstream exchange.
+3. Re-running local recovery over that preserved evidence reconstructs the same canonical semantics.
+4. Rebuild determinism is evaluated over source/natural identity, versioned outcomes, source values, observed boundaries and durable M2/M3 provenance identifiers. Local surrogate UUIDs and local audit timestamps such as `createdAt` / `recordedAt` are storage identities, not semantic equality requirements after deliberate physical deletion and rebuild.
+5. Every immutable war/report canonical observation retains an unbroken `NormalizationRun -> SourceParseRun -> representation Fetch -> Payload` chain.
+6. Every `observed` / `source_not_modified` coverage row retains the required exact Fetch/representation/parse lineage, and every coverage reprocessing run points to source-not-modified coverage.
+7. The M5 canonical Core/Application/Infrastructure boundary remains consumer-neutral: no API, Worker, WarApi source-adapter or Chronicle/UI dependency may enter canonical contracts or persistence.
+8. Recovery behavior is independently exercised from the RecoveryTests project, not only through normal integration orchestration.
+
+The completion rebuild compares semantic snapshots and intentionally excludes generated storage IDs and local recording timestamps. Public stability for a future externally exposed identifier is a separate contract and MUST be designed explicitly before M9 rather than inferred from M5 surrogate keys.
+
+Passing M5-H closes the canonical war/region/report milestone. M6 may consume these contracts but MUST NOT retroactively change M5 evidence, time or identity semantics without a new versioned contract/ADR.
