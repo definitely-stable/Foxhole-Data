@@ -370,6 +370,23 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
             new PostgresCanonicalEvidenceReader(dataSource);
         var options = CreateOptions();
 
+        var warNormalization = new WarApiWarNormalizationCoordinator(
+            canonicalEvidence,
+            new WarCanonicalKernel(
+                new PostgresWarCanonicalStore(dataSource)),
+            normalization,
+            options,
+            TimeProvider.System);
+        var regionNormalization = new WarApiRegionNormalizationCoordinator(
+            canonicalEvidence,
+            new PostgresWarContextReader(dataSource),
+            warNormalization,
+            new RegionCanonicalKernel(
+                new PostgresRegionCanonicalStore(dataSource)),
+            normalization,
+            options,
+            TimeProvider.System);
+
         return new Fixture(
             dataSource,
             registry,
@@ -379,21 +396,8 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
             new EvidenceKernel(
                 new PostgresEvidenceKernelStore(dataSource)),
             new PostgresSourceParseRunStore(dataSource),
-            new WarApiWarNormalizationCoordinator(
-                canonicalEvidence,
-                new WarCanonicalKernel(
-                    new PostgresWarCanonicalStore(dataSource)),
-                normalization,
-                options,
-                TimeProvider.System),
-            new WarApiRegionNormalizationCoordinator(
-                canonicalEvidence,
-                new PostgresWarContextReader(dataSource),
-                new RegionCanonicalKernel(
-                    new PostgresRegionCanonicalStore(dataSource)),
-                normalization,
-                options,
-                TimeProvider.System));
+            warNormalization,
+            regionNormalization);
     }
 
     private async Task MigrateAsync()
