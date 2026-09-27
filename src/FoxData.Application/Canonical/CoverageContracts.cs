@@ -74,6 +74,7 @@ public sealed record CoverageContinuityCandidate(
     string SemanticKey,
     byte[] RepresentationBody,
     string? ContentEncoding,
+    string AdapterVersion,
     string ParserVersion,
     string FingerprintAlgorithm,
     string? StructuralFingerprint,
