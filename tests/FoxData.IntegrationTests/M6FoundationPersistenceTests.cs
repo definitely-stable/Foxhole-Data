@@ -616,7 +616,9 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
         await using var command =
             dataSource.CreateCommand(
                 """
-                TRUNCATE TABLE sources.sources
+                TRUNCATE TABLE
+                    runtime.regions,
+                    sources.sources
                 RESTART IDENTITY CASCADE;
                 """);
 
