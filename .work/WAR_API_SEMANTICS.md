@@ -103,6 +103,8 @@ lastUpdated is map-level source metadata. It is not a per-objective event timest
 
 No stable map-item/objective identifier is documented. Array position is not identity.
 
+Upstream issue #115 remains open and documents duplicate Rocket Target entries at the same location. M6 MUST preserve source-array multiplicity and MUST NOT deduplicate map items by coordinate/icon/team/flag equality.
+
 Normalized coordinates use the documented constant world extents, but coordinate origin/orientation beyond the official documentation MUST NOT be strengthened into a source guarantee.
 
 ## Open values and undocumented additive fields
@@ -117,6 +119,7 @@ Therefore:
 
 - raw iconType integers are preserved;
 - raw teamId/winner strings are preserved;
+- raw viewDirection is preserved when present, but no undocumented gameplay meaning is assigned;
 - unknown JSON properties are tolerated and retained in parsed diagnostics where practical;
 - raw payload bytes remain the ultimate evidence;
 - structural fingerprint changes are signals, not automatic rejection.

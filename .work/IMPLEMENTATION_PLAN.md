@@ -141,12 +141,36 @@ Implementation slices:
 
 ## M6 — maps, taxonomy and quality
 
-Implement:
+Status: planned.
 
-- static/dynamic observations;
-- versioned icon/flag taxonomy;
-- anomaly rules;
-- issue-92 regression behavior.
+Detailed normative plan: [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
+Research evidence: [research/M6_MAP_QUALITY_2026-09.md](research/M6_MAP_QUALITY_2026-09.md).
+
+M6 converts durable static/dynamic War API representations into normalized source-occurrence snapshots, applies versioned taxonomy and quality policy, and materializes only quality-accepted war-scoped map observations.
+
+M6 deliberately stops before objective identity and state-change inference.
+
+Implementation slices:
+
+- M6-A contract, context and persistence foundation;
+- M6-B static map normalization;
+- M6-C dynamic map normalization;
+- M6-D versioned taxonomy;
+- M6-E quality kernel and accepted-observation transaction;
+- M6-F calibrated historical anomaly rules, including warapi#92/#120;
+- M6-G static/dynamic coverage, local recovery and versioned reprocessing;
+- M6-H deterministic completion gate and M6 completion record.
+
+Mandatory boundaries:
+
+- source array occurrence is not ObjectiveId;
+- duplicates are preserved;
+- static and dynamic remain independent snapshot streams;
+- unknown icon/team/flag values remain representable;
+- quality rejection/quarantine never destroys source evidence;
+- 304 validation does not duplicate normalized source snapshots;
+- M6 reuses M5 war/WarRegion provenance and cannot weaken M5-H;
+- M7 owns within-war objective matching.
 
 ## M7 — objective identity
 

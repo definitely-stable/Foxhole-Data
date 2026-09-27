@@ -11,6 +11,12 @@ The official source does not document a stable map-item/objective ID.
 
 Do not hash x, y and iconType and call it a permanent objective ID.
 
+M6 owns only layer 1. A source occurrence is scoped to one exact normalized map representation and retains a representation-local source ordinal for provenance. The ordinal is not stable across representations.
+
+M7 begins at layer 2 and consumes only M6 observations allowed by the selected quality policy. Suspect/quarantined M6 representations remain evidence but are not automatic identity inputs.
+
+Exact duplicate source occurrences are preserved. Upstream War API behavior has demonstrated duplicate map entries, so equality of coordinates/icon/team/flags is not proof that two occurrences are one objective.
+
 ## Matching evidence
 
 A matcher MAY use:

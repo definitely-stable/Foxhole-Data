@@ -4,6 +4,8 @@ Evidence chain:
 
 source -> endpoint -> fetch -> raw representation -> source parse run -> normalization run -> quality decision -> canonical observation -> observed change
 
+For M6 map data the normalization stage may materialize a representation-derived map snapshot and source occurrences before quality. Those rows are immutable derived evidence, not objective identity and not automatically accepted runtime state.
+
 ## Raw representation identity
 
 payloadHash = SHA-256(exact HTTP content bytes supplied to the Evidence Kernel)
@@ -43,7 +45,9 @@ Do not store a duplicate body.
 
 Do not point a new 304 at a previous no-body 304 when the evidence constraint requires a payload-bearing prior Fetch.
 
-Do not create a duplicate semantic observation solely because a validation request occurred.
+Do not create a duplicate representation-derived semantic snapshot solely because a validation request occurred.
+
+A later milestone may create a new war-scoped continuity binding from an unchanged representation when the 304 itself proves that the same bytes remained current at a new context boundary. Such a binding must reference the original representation and must not duplicate its Payload, SourceParseRun or source-occurrence rows.
 
 An orphan 304 with no known body-bearing representation is retained as source evidence but cannot fabricate representation bytes; M3 schedules an unconditional new Attempt.
 
