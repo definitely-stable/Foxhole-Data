@@ -14,6 +14,8 @@ public sealed class M6MapQualityFoundation : Migration
     {
         migrationBuilder.Sql(
             """
+            CREATE SCHEMA IF NOT EXISTS quality;
+
             CREATE TABLE evidence.map_snapshots (
                 id uuid NOT NULL,
                 normalization_run_id uuid NOT NULL,
@@ -64,6 +66,9 @@ public sealed class M6MapQualityFoundation : Migration
             CREATE INDEX ix_map_snapshots_source_map_kind
                 ON evidence.map_snapshots
                     (source_map_name, capability_kind, recorded_at);
+
+            CREATE UNIQUE INDEX ux_map_snapshots_id_kind
+                ON evidence.map_snapshots (id, capability_kind);
 
             CREATE TABLE evidence.map_item_occurrences (
                 id uuid NOT NULL,
@@ -149,6 +154,10 @@ public sealed class M6MapQualityFoundation : Migration
                     (map_snapshot_id, war_region_id, validation_fetch_id,
                      taxonomy_version, quality_policy_version);
 
+            CREATE UNIQUE INDEX ux_map_quality_runs_binding
+                ON quality.map_quality_runs
+                    (id, map_snapshot_id, war_region_id, validation_fetch_id);
+
             CREATE INDEX ix_map_quality_runs_region_decision
                 ON quality.map_quality_runs
                     (war_region_id, decision, created_at);
@@ -160,7 +169,8 @@ public sealed class M6MapQualityFoundation : Migration
                 rule_version character varying(128) NOT NULL,
                 configuration_version character varying(128) NOT NULL,
                 effect character varying(32) NOT NULL,
-                source_occurrence_ordinal integer NULL,
+                map_item_occurrence_id uuid NULL,
+                map_text_occurrence_id uuid NULL,
                 detail_code character varying(128) NULL,
                 input_metrics jsonb NOT NULL,
                 created_at timestamp with time zone NOT NULL
@@ -171,10 +181,18 @@ public sealed class M6MapQualityFoundation : Migration
                     FOREIGN KEY (quality_run_id)
                     REFERENCES quality.map_quality_runs (id)
                     ON DELETE RESTRICT,
-                CONSTRAINT ck_map_quality_findings_occurrence_ordinal
+                CONSTRAINT "FK_map_quality_findings_map_item_occurrences_map_item_occurrence_id"
+                    FOREIGN KEY (map_item_occurrence_id)
+                    REFERENCES evidence.map_item_occurrences (id)
+                    ON DELETE RESTRICT,
+                CONSTRAINT "FK_map_quality_findings_map_text_occurrences_map_text_occurrence_id"
+                    FOREIGN KEY (map_text_occurrence_id)
+                    REFERENCES evidence.map_text_occurrences (id)
+                    ON DELETE RESTRICT,
+                CONSTRAINT ck_map_quality_findings_occurrence_reference
                     CHECK (
-                        source_occurrence_ordinal IS NULL
-                        OR source_occurrence_ordinal >= 0),
+                        map_item_occurrence_id IS NULL
+                        OR map_text_occurrence_id IS NULL),
                 CONSTRAINT ck_map_quality_findings_input_metrics
                     CHECK (jsonb_typeof(input_metrics) = 'object')
             );
@@ -200,13 +218,21 @@ public sealed class M6MapQualityFoundation : Migration
                     FOREIGN KEY (war_region_id)
                     REFERENCES runtime.war_regions (id)
                     ON DELETE RESTRICT,
-                CONSTRAINT "FK_map_observations_map_snapshots_map_snapshot_id"
-                    FOREIGN KEY (map_snapshot_id)
-                    REFERENCES evidence.map_snapshots (id)
+                CONSTRAINT "FK_map_observations_map_snapshots_map_snapshot_id_capability_kind"
+                    FOREIGN KEY (map_snapshot_id, capability_kind)
+                    REFERENCES evidence.map_snapshots (id, capability_kind)
                     ON DELETE RESTRICT,
-                CONSTRAINT "FK_map_observations_map_quality_runs_quality_run_id"
-                    FOREIGN KEY (quality_run_id)
-                    REFERENCES quality.map_quality_runs (id)
+                CONSTRAINT "FK_map_observations_map_quality_runs_binding"
+                    FOREIGN KEY (
+                        quality_run_id,
+                        map_snapshot_id,
+                        war_region_id,
+                        validation_fetch_id)
+                    REFERENCES quality.map_quality_runs (
+                        id,
+                        map_snapshot_id,
+                        war_region_id,
+                        validation_fetch_id)
                     ON DELETE RESTRICT,
                 CONSTRAINT "FK_map_observations_fetches_validation_fetch_id"
                     FOREIGN KEY (validation_fetch_id)
