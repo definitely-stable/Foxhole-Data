@@ -17,7 +17,8 @@ public sealed record MapQualityFindingCandidate(
     string RuleVersion,
     string ConfigurationVersion,
     string Effect,
-    int? SourceOccurrenceOrdinal,
+    MapItemOccurrenceId? MapItemOccurrenceId,
+    MapTextOccurrenceId? MapTextOccurrenceId,
     string? DetailCode,
     string InputMetricsJson);
 
@@ -41,7 +42,8 @@ public sealed record MapQualityFindingDescriptor(
     string RuleVersion,
     string ConfigurationVersion,
     string Effect,
-    int? SourceOccurrenceOrdinal,
+    MapItemOccurrenceId? MapItemOccurrenceId,
+    MapTextOccurrenceId? MapTextOccurrenceId,
     string? DetailCode,
     string InputMetricsJson,
     DateTimeOffset CreatedAt);
