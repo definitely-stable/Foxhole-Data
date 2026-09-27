@@ -87,6 +87,49 @@ public sealed class RepositoryArchitectureTests
     }
 
     [Fact]
+    public void M5CanonicalCodeRemainsConsumerNeutral()
+    {
+        var root = FindRepositoryRoot();
+        var canonicalRoots = new[]
+        {
+            Path.Combine(root, "src", "FoxData.Core", "Runtime"),
+            Path.Combine(root, "src", "FoxData.Application", "Canonical"),
+            Path.Combine(root, "src", "FoxData.Infrastructure", "Canonical"),
+        };
+
+        var forbiddenTerms = new[]
+        {
+            "FoxData.Api",
+            "FoxData.Worker",
+            "FoxData.Sources.WarApi",
+            "Foxhole Chronicle",
+            "FoxholeChronicle",
+            "Chronicle",
+            "HttpContext",
+            "IResult",
+        };
+
+        foreach (var canonicalRoot in canonicalRoots)
+        {
+            foreach (var file in Directory.EnumerateFiles(
+                         canonicalRoot,
+                         "*.cs",
+                         SearchOption.AllDirectories))
+            {
+                var content = File.ReadAllText(file);
+
+                foreach (var forbidden in forbiddenTerms)
+                {
+                    Assert.DoesNotContain(
+                        forbidden,
+                        content,
+                        StringComparison.Ordinal);
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void MeasuredCollectionProfileContractRequiresProvenance()
     {
         var root = FindRepositoryRoot();
