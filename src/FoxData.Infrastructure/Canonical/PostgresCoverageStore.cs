@@ -400,7 +400,12 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
         var run = await RecordCoverageRunAsync(
             connection,
             transaction,
-            write,
+            write.CoverageObservationId,
+            write.ProcessorVersion,
+            "applied",
+            errorCode: null,
+            write.StartedAt,
+            write.CompletedAt,
             cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -409,6 +414,67 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             run,
             warContext,
             memberships);
+    }
+
+    public async Task<CoverageReprocessingRunDescriptor>
+        RecordMapContinuityRejectedAsync(
+            CoverageObservationId coverageObservationId,
+            string processorVersion,
+            DateTimeOffset startedAt,
+            DateTimeOffset completedAt,
+            string errorCode,
+            CancellationToken cancellationToken)
+    {
+        ValidateId(
+            coverageObservationId.Value,
+            nameof(coverageObservationId));
+        ValidateRequiredText(
+            processorVersion,
+            128,
+            nameof(processorVersion));
+        ValidateRequiredText(errorCode, 128, nameof(errorCode));
+
+        if (completedAt < startedAt)
+        {
+            throw new ArgumentException(
+                "Coverage processing completion must not precede start.",
+                nameof(completedAt));
+        }
+
+        await using var connection =
+            await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted,
+                cancellationToken);
+
+        var coverage = await GetCoverageForUpdateAsync(
+            connection,
+            transaction,
+            coverageObservationId,
+            cancellationToken)
+            ?? throw new CanonicalStateIntegrityException(
+                $"Coverage observation {coverageObservationId} does not exist.");
+
+        if (coverage.State != CoverageState.SourceNotModified)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Only source_not_modified coverage can terminate map continuity processing.");
+        }
+
+        var run = await RecordCoverageRunAsync(
+            connection,
+            transaction,
+            coverageObservationId,
+            processorVersion,
+            "rejected",
+            errorCode,
+            startedAt,
+            completedAt,
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return run;
     }
 
     public async Task<bool> IsMapContinuityAppliedAsync(
@@ -1078,7 +1144,12 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
         RecordCoverageRunAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
-            CoverageContinuityWrite write,
+            CoverageObservationId coverageObservationId,
+            string processorVersion,
+            string outcome,
+            string? errorCode,
+            DateTimeOffset startedAt,
+            DateTimeOffset completedAt,
             CancellationToken cancellationToken)
     {
         await using var insert = connection.CreateCommand();
@@ -1087,15 +1158,15 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             """
             INSERT INTO evidence.coverage_reprocessing_runs
                 (id, coverage_observation_id, processor_version,
-                 outcome, started_at, completed_at)
+                 outcome, error_code, started_at, completed_at)
             VALUES
                 (@id, @coverage_observation_id, @processor_version,
-                 'applied', @started_at, @completed_at)
+                 @outcome, @error_code, @started_at, @completed_at)
             ON CONFLICT (coverage_observation_id, processor_version)
             DO NOTHING
             RETURNING
                 id, coverage_observation_id, processor_version,
-                started_at, completed_at, created_at;
+                outcome, error_code, started_at, completed_at, created_at;
             """;
 
         AddUuid(
@@ -1105,13 +1176,12 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
         AddUuid(
             insert,
             "coverage_observation_id",
-            write.CoverageObservationId.Value);
-        AddText(
-            insert,
-            "processor_version",
-            write.ProcessorVersion);
-        AddTimestamp(insert, "started_at", write.StartedAt);
-        AddTimestamp(insert, "completed_at", write.CompletedAt);
+            coverageObservationId.Value);
+        AddText(insert, "processor_version", processorVersion);
+        AddText(insert, "outcome", outcome);
+        AddNullableText(insert, "error_code", errorCode);
+        AddTimestamp(insert, "started_at", startedAt);
+        AddTimestamp(insert, "completed_at", completedAt);
 
         var created = await ReadCoverageRunAsync(
             insert,
@@ -1127,7 +1197,7 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             """
             SELECT
                 id, coverage_observation_id, processor_version,
-                started_at, completed_at, created_at
+                outcome, error_code, started_at, completed_at, created_at
             FROM evidence.coverage_reprocessing_runs
             WHERE coverage_observation_id = @coverage_observation_id
               AND processor_version = @processor_version;
@@ -1136,17 +1206,23 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
         AddUuid(
             select,
             "coverage_observation_id",
-            write.CoverageObservationId.Value);
-        AddText(
-            select,
-            "processor_version",
-            write.ProcessorVersion);
+            coverageObservationId.Value);
+        AddText(select, "processor_version", processorVersion);
 
-        return await ReadCoverageRunAsync(
+        var existing = await ReadCoverageRunAsync(
             select,
             cancellationToken)
             ?? throw new CanonicalStateIntegrityException(
                 "Coverage reprocessing uniqueness conflict was not readable.");
+
+        if (!string.Equals(existing.Outcome, outcome, StringComparison.Ordinal) ||
+            !string.Equals(existing.ErrorCode, errorCode, StringComparison.Ordinal))
+        {
+            throw new CanonicalStateIntegrityException(
+                "Repeated coverage reprocessing result differs from durable terminal outcome.");
+        }
+
+        return existing;
     }
 
     private static async Task<CoverageObservationDescriptor?>
@@ -1253,9 +1329,11 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             new CoverageReprocessingRunId(reader.GetGuid(0)),
             new CoverageObservationId(reader.GetGuid(1)),
             reader.GetString(2),
-            reader.GetFieldValue<DateTimeOffset>(3),
-            reader.GetFieldValue<DateTimeOffset>(4),
-            reader.GetFieldValue<DateTimeOffset>(5));
+            reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.GetFieldValue<DateTimeOffset>(5),
+            reader.GetFieldValue<DateTimeOffset>(6),
+            reader.GetFieldValue<DateTimeOffset>(7));
     }
 
     private static async Task<RegionDescriptor?> ReadRegionAsync(
