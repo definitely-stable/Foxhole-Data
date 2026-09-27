@@ -49,4 +49,9 @@ public static class WarApiTelemetry
         Meter.CreateCounter<long>(
             "foxdata.source.reconciliations",
             description: "Durable source reconciliation outcomes.");
+
+    public static readonly Counter<long> NormalizationRuns =
+        Meter.CreateCounter<long>(
+            "foxdata.canonical.normalization.runs",
+            description: "Versioned canonical normalization outcomes.");
 }

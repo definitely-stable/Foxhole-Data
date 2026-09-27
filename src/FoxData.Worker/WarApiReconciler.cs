@@ -20,6 +20,7 @@ public sealed class WarApiReconciler(
     WarApiWorkerOptions options,
     WarApiCollectionProfile collectionProfile,
     WarApiMeasurementProbeProfile measurementProbe,
+    WarApiWarNormalizationCoordinator warNormalization,
     TimeProvider timeProvider,
     ILogger<WarApiReconciler> logger)
 {
@@ -56,11 +57,21 @@ public sealed class WarApiReconciler(
             snapshot.CurrentFetch.PayloadId is not null &&
             snapshot.RepresentationPayload is not null)
         {
-            parsed = await ParseAndRecordAsync(
+            var parse = await ParseAndRecordAsync(
                 context,
                 snapshot.CurrentFetch,
                 snapshot.RepresentationPayload,
                 cancellationToken);
+
+            parsed = parse.Parsed;
+
+            if (context.SourceEndpoint.Capability ==
+                    WarApiCapabilities.RuntimeWarState)
+            {
+                await warNormalization.NormalizeAsync(
+                    parse.Run.Id,
+                    cancellationToken);
+            }
 
             if (context.SourceEndpoint.Capability ==
                     WarApiCapabilities.ActiveMapList &&
@@ -227,7 +238,7 @@ public sealed class WarApiReconciler(
                     : "decision_replayed"));
     }
 
-    private async Task<WarApiParseResult?> ParseAndRecordAsync(
+    private async Task<ParseReconciliationResult> ParseAndRecordAsync(
         WarApiRegistryContext context,
         FetchDescriptor fetch,
         PayloadDescriptor payload,
@@ -272,7 +283,7 @@ public sealed class WarApiReconciler(
 
         var completedAt = timeProvider.GetUtcNow();
 
-        await parseRunStore.RecordAsync(
+        var run = await parseRunStore.RecordAsync(
             new SourceParseRunWrite(
                 fetch.Id,
                 context.Endpoint.CapabilityKey,
@@ -295,7 +306,7 @@ public sealed class WarApiReconciler(
             1,
             SourceTags(context, outcome));
 
-        return parsed;
+        return new ParseReconciliationResult(parsed, run);
     }
 
     private async Task ReconcileMapDiscoveryAsync(
@@ -648,6 +659,10 @@ public sealed class WarApiReconciler(
         DateTimeOffset first,
         DateTimeOffset second) =>
         first > second ? first : second;
+
+    private sealed record ParseReconciliationResult(
+        WarApiParseResult? Parsed,
+        SourceParseRunDescriptor Run);
 
     private sealed record EndpointActivity(
         bool Active,

@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text;
+using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
 using FoxData.Application.Sources;
 using FoxData.Core.Ingestion;
+using FoxData.Infrastructure.Canonical;
 using FoxData.Infrastructure.Evidence;
 using FoxData.Infrastructure.Ingestion;
 using FoxData.Infrastructure.Persistence;
@@ -890,6 +892,16 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var timeProvider = new FixedTimeProvider(now);
         var options = CreateOptions();
         var transport = new QueueTransport();
+        var normalization = new NormalizationKernel(
+            new PostgresNormalizationRunStore(dataSource));
+        var warCanonical = new WarCanonicalKernel(
+            new PostgresWarCanonicalStore(dataSource));
+        var warNormalization = new WarApiWarNormalizationCoordinator(
+            new PostgresCanonicalEvidenceReader(dataSource),
+            warCanonical,
+            normalization,
+            options,
+            timeProvider);
 
         var resolver = new WarApiRegistryResolver(registry);
         var rateGovernor = new WarApiOutboundRateGovernor(
@@ -917,6 +929,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             options,
             WarApiCollectionProfile.Bootstrap,
             measurementProbe ?? WarApiMeasurementProbeProfile.Disabled,
+            warNormalization,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
