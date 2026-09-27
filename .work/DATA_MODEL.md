@@ -294,7 +294,7 @@ Planned quality state:
 - ruleKey/ruleVersion;
 - configurationVersion;
 - effect/severity;
-- optional occurrence ordinal;
+- optional exact map-item occurrence ID or map-text occurrence ID;
 - deterministic input metrics;
 - detailCode;
 - createdAt.

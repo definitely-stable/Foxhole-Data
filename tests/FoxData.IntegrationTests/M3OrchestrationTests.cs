@@ -913,14 +913,19 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             normalization,
             options,
             timeProvider);
-        var warReportNormalization =
-            new WarApiWarReportNormalizationCoordinator(
-                canonicalEvidence,
+        var mapContextResolver =
+            new WarApiMapContextResolver(
                 sourceContextReader,
+                canonicalEvidence,
                 new PostgresWarRegionReader(dataSource),
                 new PostgresCoverageStore(dataSource),
                 warNormalization,
                 regionNormalization,
+                options);
+        var warReportNormalization =
+            new WarApiWarReportNormalizationCoordinator(
+                canonicalEvidence,
+                mapContextResolver,
                 new WarReportCanonicalKernel(
                     new PostgresWarReportCanonicalStore(dataSource)),
                 normalization,

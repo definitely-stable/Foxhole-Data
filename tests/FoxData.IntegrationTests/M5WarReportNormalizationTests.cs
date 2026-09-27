@@ -897,14 +897,19 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 options,
                 TimeProvider.System);
         var coverageStore = new PostgresCoverageStore(dataSource);
-        var reportNormalization =
-            new WarApiWarReportNormalizationCoordinator(
-                canonicalEvidence,
+        var mapContextResolver =
+            new WarApiMapContextResolver(
                 sourceContextReader,
+                canonicalEvidence,
                 new PostgresWarRegionReader(dataSource),
                 coverageStore,
                 warNormalization,
                 regionNormalization,
+                options);
+        var reportNormalization =
+            new WarApiWarReportNormalizationCoordinator(
+                canonicalEvidence,
+                mapContextResolver,
                 new WarReportCanonicalKernel(
                     new PostgresWarReportCanonicalStore(dataSource)),
                 normalization,
