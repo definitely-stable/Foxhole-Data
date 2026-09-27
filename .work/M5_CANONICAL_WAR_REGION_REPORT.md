@@ -243,6 +243,14 @@ This rule makes local replay independent of canonical worker order and stable ac
 
 `runtime.regions` is source-scoped by canonical key in M5. `runtime.war_regions` retains the exact upstream source map name and does not infer aliases, strip suffixes, case-fold, or treat absence from a later list as a deletion.
 
+## M5-E and 304 validation
+
+M5-E normalizes semantic active-map-list content from a body-bearing representation and its durable `SourceParseRun`.
+
+A `304 Not Modified` validation does not create another body-bearing source parse and MUST NOT create a second normalization run for the same representation merely to extend time coverage. The `source_not_modified` continuity record is owned by M5-G coverage.
+
+If unchanged map-list content is validated across a war boundary, M5-G MUST preserve that validation provenance and may use it to prove continuity/projection for the new war without violating the M5 normalization idempotency key or fabricating a new source payload. M5-E itself does not reinterpret a 304 as a new semantic map-list observation.
+
 ## Append-only and mutation rules
 
 Immutable:
@@ -330,6 +338,11 @@ Required behavior:
 ### M5-F — war-report normalization
 
 ### M5-G — coverage, recovery and reprocessing verification
+
+- persist `observed / source_not_modified / source_unavailable / collector_unavailable / rejected / unknown` coverage independently from domain state;
+- verify 304 continuity against the exact representation lineage without creating duplicate source parses or normalization runs;
+- cover unchanged active-map-list representations across war boundaries without inventing source payloads or violating region-normalizer idempotency;
+- prove local recovery/reprocessing from durable M2/M3/M5 evidence.
 
 ### M5-H — completion gate
 
