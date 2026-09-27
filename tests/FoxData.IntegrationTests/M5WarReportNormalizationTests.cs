@@ -434,6 +434,15 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
         Assert.Equal(
             1L,
             await fixture.CountAsync("evidence.coverage_reprocessing_runs"));
+
+        var recoveryReplay =
+            await fixture.CoverageRecovery.RunOnceAsync(
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, recoveryReplay.ContinuityApplied);
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("evidence.coverage_reprocessing_runs"));
     }
 
     [Fact]
