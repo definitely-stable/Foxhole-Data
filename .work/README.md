@@ -56,6 +56,7 @@ Primary documents:
 - M4_COMPLETION.md
 - M5_CANONICAL_WAR_REGION_REPORT.md
 - M5_COMPLETION.md
+- M6_MAPS_TAXONOMY_QUALITY.md
 - IMPLEMENTATION_PLAN.md
 
 Contract sources:
@@ -73,3 +74,4 @@ Research snapshots:
 - research/ECOSYSTEM_2026-09.md
 - research/M2_STORAGE_CONCURRENCY_2026-09.md
 - research/M3_WAR_API_HTTP_2026-09.md
+- research/M6_MAP_QUALITY_2026-09.md
