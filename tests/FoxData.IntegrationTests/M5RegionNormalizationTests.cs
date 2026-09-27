@@ -247,6 +247,61 @@ public sealed class M5RegionNormalizationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task LatestDurableWarParseWinsEvenWhenCanonicalWarNormalizationIsDelayed()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var start = new DateTimeOffset(
+            2026, 9, 27, 11, 30, 0, TimeSpan.Zero);
+
+        var olderWar = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "older-war",
+            """{"warId":"older-war","warNumber":129,"winner":"WARDENS"}""",
+            start);
+        var olderCanonical = await fixture.WarNormalization.NormalizeAsync(
+            olderWar.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(olderCanonical.Canonical);
+
+        var newerWar = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.War(),
+            "newer-war-not-yet-canonical",
+            """{"warId":"newer-war","warNumber":130,"winner":"NONE"}""",
+            start.AddMinutes(10));
+
+        var maps = await fixture.CreateParsedAsync(
+            "live-1",
+            WarApiCatalog.Maps(),
+            "maps-after-newer-war-evidence",
+            """["DeadLandsHex"]""",
+            start.AddMinutes(11));
+
+        var membership = await fixture.RegionNormalization.NormalizeAsync(
+            maps.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            WarApiRegionNormalizationStatus.Normalized,
+            membership.Status);
+        Assert.NotNull(membership.Canonical);
+
+        var newerCanonical = await fixture.WarNormalization.NormalizeAsync(
+            newerWar.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(newerCanonical.Canonical);
+
+        var region = Assert.Single(membership.Canonical.Memberships);
+        Assert.Equal(
+            newerCanonical.Canonical.War.Id,
+            region.Membership.WarId);
+        Assert.NotEqual(
+            olderCanonical.Canonical.War.Id,
+            region.Membership.WarId);
+    }
+
+    [Fact]
     public async Task SameSourceMapAcrossWarsReusesRegionButKeepsMembershipWarScoped()
     {
         await using var fixture = await CreateFixtureAsync();
