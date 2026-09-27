@@ -799,6 +799,11 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 ExchangeAuthorizationStatus.AuthorizedNow,
                 authorized.Status);
 
+            ReadOnlyMemory<byte>? capturedBody =
+                body is null
+                    ? null
+                    : body;
+
             var capture =
                 await evidence.CaptureSourceResponseAsync(
                     attemptId,
@@ -818,7 +823,7 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                         "max-age=60",
                         retrievedAt.AddMinutes(1),
                         2),
-                    body,
+                    capturedBody,
                     priorFetchId,
                     TestContext.Current.CancellationToken);
 
