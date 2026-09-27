@@ -1,3 +1,4 @@
+using System.Net;
 using FoxData.Application.Canonical;
 using FoxData.Core.Evidence;
 using FoxData.Sources.WarApi;
@@ -20,6 +21,7 @@ public sealed record WarApiRegionNormalizationResult(
 public sealed class WarApiRegionNormalizationCoordinator(
     ICanonicalEvidenceReader evidenceReader,
     IWarContextReader warContextReader,
+    WarApiWarNormalizationCoordinator warNormalization,
     RegionCanonicalKernel regionCanonical,
     NormalizationKernel normalization,
     WarApiWorkerOptions options,
@@ -117,27 +119,50 @@ public sealed class WarApiRegionNormalizationCoordinator(
                     validated));
         }
 
-        var warContext = await warContextReader.GetAtOrBeforeAsync(
+        var sourceWarContext = await warContextReader.GetAtOrBeforeAsync(
             evidence.ShardId,
             evidence.RetrievedAt,
+            WarApiCapabilities.RuntimeWarState.Key,
+            "war",
+            WarApiVersions.Parser,
             cancellationToken);
 
-        if (warContext is null)
+        if (sourceWarContext is null)
         {
-            WarApiTelemetry.NormalizationRuns.Add(
-                1,
-                new KeyValuePair<string, object?>("source", WarApiCatalog.SourceKey),
-                new KeyValuePair<string, object?>("environment", evidence.Environment),
-                new KeyValuePair<string, object?>("shard", evidence.ShardKey),
-                new KeyValuePair<string, object?>("domain", "region-membership"),
-                new KeyValuePair<string, object?>("outcome", "deferred"),
-                new KeyValuePair<string, object?>("reason", "war_context_unavailable"));
+            return Deferred(
+                evidence,
+                "war_evidence_unavailable");
+        }
 
-            return new WarApiRegionNormalizationResult(
-                WarApiRegionNormalizationStatus.Deferred,
-                null,
-                null,
-                "war_context_unavailable");
+        if (sourceWarContext.StatusCode is not (
+                (int)HttpStatusCode.OK or
+                (int)HttpStatusCode.NotModified) ||
+            sourceWarContext.RepresentationFetchId is null)
+        {
+            return Deferred(
+                evidence,
+                "war_context_unconfirmed");
+        }
+
+        if (sourceWarContext.SourceParseRunId is null)
+        {
+            return Deferred(
+                evidence,
+                "war_parse_unavailable");
+        }
+
+        var warResult = await warNormalization.NormalizeAsync(
+            sourceWarContext.SourceParseRunId.Value,
+            cancellationToken);
+
+        if (warResult.Status != WarApiWarNormalizationStatus.Normalized ||
+            warResult.Canonical is null)
+        {
+            return await RejectAsync(
+                sourceParseRunId,
+                startedAt,
+                "war_context_rejected",
+                cancellationToken);
         }
 
         var completedAt = timeProvider.GetUtcNow();
@@ -149,7 +174,7 @@ public sealed class WarApiRegionNormalizationCoordinator(
             completedAt,
             evidence.ShardId,
             evidence.RepresentationFetchId,
-            warContext.WarId,
+            warResult.Canonical.War.Id,
             evidence.RetrievedAt,
             memberships,
             cancellationToken);
@@ -166,6 +191,26 @@ public sealed class WarApiRegionNormalizationCoordinator(
             WarApiRegionNormalizationStatus.Normalized,
             canonical.NormalizationRun,
             canonical);
+    }
+
+    private static WarApiRegionNormalizationResult Deferred(
+        CanonicalEvidenceInput evidence,
+        string reason)
+    {
+        WarApiTelemetry.NormalizationRuns.Add(
+            1,
+            new KeyValuePair<string, object?>("source", WarApiCatalog.SourceKey),
+            new KeyValuePair<string, object?>("environment", evidence.Environment),
+            new KeyValuePair<string, object?>("shard", evidence.ShardKey),
+            new KeyValuePair<string, object?>("domain", "region-membership"),
+            new KeyValuePair<string, object?>("outcome", "deferred"),
+            new KeyValuePair<string, object?>("reason", reason));
+
+        return new WarApiRegionNormalizationResult(
+            WarApiRegionNormalizationStatus.Deferred,
+            null,
+            null,
+            reason);
     }
 
     private async Task<WarApiRegionNormalizationResult> RejectAsync(
