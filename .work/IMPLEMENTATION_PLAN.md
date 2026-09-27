@@ -136,7 +136,7 @@ Implementation slices:
 - M5-D war normalization — complete;
 - M5-E region discovery/membership — complete;
 - M5-F war-report normalization — complete;
-- M5-G coverage/recovery verification — pending;
+- M5-G coverage/recovery verification — complete;
 - M5-H completion gate — pending.
 
 ## M6 — maps, taxonomy and quality
