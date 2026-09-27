@@ -181,8 +181,16 @@ public sealed class WarApiWarNormalizationCoordinator(
                 WarApiCatalog.SourceKey,
                 StringComparison.Ordinal) ||
             !string.Equals(
-                evidence.CapabilityKey,
+                evidence.ParseCapabilityKey,
                 WarApiCapabilities.RuntimeWarState.Key,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                evidence.EndpointCapabilityKey,
+                WarApiCapabilities.RuntimeWarState.Key,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                evidence.ParseCapabilityKey,
+                evidence.EndpointCapabilityKey,
                 StringComparison.Ordinal) ||
             !string.Equals(
                 evidence.SemanticKey,
