@@ -310,3 +310,30 @@ Therefore:
 - normalized raw icon/team/flag values are preserved;
 - the selected taxonomy profile alone determines semantic known/unknown interpretation;
 - a taxonomy update does not require rewriting historical SourceParseRuns.
+
+
+## Chronology barrier must start from source evidence
+
+A post-crash ordering defect remains possible if the barrier only scans normalized MapSnapshot rows.
+
+Example:
+
+~~~text
+t1 Fetch is durable
+process dies before t1 normalization
+
+t2 Fetch/parse/snapshot completes later
+t2 quality evaluates before t1 recovery
+~~~
+
+If t2 only asks whether an earlier MapSnapshot lacks quality, t1 is invisible and t2 can permanently select the wrong immutable baseline.
+
+Therefore the v1 barrier is anchored at authoritative captured_current source evidence and checks completion of the whole required chain:
+
+~~~text
+Fetch -> SourceParseRun -> M6 NormalizationRun -> MapSnapshot -> QualityRun
+~~~
+
+Any unfinished earlier authoritative candidate defers later quality evaluation.
+
+This also makes M6-E live processing and M6-G recovery converge on the same ordering contract.
