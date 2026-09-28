@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:foxdata:contract:source:warapi-map-taxonomy",
+  "title": "FoxData Official War API map taxonomy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "source",
+    "documentationReference",
+    "reviewedAt",
+    "teams",
+    "icons",
+    "flags"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^warapi-map-taxonomy@[1-9][0-9]*$"
+    },
+    "source": {
+      "const": "official-war-api"
+    },
+    "documentationReference": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1
+    },
+    "reviewedAt": {
+      "type": "string",
+      "format": "date"
+    },
+    "teams": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/team" }
+    },
+    "icons": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/icon" }
+    },
+    "flags": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/flag" }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["documented", "legacy", "removed"]
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rawValue", "key", "label", "status"],
+      "properties": {
+        "rawValue": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "pattern": "^team\\.[a-z0-9][a-z0-9.-]*$" },
+        "label": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    },
+    "icon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rawIconType", "key", "label", "status"],
+      "properties": {
+        "rawIconType": { "type": "integer", "minimum": 0 },
+        "key": { "type": "string", "pattern": "^icon\\.[a-z0-9][a-z0-9.-]*$" },
+        "label": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "introducedUpdate": { "type": "integer", "minimum": 1 },
+        "removedUpdate": { "type": "integer", "minimum": 1 },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    },
+    "flag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rawBit", "key", "label", "status"],
+      "properties": {
+        "rawBit": { "type": "integer", "minimum": 1 },
+        "key": { "type": "string", "pattern": "^flag\\.[a-z0-9][a-z0-9.-]*$" },
+        "label": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "introducedUpdate": { "type": "integer", "minimum": 1 },
+        "removedUpdate": { "type": "integer", "minimum": 1 },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
