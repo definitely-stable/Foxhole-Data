@@ -1,0 +1,480 @@
+{
+  "version": "warapi-map-taxonomy@1",
+  "source": "official-war-api",
+  "documentationReference": "https://github.com/clapfoot/warapi/blob/master/README.md",
+  "reviewedAt": "2026-09-28",
+  "teams": [
+    {
+      "rawValue": "NONE",
+      "key": "team.none",
+      "label": "None",
+      "status": "documented"
+    },
+    {
+      "rawValue": "WARDENS",
+      "key": "team.wardens",
+      "label": "Wardens",
+      "status": "documented"
+    },
+    {
+      "rawValue": "COLONIALS",
+      "key": "team.colonials",
+      "label": "Colonials",
+      "status": "documented"
+    }
+  ],
+  "icons": [
+    {
+      "rawIconType": 5,
+      "key": "icon.static-base-1",
+      "label": "Static Base 1",
+      "status": "removed",
+      "removedUpdate": 46
+    },
+    {
+      "rawIconType": 6,
+      "key": "icon.static-base-2",
+      "label": "Static Base 2",
+      "status": "removed",
+      "removedUpdate": 46
+    },
+    {
+      "rawIconType": 7,
+      "key": "icon.static-base-3",
+      "label": "Static Base 3",
+      "status": "removed",
+      "removedUpdate": 46
+    },
+    {
+      "rawIconType": 8,
+      "key": "icon.forward-base-1",
+      "label": "Forward Base 1",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 9,
+      "key": "icon.forward-base-2",
+      "label": "Forward Base 2",
+      "status": "removed",
+      "removedUpdate": 50
+    },
+    {
+      "rawIconType": 10,
+      "key": "icon.forward-base-3",
+      "label": "Forward Base 3",
+      "status": "removed",
+      "removedUpdate": 50
+    },
+    {
+      "rawIconType": 11,
+      "key": "icon.hospital",
+      "label": "Hospital",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 12,
+      "key": "icon.vehicle-factory",
+      "label": "Vehicle Factory",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 13,
+      "key": "icon.armory",
+      "label": "Armory",
+      "status": "removed",
+      "notes": "Official README marks this icon removed in a previous update without naming the update."
+    },
+    {
+      "rawIconType": 14,
+      "key": "icon.supply-station",
+      "label": "Supply Station",
+      "status": "removed",
+      "notes": "Official README marks this icon removed in a previous update without naming the update."
+    },
+    {
+      "rawIconType": 15,
+      "key": "icon.workshop",
+      "label": "Workshop",
+      "status": "removed",
+      "notes": "Official README marks this icon removed in a previous update without naming the update."
+    },
+    {
+      "rawIconType": 16,
+      "key": "icon.manufacturing-plant",
+      "label": "Manufacturing Plant",
+      "status": "removed",
+      "notes": "Official README marks this icon removed in a previous update without naming the update."
+    },
+    {
+      "rawIconType": 17,
+      "key": "icon.refinery",
+      "label": "Refinery",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 18,
+      "key": "icon.shipyard",
+      "label": "Shipyard",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 19,
+      "key": "icon.tech-center",
+      "label": "Tech Center",
+      "status": "documented",
+      "notes": "Official README notes Engineering Center naming in Update 37."
+    },
+    {
+      "rawIconType": 20,
+      "key": "icon.salvage-field",
+      "label": "Salvage Field",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 21,
+      "key": "icon.component-field",
+      "label": "Component Field",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 22,
+      "key": "icon.fuel-field",
+      "label": "Fuel Field",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 23,
+      "key": "icon.sulfur-field",
+      "label": "Sulfur Field",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 24,
+      "key": "icon.world-map-tent",
+      "label": "World Map Tent",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 25,
+      "key": "icon.travel-tent",
+      "label": "Travel Tent",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 26,
+      "key": "icon.training-area",
+      "label": "Training Area",
+      "status": "documented"
+    },
+    {
+      "rawIconType": 27,
+      "key": "icon.special-base-keep",
+      "label": "Special Base (Keep)",
+      "status": "documented",
+      "introducedUpdate": 14
+    },
+    {
+      "rawIconType": 28,
+      "key": "icon.observation-tower",
+      "label": "Observation Tower",
+      "status": "documented",
+      "introducedUpdate": 14
+    },
+    {
+      "rawIconType": 29,
+      "key": "icon.fort",
+      "label": "Fort",
+      "status": "documented",
+      "introducedUpdate": 14
+    },
+    {
+      "rawIconType": 30,
+      "key": "icon.troop-ship",
+      "label": "Troop Ship",
+      "status": "documented",
+      "introducedUpdate": 14
+    },
+    {
+      "rawIconType": 32,
+      "key": "icon.sulfur-mine",
+      "label": "Sulfur Mine",
+      "status": "documented",
+      "introducedUpdate": 16
+    },
+    {
+      "rawIconType": 33,
+      "key": "icon.storage-facility",
+      "label": "Storage Facility",
+      "status": "documented",
+      "introducedUpdate": 17
+    },
+    {
+      "rawIconType": 34,
+      "key": "icon.factory",
+      "label": "Factory",
+      "status": "documented",
+      "introducedUpdate": 17
+    },
+    {
+      "rawIconType": 35,
+      "key": "icon.garrison-station",
+      "label": "Garrison Station",
+      "status": "documented",
+      "introducedUpdate": 20
+    },
+    {
+      "rawIconType": 36,
+      "key": "icon.ammo-factory",
+      "label": "Ammo Factory",
+      "status": "removed",
+      "notes": "Official README marks this icon removed in a previous update without naming the update."
+    },
+    {
+      "rawIconType": 37,
+      "key": "icon.rocket-site",
+      "label": "Rocket Site",
+      "status": "documented",
+      "introducedUpdate": 20
+    },
+    {
+      "rawIconType": 38,
+      "key": "icon.salvage-mine",
+      "label": "Salvage Mine",
+      "status": "documented",
+      "introducedUpdate": 22
+    },
+    {
+      "rawIconType": 39,
+      "key": "icon.construction-yard",
+      "label": "Construction Yard",
+      "status": "documented",
+      "introducedUpdate": 26
+    },
+    {
+      "rawIconType": 40,
+      "key": "icon.component-mine",
+      "label": "Component Mine",
+      "status": "documented",
+      "introducedUpdate": 26
+    },
+    {
+      "rawIconType": 41,
+      "key": "icon.oil-well",
+      "label": "Oil Well",
+      "status": "removed",
+      "removedUpdate": 50
+    },
+    {
+      "rawIconType": 45,
+      "key": "icon.relic-base-1",
+      "label": "Relic Base 1",
+      "status": "documented",
+      "introducedUpdate": 32
+    },
+    {
+      "rawIconType": 46,
+      "key": "icon.relic-base-2",
+      "label": "Relic Base 2",
+      "status": "removed",
+      "removedUpdate": 52,
+      "notes": "Official README says removed until further notice; use Relic Base 1."
+    },
+    {
+      "rawIconType": 47,
+      "key": "icon.relic-base-3",
+      "label": "Relic Base 3",
+      "status": "removed",
+      "removedUpdate": 52,
+      "notes": "Official README says removed until further notice; use Relic Base 1."
+    },
+    {
+      "rawIconType": 51,
+      "key": "icon.mass-production-factory",
+      "label": "Mass Production Factory",
+      "status": "documented",
+      "introducedUpdate": 35
+    },
+    {
+      "rawIconType": 52,
+      "key": "icon.seaport",
+      "label": "Seaport",
+      "status": "documented",
+      "introducedUpdate": 37
+    },
+    {
+      "rawIconType": 53,
+      "key": "icon.coastal-gun",
+      "label": "Coastal Gun",
+      "status": "documented",
+      "introducedUpdate": 37
+    },
+    {
+      "rawIconType": 54,
+      "key": "icon.soul-factory",
+      "label": "Soul Factory",
+      "status": "documented",
+      "introducedUpdate": 39
+    },
+    {
+      "rawIconType": 56,
+      "key": "icon.town-base-1",
+      "label": "Town Base 1",
+      "status": "documented",
+      "introducedUpdate": 46
+    },
+    {
+      "rawIconType": 57,
+      "key": "icon.town-base-2",
+      "label": "Town Base 2",
+      "status": "documented",
+      "introducedUpdate": 46
+    },
+    {
+      "rawIconType": 58,
+      "key": "icon.town-base-3",
+      "label": "Town Base 3",
+      "status": "documented",
+      "introducedUpdate": 46
+    },
+    {
+      "rawIconType": 59,
+      "key": "icon.storm-cannon",
+      "label": "Storm Cannon",
+      "status": "documented",
+      "introducedUpdate": 47
+    },
+    {
+      "rawIconType": 60,
+      "key": "icon.intel-center",
+      "label": "Intel Center",
+      "status": "documented",
+      "introducedUpdate": 47
+    },
+    {
+      "rawIconType": 61,
+      "key": "icon.coal-field",
+      "label": "Coal Field",
+      "status": "documented",
+      "introducedUpdate": 50
+    },
+    {
+      "rawIconType": 62,
+      "key": "icon.oil-field",
+      "label": "Oil Field",
+      "status": "documented",
+      "introducedUpdate": 50
+    },
+    {
+      "rawIconType": 70,
+      "key": "icon.rocket-target",
+      "label": "Rocket Target",
+      "status": "documented",
+      "introducedUpdate": 54
+    },
+    {
+      "rawIconType": 71,
+      "key": "icon.rocket-ground-zero",
+      "label": "Rocket Ground Zero",
+      "status": "documented",
+      "introducedUpdate": 54
+    },
+    {
+      "rawIconType": 72,
+      "key": "icon.rocket-site-with-rocket",
+      "label": "Rocket Site With Rocket",
+      "status": "documented",
+      "introducedUpdate": 54
+    },
+    {
+      "rawIconType": 75,
+      "key": "icon.facility-mine-oil-rig",
+      "label": "Facility Mine Oil Rig",
+      "status": "documented",
+      "introducedUpdate": 54
+    },
+    {
+      "rawIconType": 83,
+      "key": "icon.weather-station",
+      "label": "Weather Station",
+      "status": "documented",
+      "introducedUpdate": 57
+    },
+    {
+      "rawIconType": 84,
+      "key": "icon.mortar-house",
+      "label": "Mortar House",
+      "status": "documented",
+      "introducedUpdate": 58
+    },
+    {
+      "rawIconType": 88,
+      "key": "icon.aircraft-depot",
+      "label": "Aircraft Depot",
+      "status": "documented",
+      "introducedUpdate": 63
+    },
+    {
+      "rawIconType": 89,
+      "key": "icon.aircraft-factory",
+      "label": "Aircraft Factory",
+      "status": "documented",
+      "introducedUpdate": 63
+    },
+    {
+      "rawIconType": 90,
+      "key": "icon.aircraft-radar",
+      "label": "Aircraft Radar",
+      "status": "documented",
+      "introducedUpdate": 63
+    },
+    {
+      "rawIconType": 91,
+      "key": "icon.aircraft-runway-t1",
+      "label": "Aircraft Runway (T1)",
+      "status": "documented",
+      "introducedUpdate": 63
+    },
+    {
+      "rawIconType": 92,
+      "key": "icon.aircraft-runway-t2",
+      "label": "Aircraft Runway (T2)",
+      "status": "documented",
+      "introducedUpdate": 63
+    }
+  ],
+  "flags": [
+    {
+      "rawBit": 1,
+      "key": "flag.is-victory-base",
+      "label": "IsVictoryBase",
+      "status": "documented"
+    },
+    {
+      "rawBit": 2,
+      "key": "flag.is-home-base",
+      "label": "IsHomeBase",
+      "status": "removed",
+      "removedUpdate": 29
+    },
+    {
+      "rawBit": 4,
+      "key": "flag.is-build-site",
+      "label": "IsBuildSite",
+      "status": "documented"
+    },
+    {
+      "rawBit": 16,
+      "key": "flag.is-scorched",
+      "label": "IsScorched",
+      "status": "documented",
+      "introducedUpdate": 22
+    },
+    {
+      "rawBit": 32,
+      "key": "flag.is-town-claimed",
+      "label": "IsTownClaimed",
+      "status": "documented",
+      "introducedUpdate": 26
+    }
+  ]
+}
