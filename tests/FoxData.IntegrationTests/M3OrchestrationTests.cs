@@ -911,6 +911,429 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task DynamicMapNormalizationPreservesOpenValuesAndSourceOccurrences()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-dynamic-open-values");
+
+        var endpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var body = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":-7,
+              "scorchedVictoryTowns":-2,
+              "mapItems":[
+                {
+                  "teamId":"FUTURE_TEAM",
+                  "iconType":97,
+                  "x":0.5,
+                  "y":0.25,
+                  "flags":64,
+                  "viewDirection":90
+                },
+                {
+                  "teamId":"FUTURE_TEAM",
+                  "iconType":97,
+                  "x":0.5,
+                  "y":0.25,
+                  "flags":64,
+                  "viewDirection":90
+                }
+              ],
+              "mapTextItems":[
+                {
+                  "text":"Future marker",
+                  "x":0.1,
+                  "y":0.2,
+                  "mapMarkerType":"FUTURE_MARKER"
+                }
+              ],
+              "lastUpdated":9223372036854775807,
+              "version":-3
+            }
+            """);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                body,
+                ""dynamic-open-v1"",
+                "max-age=0"));
+
+        var job = await fixture.EnqueueAndClaimAsync(
+            endpoint.Resource.Id,
+            "test:m6-dynamic:open-values");
+        await fixture.Executor.ExecuteAsync(
+            job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var evidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(evidence?.RepresentationFetch);
+
+        var parseRun = await fixture.ParseRuns.GetAsync(
+            evidence.RepresentationFetch.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            WarApiVersions.Parser,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(parseRun);
+        Assert.Equal("parsed_with_unknowns", parseRun.Outcome);
+
+        var replay = await fixture.DynamicMapNormalization.NormalizeAsync(
+            parseRun.Id,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            WarApiDynamicMapNormalizationStatus.Normalized,
+            replay.Status);
+        Assert.NotNull(replay.Snapshot);
+        Assert.Equal(MapSnapshotKind.Dynamic, replay.Snapshot.Snapshot.Kind);
+        Assert.Equal("DeadLandsHex", replay.Snapshot.Snapshot.SourceMapName);
+        Assert.Equal(-7, replay.Snapshot.Snapshot.SourceRegionId);
+        Assert.Equal(-2, replay.Snapshot.Snapshot.SourceScorchedVictoryTowns);
+        Assert.Equal(-3L, replay.Snapshot.Snapshot.SourceVersion);
+        Assert.Equal(long.MaxValue, replay.Snapshot.Snapshot.SourceLastUpdatedMs);
+        Assert.Null(replay.Snapshot.Snapshot.SourceUpdatedAt);
+        Assert.True(replay.Snapshot.Snapshot.SourceMapItemsArrayPresent);
+        Assert.True(replay.Snapshot.Snapshot.SourceMapTextItemsArrayPresent);
+        Assert.Equal(2, replay.Snapshot.Snapshot.ItemCount);
+        Assert.Equal(1, replay.Snapshot.Snapshot.TextItemCount);
+
+        Assert.Equal(2, replay.Snapshot.Items.Count);
+        Assert.Equal(
+            [0, 1],
+            replay.Snapshot.Items.Select(x => x.SourceOrdinal).ToArray());
+        Assert.All(
+            replay.Snapshot.Items,
+            item =>
+            {
+                Assert.Equal("FUTURE_TEAM", item.RawTeamId);
+                Assert.Equal(97, item.RawIconType);
+                Assert.Equal(0.5d, item.X);
+                Assert.Equal(0.25d, item.Y);
+                Assert.Equal(64, item.RawFlags);
+                Assert.Equal(90, item.RawViewDirection);
+            });
+
+        var text = Assert.Single(replay.Snapshot.TextItems);
+        Assert.Equal("Future marker", text.Text);
+        Assert.Equal("FUTURE_MARKER", text.RawMapMarkerType);
+
+        Assert.Equal(
+            1L,
+            await fixture.CountRowsAsync(
+                "evidence.normalization_runs",
+                "normalizer_version = 'warapi-dynamic-map-normalizer@1'"));
+        Assert.Equal(
+            1L,
+            await fixture.CountRowsAsync("evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync("evidence.map_item_occurrences"));
+        Assert.Equal(
+            0L,
+            await fixture.CountRowsAsync("runtime.war_regions"));
+    }
+
+    [Fact]
+    public async Task DynamicMapRevisionCreatesSnapshotBut304DoesNotDuplicateIt()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-dynamic-revision");
+
+        var endpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var firstBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":1000,
+              "version":10
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                firstBody,
+                ""dynamic-v10"",
+                "max-age=0"));
+
+        var firstJob = await fixture.EnqueueAndClaimAsync(
+            endpoint.Resource.Id,
+            "test:m6-dynamic-revision:first");
+        await fixture.Executor.ExecuteAsync(
+            firstJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var firstEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(firstEvidence);
+        await fixture.MakeSuccessorAvailableAsync(
+            firstEvidence.CurrentFetch.Id);
+
+        var secondBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[
+                {
+                  "teamId":"WARDENS",
+                  "iconType":20,
+                  "x":0.4,
+                  "y":0.6,
+                  "flags":1,
+                  "viewDirection":45
+                }
+              ],
+              "mapTextItems":[],
+              "lastUpdated":2000,
+              "version":11
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddMinutes(1),
+                HttpStatusCode.OK,
+                secondBody,
+                ""dynamic-v11"",
+                "max-age=0"));
+
+        var secondClaim =
+            await fixture.Ingestion.ClaimNextForSourceAsync(
+                fixture.WorkerId,
+                WarApiCatalog.SourceKey,
+                TimeSpan.FromMinutes(2),
+                TestContext.Current.CancellationToken);
+        Assert.True(secondClaim.Claimed);
+        Assert.Equal(endpoint.Resource.Id, secondClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            secondClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var secondEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(secondEvidence);
+
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync("evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync("evidence.source_parse_runs"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.normalization_runs",
+                "normalizer_version = 'warapi-dynamic-map-normalizer@1'"));
+
+        await fixture.MakeSuccessorAvailableAsync(
+            secondEvidence.CurrentFetch.Id);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddMinutes(2),
+                HttpStatusCode.NotModified,
+                body: null,
+                ""dynamic-v11"",
+                "max-age=0"));
+
+        var thirdClaim =
+            await fixture.Ingestion.ClaimNextForSourceAsync(
+                fixture.WorkerId,
+                WarApiCatalog.SourceKey,
+                TimeSpan.FromMinutes(2),
+                TestContext.Current.CancellationToken);
+        Assert.True(thirdClaim.Claimed);
+        Assert.Equal(endpoint.Resource.Id, thirdClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            thirdClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync("evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync("evidence.source_parse_runs"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.normalization_runs",
+                "normalizer_version = 'warapi-dynamic-map-normalizer@1'"));
+    }
+
+    [Fact]
+    public async Task DynamicMapFailedParseRecordsRejectedNormalizationWithoutSnapshot()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-dynamic-rejected");
+
+        var endpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                """{"regionId":"""u8.ToArray(),
+                ""dynamic-bad"",
+                "max-age=0"));
+
+        var job = await fixture.EnqueueAndClaimAsync(
+            endpoint.Resource.Id,
+            "test:m6-dynamic:bad");
+        await fixture.Executor.ExecuteAsync(
+            job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            1L,
+            await fixture.CountRowsAsync(
+                "evidence.normalization_runs",
+                "normalizer_version = 'warapi-dynamic-map-normalizer@1' AND outcome = 'rejected' AND error_code = 'source_parse_unsuccessful'"));
+        Assert.Equal(
+            0L,
+            await fixture.CountRowsAsync("evidence.map_snapshots"));
+    }
+
+    [Fact]
+    public async Task StaticAndDynamicVersionsRemainIndependentSnapshotStreams()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-static-dynamic-independent");
+
+        var staticEndpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+        var dynamicEndpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var staticBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":5000,
+              "version":42
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                staticBody,
+                ""static-v42"",
+                "max-age=21600"));
+
+        var staticJob = await fixture.EnqueueAndClaimAsync(
+            staticEndpoint.Resource.Id,
+            "test:m6-independent:static");
+        await fixture.Executor.ExecuteAsync(
+            staticJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            staticEndpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var dynamicBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":5000,
+              "version":42
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                dynamicBody,
+                ""dynamic-v42"",
+                "max-age=0"));
+
+        var dynamicJob = await fixture.EnqueueAndClaimAsync(
+            dynamicEndpoint.Resource.Id,
+            "test:m6-independent:dynamic");
+        await fixture.Executor.ExecuteAsync(
+            dynamicJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            dynamicEndpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        await using var command = fixture.DataSource.CreateCommand(
+            """
+            SELECT capability_kind, source_version
+            FROM evidence.map_snapshots
+            ORDER BY capability_kind;
+            """);
+        await using var reader = await command.ExecuteReaderAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.True(await reader.ReadAsync(
+            TestContext.Current.CancellationToken));
+        Assert.Equal("dynamic", reader.GetString(0));
+        Assert.Equal(42L, reader.GetInt64(1));
+
+        Assert.True(await reader.ReadAsync(
+            TestContext.Current.CancellationToken));
+        Assert.Equal("static", reader.GetString(0));
+        Assert.Equal(42L, reader.GetInt64(1));
+
+        Assert.False(await reader.ReadAsync(
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task M4ProbeAcceleratesSelectedMapButCacheStillControlsSuccessor()
     {
         var probe = new WarApiMeasurementProbeProfile(
