@@ -101,6 +101,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "region-id.valid" },
             "effect": { "const": "quarantined" },
@@ -121,6 +122,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "region-id.conflict" },
             "effect": { "const": "quarantined" },
@@ -140,6 +142,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "coordinate.valid" },
             "effect": { "const": "quarantined" },
@@ -161,6 +164,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "source-time.representable" },
             "effect": { "const": "suspect" },
@@ -181,6 +185,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "schema.structure-changed" },
             "effect": { "const": "informational" },
@@ -197,6 +202,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "taxonomy.unknown-icon" },
             "effect": { "const": "informational" },
@@ -213,6 +219,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "taxonomy.unknown-team" },
             "effect": { "const": "informational" },
@@ -229,6 +236,7 @@
       "allOf": [
         { "$ref": "#/$defs/baseRule" },
         {
+          "type": "object",
           "properties": {
             "key": { "const": "taxonomy.unknown-flag-bits" },
             "effect": { "const": "informational" },
