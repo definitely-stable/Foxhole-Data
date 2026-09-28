@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-C implemented; next slice M6-D.
+Status: in progress. M6-A through M6-D implemented; next slice M6-E.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1299,28 +1299,55 @@ M6-D is the first slice allowed to assign versioned semantic meaning to raw icon
 
 ### M6-D — Versioned taxonomy
 
-Goal: provide deterministic semantic interpretation without mutating raw source occurrences.
+Status: complete.
 
-Implement:
+Goal: provide deterministic semantic interpretation without mutating normalized source occurrences or converting parser diagnostics into semantic truth.
 
-1. `warapi-map-taxonomy.schema.json`;
-2. `warapi-map-taxonomy@1.json`;
-3. immutable version registry/loader;
-4. pure taxonomy interpreter;
-5. documented icon mappings from current Official War API README;
-6. documented public flag-bit interpretation;
-7. open unknown icon/team/flag behavior;
-8. legacy/removed status metadata;
-9. unit/golden tests;
-10. no persistence duplication of every interpreted occurrence unless measurement proves it necessary.
+Delivered:
+
+1. executable JSON Schema contract `warapi-map-taxonomy.schema.json`;
+2. immutable profile `warapi-map-taxonomy@1.json`;
+3. one build/runtime source of truth: the normative `.work` profile is embedded directly into `FoxData.Sources.WarApi` rather than copied into C# constants;
+4. source-generated System.Text.Json metadata for AOT-friendly profile loading;
+5. fail-closed version registry: an unknown taxonomy version is not silently upgraded to the newest profile;
+6. pure `WarApiMapTaxonomyInterpreter` with no database, Worker or wall-clock dependency;
+7. all icon codes currently documented by the Official War API README as of the profile review date, with stable `icon.*` keys and documented removal/update metadata where available;
+8. exact current documented team values with stable `team.*` keys;
+9. all documented public flag bits with stable `flag.*` keys;
+10. raw signed flag preservation plus unsigned bit-pattern decomposition into known and unknown bits;
+11. exact/open team and icon behavior: unknown raw values remain unknown and are never coerced to a nearby known entry;
+12. removed/legacy taxonomy entries remain interpretable and do not erase historical raw source meaning;
+13. Contracts CI validation of the profile against JSON Schema Draft 2020-12;
+14. source/golden tests for documented entries, removed metadata, icon 97, unknown teams, unknown flag bits and negative/raw flag bit patterns;
+15. no persistence duplication of taxonomy labels or interpreted occurrence rows.
+
+The v1 profile intentionally does not define an objective-family hierarchy. M7 may introduce versioned matching families later if its evidence requires them. M6-D only assigns meanings directly supported by the selected taxonomy contract.
+
+The existing `warapi-parser@1` `unknownCodeCount` remains a parser-time provenance diagnostic. It is not taxonomy authority. For example, iconType 97 currently contributes to parser unknown-code diagnostics and remains `unknown` under `warapi-map-taxonomy@1`; a future taxonomy version may interpret a code without rewriting the historical parser run.
+
+Flag interpretation is deliberately lossless:
+
+~~~text
+raw bit pattern
+    -> knownBits according to taxonomy version
+    -> unknownBits preserved exactly
+    -> list of known flag entries
+~~~
+
+A zero bitmask is fully known with no active flags. A null flag field is missing rather than equivalent to zero.
 
 Acceptance:
 
-- current documented codes produce stable interpretation keys;
-- icon 97 remains preserved and unknown unless explicitly evidenced in profile;
-- unknown flag bits round-trip;
-- changing taxonomy requires a new profile/version.
+- current documented codes produce stable versioned interpretation keys — verified;
+- icon 97 remains raw and unknown in taxonomy@1 — verified;
+- parser `unknownCodeCount` and taxonomy known/unknown status remain separate contracts — verified;
+- unknown teams remain exact/open — verified;
+- unknown flag bits round-trip without invented semantics — verified;
+- removed flag/icon entries remain interpretable with lifecycle metadata — verified;
+- changing taxonomy meaning requires a new profile/version — enforced by explicit registry identity;
+- schema/profile validation is part of the Contracts workflow — implemented.
 
+M6-E MUST record the exact taxonomy version used by every QualityRun. It consumes taxonomy interpretation but does not mutate normalized occurrence rows.
 ### M6-E — Quality kernel and accepted-observation transaction
 
 Goal: introduce versioned quality decisions without anomaly heuristics being hidden inside normalizers.
