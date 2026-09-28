@@ -549,7 +549,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                       "version":-3
                     }
                     """),
-                ""static-deadlands-v1"",
+                "\\\"static-deadlands-v1\\\"",
                 "max-age=21600"));
 
         var firstJob = await fixture.EnqueueAndClaimAsync(
@@ -576,7 +576,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                       "version":1
                     }
                     """),
-                ""static-marban-v1"",
+                "\\\"static-marban-v1\\\"",
                 "max-age=21600"));
 
         var secondJob = await fixture.EnqueueAndClaimAsync(
