@@ -367,36 +367,88 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
         IReadOnlyList<MapItemOccurrenceCandidate> items,
         CancellationToken cancellationToken)
     {
-        foreach (var item in items)
+        if (items.Count == 0)
         {
-            await using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText =
-                """
-                INSERT INTO evidence.map_item_occurrences
-                    (id, map_snapshot_id, source_ordinal,
-                     raw_team_id, raw_icon_type, x, y,
-                     raw_flags, raw_view_direction)
-                VALUES
-                    (@id, @map_snapshot_id, @source_ordinal,
-                     @raw_team_id, @raw_icon_type, @x, @y,
-                     @raw_flags, @raw_view_direction);
-                """;
+            return;
+        }
 
-            AddUuid(command, "id", MapItemOccurrenceId.New().Value);
-            AddUuid(command, "map_snapshot_id", snapshotId.Value);
-            AddInteger(command, "source_ordinal", item.SourceOrdinal);
-            AddNullableText(command, "raw_team_id", item.RawTeamId);
-            AddNullableInteger(command, "raw_icon_type", item.RawIconType);
-            AddNullableDouble(command, "x", item.X);
-            AddNullableDouble(command, "y", item.Y);
-            AddNullableInteger(command, "raw_flags", item.RawFlags);
-            AddNullableInteger(
-                command,
-                "raw_view_direction",
-                item.RawViewDirection);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            INSERT INTO evidence.map_item_occurrences
+                (id, map_snapshot_id, source_ordinal,
+                 raw_team_id, raw_icon_type, x, y,
+                 raw_flags, raw_view_direction)
+            SELECT
+                source.id,
+                @map_snapshot_id,
+                source.source_ordinal,
+                source.raw_team_id,
+                source.raw_icon_type,
+                source.x,
+                source.y,
+                source.raw_flags,
+                source.raw_view_direction
+            FROM unnest(
+                @ids::uuid[],
+                @source_ordinals::integer[],
+                @raw_team_ids::text[],
+                @raw_icon_types::integer[],
+                @xs::double precision[],
+                @ys::double precision[],
+                @raw_flags::integer[],
+                @raw_view_directions::integer[])
+            AS source(
+                id,
+                source_ordinal,
+                raw_team_id,
+                raw_icon_type,
+                x,
+                y,
+                raw_flags,
+                raw_view_direction);
+            """;
 
-            await command.ExecuteNonQueryAsync(cancellationToken);
+        AddUuid(command, "map_snapshot_id", snapshotId.Value);
+        command.Parameters.Add(
+            "ids",
+            NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value =
+            items.Select(_ => MapItemOccurrenceId.New().Value).ToArray();
+        command.Parameters.Add(
+            "source_ordinals",
+            NpgsqlDbType.Array | NpgsqlDbType.Integer).Value =
+            items.Select(item => item.SourceOrdinal).ToArray();
+        command.Parameters.Add(
+            "raw_team_ids",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value =
+            items.Select(item => item.RawTeamId).ToArray();
+        command.Parameters.Add(
+            "raw_icon_types",
+            NpgsqlDbType.Array | NpgsqlDbType.Integer).Value =
+            items.Select(item => item.RawIconType).ToArray();
+        command.Parameters.Add(
+            "xs",
+            NpgsqlDbType.Array | NpgsqlDbType.Double).Value =
+            items.Select(item => item.X).ToArray();
+        command.Parameters.Add(
+            "ys",
+            NpgsqlDbType.Array | NpgsqlDbType.Double).Value =
+            items.Select(item => item.Y).ToArray();
+        command.Parameters.Add(
+            "raw_flags",
+            NpgsqlDbType.Array | NpgsqlDbType.Integer).Value =
+            items.Select(item => item.RawFlags).ToArray();
+        command.Parameters.Add(
+            "raw_view_directions",
+            NpgsqlDbType.Array | NpgsqlDbType.Integer).Value =
+            items.Select(item => item.RawViewDirection).ToArray();
+
+        var inserted = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (inserted != items.Count)
+        {
+            throw new CanonicalStateIntegrityException(
+                $"Expected to persist {items.Count} map item occurrences but PostgreSQL inserted {inserted}.");
         }
     }
 
@@ -407,32 +459,73 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
         IReadOnlyList<MapTextOccurrenceCandidate> items,
         CancellationToken cancellationToken)
     {
-        foreach (var item in items)
+        if (items.Count == 0)
         {
-            await using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText =
-                """
-                INSERT INTO evidence.map_text_occurrences
-                    (id, map_snapshot_id, source_ordinal,
-                     text, x, y, raw_map_marker_type)
-                VALUES
-                    (@id, @map_snapshot_id, @source_ordinal,
-                     @text, @x, @y, @raw_map_marker_type);
-                """;
+            return;
+        }
 
-            AddUuid(command, "id", MapTextOccurrenceId.New().Value);
-            AddUuid(command, "map_snapshot_id", snapshotId.Value);
-            AddInteger(command, "source_ordinal", item.SourceOrdinal);
-            AddNullableText(command, "text", item.Text);
-            AddNullableDouble(command, "x", item.X);
-            AddNullableDouble(command, "y", item.Y);
-            AddNullableText(
-                command,
-                "raw_map_marker_type",
-                item.RawMapMarkerType);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            INSERT INTO evidence.map_text_occurrences
+                (id, map_snapshot_id, source_ordinal,
+                 text, x, y, raw_map_marker_type)
+            SELECT
+                source.id,
+                @map_snapshot_id,
+                source.source_ordinal,
+                source.text,
+                source.x,
+                source.y,
+                source.raw_map_marker_type
+            FROM unnest(
+                @ids::uuid[],
+                @source_ordinals::integer[],
+                @texts::text[],
+                @xs::double precision[],
+                @ys::double precision[],
+                @raw_map_marker_types::text[])
+            AS source(
+                id,
+                source_ordinal,
+                text,
+                x,
+                y,
+                raw_map_marker_type);
+            """;
 
-            await command.ExecuteNonQueryAsync(cancellationToken);
+        AddUuid(command, "map_snapshot_id", snapshotId.Value);
+        command.Parameters.Add(
+            "ids",
+            NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value =
+            items.Select(_ => MapTextOccurrenceId.New().Value).ToArray();
+        command.Parameters.Add(
+            "source_ordinals",
+            NpgsqlDbType.Array | NpgsqlDbType.Integer).Value =
+            items.Select(item => item.SourceOrdinal).ToArray();
+        command.Parameters.Add(
+            "texts",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value =
+            items.Select(item => item.Text).ToArray();
+        command.Parameters.Add(
+            "xs",
+            NpgsqlDbType.Array | NpgsqlDbType.Double).Value =
+            items.Select(item => item.X).ToArray();
+        command.Parameters.Add(
+            "ys",
+            NpgsqlDbType.Array | NpgsqlDbType.Double).Value =
+            items.Select(item => item.Y).ToArray();
+        command.Parameters.Add(
+            "raw_map_marker_types",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value =
+            items.Select(item => item.RawMapMarkerType).ToArray();
+
+        var inserted = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (inserted != items.Count)
+        {
+            throw new CanonicalStateIntegrityException(
+                $"Expected to persist {items.Count} map text occurrences but PostgreSQL inserted {inserted}.");
         }
     }
 
