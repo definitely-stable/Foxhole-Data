@@ -107,6 +107,7 @@ public sealed class MapSnapshotKernelTests
             SourceParseRunId.New(),
             "map-normalizer@1",
             "dynamic-map-state",
+            "map-dynamic/DeadLandsHex",
             now,
             now,
             FetchId.New(),
