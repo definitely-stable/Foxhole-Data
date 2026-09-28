@@ -4,31 +4,31 @@ using FoxData.Sources.WarApi;
 
 namespace FoxData.Worker;
 
-public enum WarApiStaticMapNormalizationStatus
+public enum WarApiDynamicMapNormalizationStatus
 {
     Normalized,
     Rejected,
 }
 
-public sealed record WarApiStaticMapNormalizationResult(
-    WarApiStaticMapNormalizationStatus Status,
+public sealed record WarApiDynamicMapNormalizationResult(
+    WarApiDynamicMapNormalizationStatus Status,
     NormalizationRunDescriptor NormalizationRun,
     MapSnapshotResult? Snapshot);
 
-public sealed class WarApiStaticMapNormalizationCoordinator
+public sealed class WarApiDynamicMapNormalizationCoordinator
 {
     private static readonly WarApiMapSnapshotNormalizationProfile Profile =
         new(
-            WarApiCapabilities.StaticMapState,
-            "map-static/",
-            WarApiVersions.StaticMapNormalizer,
-            MapSnapshotKind.Static,
-            "map-static",
-            "static-map");
+            WarApiCapabilities.DynamicMapState,
+            "map-dynamic/",
+            WarApiVersions.DynamicMapNormalizer,
+            MapSnapshotKind.Dynamic,
+            "map-dynamic",
+            "dynamic-map");
 
     private readonly WarApiMapSnapshotNormalizationCore _core;
 
-    public WarApiStaticMapNormalizationCoordinator(
+    public WarApiDynamicMapNormalizationCoordinator(
         ICanonicalEvidenceReader evidenceReader,
         MapSnapshotKernel mapSnapshots,
         NormalizationKernel normalization,
@@ -43,7 +43,7 @@ public sealed class WarApiStaticMapNormalizationCoordinator
             timeProvider);
     }
 
-    public async Task<WarApiStaticMapNormalizationResult> NormalizeAsync(
+    public async Task<WarApiDynamicMapNormalizationResult> NormalizeAsync(
         SourceParseRunId sourceParseRunId,
         CancellationToken cancellationToken)
     {
@@ -52,11 +52,11 @@ public sealed class WarApiStaticMapNormalizationCoordinator
             Profile,
             cancellationToken);
 
-        return new WarApiStaticMapNormalizationResult(
+        return new WarApiDynamicMapNormalizationResult(
             result.Status ==
                 WarApiMapSnapshotNormalizationStatus.Normalized
-                ? WarApiStaticMapNormalizationStatus.Normalized
-                : WarApiStaticMapNormalizationStatus.Rejected,
+                ? WarApiDynamicMapNormalizationStatus.Normalized
+                : WarApiDynamicMapNormalizationStatus.Rejected,
             result.NormalizationRun,
             result.Snapshot);
     }

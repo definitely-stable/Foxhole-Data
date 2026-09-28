@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A and M6-B implemented; next slice M6-C.
+Status: in progress. M6-A through M6-C implemented; next slice M6-D.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1260,26 +1260,42 @@ Acceptance:
 
 ### M6-C — Dynamic map normalization
 
-Goal: materialize dynamic/public representations with the same loss-minimizing model.
+Status: complete.
 
-Implement:
+Goal: materialize dynamic/public representations with the same loss-minimizing, source-local model as static normalization, while keeping static and dynamic streams semantically independent.
+
+Delivered:
 
 1. `warapi-dynamic-map-normalizer@1`;
-2. exact representation/provenance checks without requiring WarRegion context;
-3. reuse the M6-B array-presence representation;
-4. atomic snapshot + item/text occurrences;
-5. version/lastUpdated preservation;
-6. team/icon/flags/viewDirection raw preservation;
-7. unknown/additive values remain representable;
-8. Worker integration;
-9. recovery and source-normalization-before-context tests.
+2. one shared Worker-level durable map-normalization core used by both static and dynamic wrappers, preventing replay/provenance semantics from drifting between the two source capabilities;
+3. exact SourceParseRunId-based replay from body-bearing durable evidence;
+4. fail-closed source/endpoint capability, semantic-key, adapter/parser/fingerprint and parser-replay verification;
+5. exact case-sensitive sourceMapName extraction from `map-dynamic/<name>`;
+6. source-local normalization without requiring WarId or WarRegion context;
+7. atomic reuse of the M6-B `normalization_run + map_snapshot + occurrence rows` transaction;
+8. exact source item/text multiplicity, ordinal and array-presence preservation;
+9. raw preservation of teamId, iconType, flags, viewDirection, coordinates, map-marker values, regionId, scorchedVictoryTowns, source version and lastUpdated;
+10. safe UTC conversion of lastUpdated only when representable while retaining the raw milliseconds independently;
+11. live Worker normalization after durable dynamic SourceParseRun creation;
+12. terminal normalization rejection for unsuccessful source parses without fabricating a snapshot;
+13. idempotent replay returning the existing dynamic snapshot;
+14. 304 behavior that reuses the existing representation and creates no new SourceParseRun or map snapshot;
+15. no taxonomy, quality acceptance, objective identity or static/dynamic synthetic merge.
 
-Acceptance:
+Acceptance verified by integration coverage:
 
-- iconType 97 fixture normalizes;
-- unknown teams/flags do not disappear;
+- iconType 97 and unknown team/flag values normalize rather than disappear;
+- parser `parsed_with_unknowns` diagnostic does not block loss-minimizing normalization;
 - viewDirection is preserved without invented semantics;
-- static and dynamic source versions are never compared as one stream.
+- exact duplicate source occurrences remain distinct by representation-local ordinal;
+- unrepresentable lastUpdated retains its raw value with nullable converted UTC time;
+- dynamic representation revision produces a new append-only snapshot;
+- 304 validation produces no duplicate source parse, normalization or snapshot;
+- malformed dynamic source JSON records rejected normalization with no snapshot;
+- identical numeric source version values can coexist in static and dynamic snapshots without comparison or uniqueness coupling;
+- normalization succeeds without WarRegion context.
+
+M6-D is the first slice allowed to assign versioned semantic meaning to raw icon/team/flag values.
 
 ### M6-D — Versioned taxonomy
 

@@ -232,7 +232,7 @@ Immutable accepted observations:
 
 M6 separates representation-derived normalized content from war-scoped quality-accepted observations.
 
-M6-A/B implemented derived evidence:
+M6-A/B/C implemented derived evidence:
 
 `map_snapshots`:
 
