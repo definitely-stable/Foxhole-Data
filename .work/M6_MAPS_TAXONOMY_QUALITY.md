@@ -106,6 +106,8 @@ M6 MUST also retain the stronger defensive rules already established by FoxData:
 
 Research evidence for these decisions is summarized in [research/M6_MAP_QUALITY_2026-09.md](research/M6_MAP_QUALITY_2026-09.md).
 
+Concrete implementation ordering for the remaining M6-E through M6-H work is maintained in [M6_EXECUTION_PLAN.md](M6_EXECUTION_PLAN.md).
+
 ## 3. Architectural boundary
 
 M6 extends the existing pipeline as:
@@ -749,18 +751,22 @@ Out-of-order replay MUST select the same baseline as chronological replay or fai
 
 ### Chronology barrier
 
-For one `WarRegion + capabilityKind + taxonomyVersion + qualityPolicyVersion`, candidate C MUST NOT be quality-evaluated while an earlier eligible normalized candidate lacks a terminal quality result for the same selected versions.
+For one `WarRegion + capabilityKind + taxonomyVersion + qualityPolicyVersion`, candidate C MUST NOT be quality-evaluated while any earlier authoritative source candidate has unfinished parse, normalization or quality work required by the selected versions.
+
+The barrier starts from durable authoritative `captured_current` source evidence, not only from already-created MapSnapshot rows. Therefore an earlier body-bearing Fetch with a missing SourceParseRun, a SourceParseRun with a missing current M6 normalization, or a MapSnapshot with no terminal QualityRun all block a later candidate.
 
 Ordering is:
 
 ~~~text
-candidate observedAt ASC
+source observation boundary ASC
 then deterministic durable tie-breaker
 ~~~
 
+`captured_late` or superseded evidence does not block the canonical quality stream.
+
 A `suspect` or `quarantined` result is terminal for ordering purposes but never becomes an accepted baseline.
 
-This barrier prevents late recovery of an older snapshot from retroactively changing the baseline that a newer immutable QualityRun should have used.
+This barrier prevents crash recovery of older durable source work from retroactively changing the baseline that a newer immutable QualityRun should have used.
 
 M6-G reprocessing MUST use the same ordering rule.
 
@@ -1024,15 +1030,13 @@ A successful accepted QualityRun cannot exist without its runtime map observatio
 
 Quality evaluation that depends on a prior accepted baseline must prevent two concurrent candidates for the same WarRegion/capability from silently selecting inconsistent baselines.
 
-M6-E must choose and test one of:
+M6-E must choose and test one PostgreSQL-enforced serialization strategy.
 
-- PostgreSQL advisory/row lock scoped to WarRegion + capability;
-- SERIALIZABLE transaction with deterministic retry at the durable work boundary;
-- another PostgreSQL-enforced equivalent.
+The current execution plan selects `SELECT ... FOR UPDATE` on the target `runtime.war_regions` row as the v1 serialization boundary. This deliberately serializes static and dynamic quality acceptance for one WarRegion until measurements justify a finer scope.
 
 Do not rely on in-process locks because Worker process death and future horizontal workers must remain safe.
 
-The implementation decision and measured contention must be documented in M6-E. An ADR is required only if this introduces a new cross-system infrastructure guarantee.
+M6-E must prove the row-lock strategy under concurrent integration tests and record measured contention. If measurements show unacceptable serialization, a later version may move to transaction-level advisory locking or SERIALIZABLE retry, but that change must preserve the same chronology/baseline semantics. An ADR is required only if this introduces a new cross-system infrastructure guarantee.
 
 ## 21. Observability
 
