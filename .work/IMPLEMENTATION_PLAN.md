@@ -144,6 +144,7 @@ Implementation slices:
 Status: in progress. M6-A through M6-D complete; M6-E next.
 
 Detailed normative plan: [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
+Execution sequence for the remaining slices: [M6_EXECUTION_PLAN.md](M6_EXECUTION_PLAN.md).
 Research evidence: [research/M6_MAP_QUALITY_2026-09.md](research/M6_MAP_QUALITY_2026-09.md).
 
 M6 converts durable static/dynamic War API representations into normalized source-occurrence snapshots, applies versioned taxonomy and quality policy, and materializes only quality-accepted war-scoped map observations.
