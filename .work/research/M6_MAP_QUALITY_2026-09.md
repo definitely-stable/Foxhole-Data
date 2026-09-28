@@ -250,18 +250,28 @@ Official PostgreSQL 18 references:
 - https://www.postgresql.org/docs/18/transaction-iso.html
 - https://www.postgresql.org/docs/18/applevel-consistency.html
 
-M6 planning intentionally does not freeze one primitive yet.
+PostgreSQL 18 documents both transaction-scoped row locking and transaction-level advisory locks as server-managed concurrency primitives.
 
-M6-E must compare:
+For the first M6-E implementation, FoxData selects a row lock on the existing WarRegion record using `SELECT ... FOR UPDATE`.
+
+Reasons:
+
+- the lock is tied to an existing canonical row rather than an application-defined numeric lock key;
+- it is released by transaction completion/rollback/process loss;
+- it serializes exactly the canonical region stream whose accepted baseline is being updated;
+- M4 cadence measurements make the deliberately coarse static+dynamic serialization acceptable as a v1 starting point;
+- any collision/key-stability discussion required by advisory locks is avoided.
+
+The implementation must still measure:
 
 - correctness across two Worker processes;
-- crash cleanup semantics;
-- contention at measured update rate;
-- retry behavior;
-- implementation complexity;
-- whether serialization must be scoped by WarRegion + capability.
+- lock wait/contention at measured update rate;
+- transaction duration;
+- static/dynamic interference for one WarRegion.
 
-An in-process `lock`, semaphore or singleton is insufficient.
+If contention is material, transaction-level advisory locking or SERIALIZABLE retry can be re-evaluated without changing the quality semantics.
+
+An in-process `lock`, semaphore or singleton remains insufficient.
 
 ## Out-of-order replay and chronology barrier
 
