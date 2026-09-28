@@ -626,8 +626,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             Assert.True(await reader.ReadAsync(
                 TestContext.Current.CancellationToken));
             Assert.Equal("MarbanHollow", reader.GetString(0));
-            Assert.True(reader.GetBoolean(6) is false);
-            Assert.True(reader.GetBoolean(7) is false);
+            Assert.False(reader.GetBoolean(6));
+            Assert.False(reader.GetBoolean(7));
             Assert.Equal(0, reader.GetInt32(8));
             Assert.Equal(0, reader.GetInt32(9));
 
@@ -733,7 +733,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 """{"regionId":"""u8.ToArray(),
-                ""static-bad"",
+                "\"static-bad\"",
                 "max-age=21600"));
 
         var job = await fixture.EnqueueAndClaimAsync(
