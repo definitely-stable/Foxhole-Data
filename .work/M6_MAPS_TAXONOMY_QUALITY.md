@@ -1233,15 +1233,15 @@ Delivered:
 
 The generic `PostgresMapSnapshotStore` introduced here is intentionally reusable by M6-C dynamic normalization. It revalidates exact source-parse provenance inside the same transaction that commits normalized content.
 
-Implementation verification head `aa45b8ce1b1ba7524d257c1e350a93b8b63f3314` passed:
+Implementation verification head `3a2a83b7b0e8a4d27ab04b741cf2d209e1e3615d` passed:
 
 - Release build and CLI bootstrap;
 - 28 unit tests;
-- 93 integration tests;
+- 94 integration tests;
 - 15 recovery tests;
 - 114 source tests;
 - 4 contract tests;
-- 254 tests total, 0 failed, 0 skipped;
+- 255 tests total, 0 failed, 0 skipped;
 - Docker Compose migration/API readiness/OpenAPI/Worker smoke;
 - Contracts workflow;
 - Dependency Review.
