@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:foxdata:contract:source:warapi-map-quality-policy",
+  "title": "FoxData Official War API map quality policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "source",
+    "taxonomyVersion",
+    "reviewedAt",
+    "aggregation",
+    "rules"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^warapi-map-quality@[1-9][0-9]*$"
+    },
+    "source": {
+      "const": "official-war-api"
+    },
+    "taxonomyVersion": {
+      "type": "string",
+      "pattern": "^warapi-map-taxonomy@[1-9][0-9]*$"
+    },
+    "reviewedAt": {
+      "type": "string",
+      "format": "date"
+    },
+    "aggregation": {
+      "$ref": "#/$defs/aggregation"
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/regionIdValidRule" },
+          { "$ref": "#/$defs/regionIdConflictRule" },
+          { "$ref": "#/$defs/coordinateValidRule" },
+          { "$ref": "#/$defs/sourceTimeRepresentableRule" },
+          { "$ref": "#/$defs/structureChangedRule" },
+          { "$ref": "#/$defs/unknownIconRule" },
+          { "$ref": "#/$defs/unknownTeamRule" },
+          { "$ref": "#/$defs/unknownFlagBitsRule" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "aggregation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noFindingsDecision",
+        "informationalDecision",
+        "suspectDecision",
+        "quarantinedDecision"
+      ],
+      "properties": {
+        "noFindingsDecision": { "const": "accepted" },
+        "informationalDecision": { "const": "accepted" },
+        "suspectDecision": { "const": "suspect" },
+        "quarantinedDecision": { "const": "quarantined" }
+      }
+    },
+    "baseRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "ruleVersion",
+        "configurationVersion",
+        "effect",
+        "parameters"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]*$"
+        },
+        "ruleVersion": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]*@[1-9][0-9]*$"
+        },
+        "configurationVersion": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]*-config@[1-9][0-9]*$"
+        },
+        "effect": {
+          "enum": ["informational", "suspect", "quarantined"]
+        },
+        "parameters": {
+          "type": "object"
+        }
+      }
+    },
+    "regionIdValidRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "region-id.valid" },
+            "effect": { "const": "quarantined" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["allowNull", "minimum"],
+              "properties": {
+                "allowNull": { "const": true },
+                "minimum": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "regionIdConflictRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "region-id.conflict" },
+            "effect": { "const": "quarantined" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["blockOnConflict"],
+              "properties": {
+                "blockOnConflict": { "const": true }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "coordinateValidRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "coordinate.valid" },
+            "effect": { "const": "quarantined" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["minimum", "maximum", "requireFinite"],
+              "properties": {
+                "minimum": { "type": "number", "const": 0.0 },
+                "maximum": { "type": "number", "const": 1.0 },
+                "requireFinite": { "const": true }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceTimeRepresentableRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "source-time.representable" },
+            "effect": { "const": "suspect" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["allowMissing", "requireSafeUtcWhenPresent"],
+              "properties": {
+                "allowMissing": { "const": true },
+                "requireSafeUtcWhenPresent": { "const": true }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "structureChangedRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "schema.structure-changed" },
+            "effect": { "const": "informational" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "unknownIconRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "taxonomy.unknown-icon" },
+            "effect": { "const": "informational" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "unknownTeamRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "taxonomy.unknown-team" },
+            "effect": { "const": "informational" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "unknownFlagBitsRule": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRule" },
+        {
+          "type": "object",
+          "properties": {
+            "key": { "const": "taxonomy.unknown-flag-bits" },
+            "effect": { "const": "informational" },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    }
+  }
+}

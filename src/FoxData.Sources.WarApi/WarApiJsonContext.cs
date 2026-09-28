@@ -9,5 +9,6 @@ namespace FoxData.Sources.WarApi;
 [JsonSerializable(typeof(WarApiWarReportDto))]
 [JsonSerializable(typeof(WarApiMapDataDto))]
 [JsonSerializable(typeof(WarApiMapTaxonomyDocumentDto))]
+[JsonSerializable(typeof(WarApiMapQualityPolicyDocumentDto))]
 [JsonSerializable(typeof(string[]))]
 internal sealed partial class WarApiJsonContext : JsonSerializerContext;

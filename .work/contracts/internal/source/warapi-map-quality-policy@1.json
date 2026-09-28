@@ -1,0 +1,82 @@
+{
+  "version": "warapi-map-quality@1",
+  "source": "official-war-api",
+  "taxonomyVersion": "warapi-map-taxonomy@1",
+  "reviewedAt": "2026-09-28",
+  "aggregation": {
+    "noFindingsDecision": "accepted",
+    "informationalDecision": "accepted",
+    "suspectDecision": "suspect",
+    "quarantinedDecision": "quarantined"
+  },
+  "rules": [
+    {
+      "key": "region-id.valid",
+      "ruleVersion": "region-id.valid@1",
+      "configurationVersion": "region-id.valid-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "allowNull": true,
+        "minimum": 0
+      }
+    },
+    {
+      "key": "region-id.conflict",
+      "ruleVersion": "region-id.conflict@1",
+      "configurationVersion": "region-id.conflict-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "blockOnConflict": true
+      }
+    },
+    {
+      "key": "coordinate.valid",
+      "ruleVersion": "coordinate.valid@1",
+      "configurationVersion": "coordinate.valid-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "requireFinite": true
+      }
+    },
+    {
+      "key": "source-time.representable",
+      "ruleVersion": "source-time.representable@1",
+      "configurationVersion": "source-time.representable-config@1",
+      "effect": "suspect",
+      "parameters": {
+        "allowMissing": true,
+        "requireSafeUtcWhenPresent": true
+      }
+    },
+    {
+      "key": "schema.structure-changed",
+      "ruleVersion": "schema.structure-changed@1",
+      "configurationVersion": "schema.structure-changed-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "taxonomy.unknown-icon",
+      "ruleVersion": "taxonomy.unknown-icon@1",
+      "configurationVersion": "taxonomy.unknown-icon-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "taxonomy.unknown-team",
+      "ruleVersion": "taxonomy.unknown-team@1",
+      "configurationVersion": "taxonomy.unknown-team-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "taxonomy.unknown-flag-bits",
+      "ruleVersion": "taxonomy.unknown-flag-bits@1",
+      "configurationVersion": "taxonomy.unknown-flag-bits-config@1",
+      "effect": "informational",
+      "parameters": {}
+    }
+  ]
+}
