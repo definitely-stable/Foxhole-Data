@@ -963,7 +963,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 body,
-                ""dynamic-open-v1"",
+                "\"dynamic-open-v1\"",
                 "max-age=0"));
 
         var job = await fixture.EnqueueAndClaimAsync(
@@ -1072,7 +1072,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 firstBody,
-                ""dynamic-v10"",
+                "\"dynamic-v10\"",
                 "max-age=0"));
 
         var firstJob = await fixture.EnqueueAndClaimAsync(
@@ -1117,7 +1117,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now.AddMinutes(1),
                 HttpStatusCode.OK,
                 secondBody,
-                ""dynamic-v11"",
+                "\"dynamic-v11\"",
                 "max-age=0"));
 
         var secondClaim =
@@ -1161,7 +1161,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now.AddMinutes(2),
                 HttpStatusCode.NotModified,
                 body: null,
-                ""dynamic-v11"",
+                "\"dynamic-v11\"",
                 "max-age=0"));
 
         var thirdClaim =
@@ -1211,7 +1211,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 """{"regionId":"""u8.ToArray(),
-                ""dynamic-bad"",
+                "\"dynamic-bad\"",
                 "max-age=0"));
 
         var job = await fixture.EnqueueAndClaimAsync(
@@ -1267,7 +1267,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 staticBody,
-                ""static-v42"",
+                "\"static-v42\"",
                 "max-age=21600"));
 
         var staticJob = await fixture.EnqueueAndClaimAsync(
@@ -1296,7 +1296,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 fixture.Now,
                 HttpStatusCode.OK,
                 dynamicBody,
-                ""dynamic-v42"",
+                "\"dynamic-v42\"",
                 "max-age=0"));
 
         var dynamicJob = await fixture.EnqueueAndClaimAsync(
