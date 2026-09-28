@@ -68,6 +68,8 @@ Contract sources:
 - contracts/internal/source/collection-profile.schema.json
 - contracts/internal/source/collection-profile@1.json
 - contracts/internal/source/collection-policy.schema.json
+- contracts/internal/source/warapi-map-taxonomy.schema.json
+- contracts/internal/source/warapi-map-taxonomy@1.json
 
 Research snapshots:
 

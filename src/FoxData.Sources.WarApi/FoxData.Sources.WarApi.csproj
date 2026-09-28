@@ -2,4 +2,9 @@
   <ItemGroup>
     <ProjectReference Include="../FoxData.Sources.Abstractions/FoxData.Sources.Abstractions.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../.work/contracts/internal/source/warapi-map-taxonomy@1.json"
+                      LogicalName="FoxData.Sources.WarApi.Contracts.warapi-map-taxonomy@1.json" />
+  </ItemGroup>
 </Project>
