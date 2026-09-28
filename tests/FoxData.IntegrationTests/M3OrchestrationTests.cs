@@ -717,6 +717,152 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task StaticMapRevisionCreatesSnapshotBut304DoesNotDuplicateIt()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-static-revision");
+
+        var endpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var firstBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":1000,
+              "version":1
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                firstBody,
+                "\"static-v1\"",
+                "max-age=21600"));
+
+        var firstJob = await fixture.EnqueueAndClaimAsync(
+            endpoint.Resource.Id,
+            "test:m6-static-revision:first");
+        await fixture.Executor.ExecuteAsync(
+            firstJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var firstEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(firstEvidence);
+        await fixture.MakeSuccessorAvailableAsync(
+            firstEvidence.CurrentFetch.Id);
+
+        var secondBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[
+                {
+                  "teamId":"NONE",
+                  "iconType":20,
+                  "x":0.4,
+                  "y":0.6,
+                  "flags":0
+                }
+              ],
+              "mapTextItems":[],
+              "lastUpdated":2000,
+              "version":2
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddHours(6),
+                HttpStatusCode.OK,
+                secondBody,
+                "\"static-v2\"",
+                "max-age=21600"));
+
+        var secondClaim =
+            await fixture.Ingestion.ClaimNextForSourceAsync(
+                fixture.WorkerId,
+                WarApiCatalog.SourceKey,
+                TimeSpan.FromMinutes(2),
+                TestContext.Current.CancellationToken);
+        Assert.True(secondClaim.Claimed);
+        Assert.Equal(endpoint.Resource.Id, secondClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            secondClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var secondEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(secondEvidence);
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.source_parse_runs"));
+
+        await fixture.MakeSuccessorAvailableAsync(
+            secondEvidence.CurrentFetch.Id);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddHours(12),
+                HttpStatusCode.NotModified,
+                body: null,
+                "\"static-v2\"",
+                "max-age=21600"));
+
+        var thirdClaim =
+            await fixture.Ingestion.ClaimNextForSourceAsync(
+                fixture.WorkerId,
+                WarApiCatalog.SourceKey,
+                TimeSpan.FromMinutes(2),
+                TestContext.Current.CancellationToken);
+        Assert.True(thirdClaim.Claimed);
+        Assert.Equal(endpoint.Resource.Id, thirdClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            thirdClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.source_parse_runs"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.normalization_runs",
+                "normalizer_version = 'warapi-static-map-normalizer@1'"));
+    }
+
+    [Fact]
     public async Task StaticMapFailedParseRecordsRejectedNormalizationWithoutSnapshot()
     {
         await using var fixture = await CreateFixtureAsync(
@@ -1553,6 +1699,18 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 attemptId,
                 TestContext.Current.CancellationToken)
                 ?? throw new InvalidOperationException("Attempt disappeared.");
+        }
+
+        public async Task<long> CountRowsAsync(
+            string table,
+            string? predicate = null)
+        {
+            var sql = predicate is null
+                ? $"SELECT COUNT(*) FROM {table};"
+                : $"SELECT COUNT(*) FROM {table} WHERE {predicate};";
+            await using var command = DataSource.CreateCommand(sql);
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
         }
 
         public async Task<long> CountPayloadsAsync()
