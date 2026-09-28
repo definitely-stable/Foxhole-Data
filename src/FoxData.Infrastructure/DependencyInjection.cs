@@ -2,6 +2,7 @@ using System.Globalization;
 using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
+using FoxData.Application.Quality;
 using FoxData.Application.Sources;
 using FoxData.Infrastructure.Canonical;
 using FoxData.Infrastructure.Configuration;
@@ -9,6 +10,7 @@ using FoxData.Infrastructure.Evidence;
 using FoxData.Infrastructure.Health;
 using FoxData.Infrastructure.Ingestion;
 using FoxData.Infrastructure.Persistence;
+using FoxData.Infrastructure.Quality;
 using FoxData.Infrastructure.Sources;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -89,6 +91,8 @@ public static class DependencyInjection
         services.AddScoped<WarReportCanonicalKernel>();
         services.AddScoped<IMapSnapshotStore, PostgresMapSnapshotStore>();
         services.AddScoped<MapSnapshotKernel>();
+        services.AddScoped<IMapQualityStore, PostgresMapQualityStore>();
+        services.AddScoped<MapQualityKernel>();
         services.AddScoped<ICoverageStore, PostgresCoverageStore>();
 
         services.AddSingleton<PostgresHealthCheck>();
