@@ -170,25 +170,39 @@ WarRegion
 + qualityPolicyVersion
 ~~~
 
-candidate C must not become terminal while an earlier eligible normalized candidate lacks a terminal quality result for the same selected versions.
+candidate C must not become terminal while any earlier authoritative source candidate in the same stream has unfinished work required by the selected versions.
+
+The barrier is evidence-driven, not snapshot-driven. It must detect earlier durable authoritative work at every stage:
+
+~~~
+captured_current body-bearing Fetch
+    -> current SourceParseRun
+        -> current static/dynamic NormalizationRun
+            -> MapSnapshot
+                -> terminal QualityRun
+~~~
+
+An earlier authoritative Fetch with a missing parse, missing normalization, missing snapshot or missing terminal QualityRun blocks C. This is required so a crash between stages cannot let a later candidate permanently choose the wrong immutable baseline.
 
 Ordering:
 
 ~~~
-observedAt ASC
+source observation boundary ASC
 + one durable deterministic tie-breaker
 ~~~
 
-The same tie-breaker must be used by:
+The same ordering must be used by:
 
-- chronology barrier;
+- source-work barrier;
 - baseline selection;
 - recovery scanning;
 - M6-H rebuild.
 
+The source-work query must use only authoritative captured_current lineage. captured_late/superseded evidence remains evidence but does not block the canonical quality stream.
+
 A prior suspect/quarantined result is terminal for ordering but is never a baseline.
 
-If an earlier candidate is unresolved:
+If any earlier authoritative candidate is unresolved:
 
 ~~~
 current candidate -> Deferred
