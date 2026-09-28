@@ -353,6 +353,48 @@ public sealed class M6FoundationPersistenceTests(PostgresFixture postgres)
             bindingException.ConstraintName);
     }
 
+    [Fact]
+    public async Task ArrayPresenceConstraintRejectsOccurrencesForAbsentSourceArray()
+    {
+        await using var fixture = await CreateFixtureAsync();
+
+        await using var command = fixture.DataSource.CreateCommand(
+            """
+            INSERT INTO evidence.map_snapshots
+                (id, normalization_run_id, source_parse_run_id,
+                 representation_fetch_id, capability_kind,
+                 source_map_name,
+                 source_map_items_array_present,
+                 source_map_text_items_array_present,
+                 item_count, text_item_count)
+            VALUES
+                (@id, @normalization_run_id, @source_parse_run_id,
+                 @representation_fetch_id, 'dynamic',
+                 'DeadLandsHex', FALSE, TRUE, 1, 0);
+            """);
+        command.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        command.Parameters.AddWithValue(
+            "normalization_run_id",
+            fixture.NormalizationRunId);
+        command.Parameters.AddWithValue(
+            "source_parse_run_id",
+            fixture.SourceParseRunId);
+        command.Parameters.AddWithValue(
+            "representation_fetch_id",
+            fixture.RepresentationFetchId);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            PostgresErrorCodes.CheckViolation,
+            exception.SqlState);
+        Assert.Equal(
+            "ck_map_snapshots_items_array_presence",
+            exception.ConstraintName);
+    }
+
     private async Task<Fixture> CreateFixtureAsync()
     {
         await MigrateAsync();
