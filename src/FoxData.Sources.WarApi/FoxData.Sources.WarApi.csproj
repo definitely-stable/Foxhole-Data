@@ -6,5 +6,7 @@
   <ItemGroup>
     <EmbeddedResource Include="../../.work/contracts/internal/source/warapi-map-taxonomy@1.json"
                       LogicalName="FoxData.Sources.WarApi.Contracts.warapi-map-taxonomy@1.json" />
+    <EmbeddedResource Include="../../.work/contracts/internal/source/warapi-map-quality-policy@1.json"
+                      LogicalName="FoxData.Sources.WarApi.Contracts.warapi-map-quality-policy@1.json" />
   </ItemGroup>
 </Project>
