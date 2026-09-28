@@ -751,18 +751,22 @@ Out-of-order replay MUST select the same baseline as chronological replay or fai
 
 ### Chronology barrier
 
-For one `WarRegion + capabilityKind + taxonomyVersion + qualityPolicyVersion`, candidate C MUST NOT be quality-evaluated while an earlier eligible normalized candidate lacks a terminal quality result for the same selected versions.
+For one `WarRegion + capabilityKind + taxonomyVersion + qualityPolicyVersion`, candidate C MUST NOT be quality-evaluated while any earlier authoritative source candidate has unfinished parse, normalization or quality work required by the selected versions.
+
+The barrier starts from durable authoritative `captured_current` source evidence, not only from already-created MapSnapshot rows. Therefore an earlier body-bearing Fetch with a missing SourceParseRun, a SourceParseRun with a missing current M6 normalization, or a MapSnapshot with no terminal QualityRun all block a later candidate.
 
 Ordering is:
 
 ~~~text
-candidate observedAt ASC
+source observation boundary ASC
 then deterministic durable tie-breaker
 ~~~
 
+`captured_late` or superseded evidence does not block the canonical quality stream.
+
 A `suspect` or `quarantined` result is terminal for ordering purposes but never becomes an accepted baseline.
 
-This barrier prevents late recovery of an older snapshot from retroactively changing the baseline that a newer immutable QualityRun should have used.
+This barrier prevents crash recovery of older durable source work from retroactively changing the baseline that a newer immutable QualityRun should have used.
 
 M6-G reprocessing MUST use the same ordering rule.
 
