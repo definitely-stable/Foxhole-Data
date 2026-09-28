@@ -25,6 +25,7 @@ public sealed class MapSnapshotKernelTests
             SourceParseRunId.New(),
             "map-normalizer@1",
             "dynamic-map-state",
+            "map-dynamic/DeadLandsHex",
             now,
             now.AddMilliseconds(1),
             FetchId.New(),
@@ -35,6 +36,8 @@ public sealed class MapSnapshotKernelTests
             -1,
             -1,
             null,
+            true,
+            true,
             [
                 duplicate,
                 duplicate with { SourceOrdinal = 1 },
@@ -62,6 +65,7 @@ public sealed class MapSnapshotKernelTests
             SourceParseRunId.New(),
             "map-normalizer@1",
             "static-map-state",
+            "map-static/DeadLandsHex",
             now,
             now,
             FetchId.New(),
@@ -72,6 +76,8 @@ public sealed class MapSnapshotKernelTests
             null,
             null,
             null,
+            true,
+            true,
             [
                 new MapItemOccurrenceCandidate(
                     1,
@@ -111,6 +117,8 @@ public sealed class MapSnapshotKernelTests
             -7,
             long.MinValue,
             null,
+            true,
+            true,
             [
                 new MapItemOccurrenceCandidate(
                     0,
@@ -138,6 +146,47 @@ public sealed class MapSnapshotKernelTests
         await Assert.ThrowsAsync<ArgumentException>(
             () => kernel.RecordAcceptedAsync(
                 invalidIdentity,
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task SnapshotRejectsOccurrencesWhenSourceArrayWasAbsent()
+    {
+        var kernel = new MapSnapshotKernel(new RecordingStore());
+        var now = DateTimeOffset.UtcNow;
+
+        var write = new MapSnapshotWrite(
+            SourceParseRunId.New(),
+            "map-normalizer@1",
+            "static-map-state",
+            "map-static/DeadLandsHex",
+            now,
+            now,
+            FetchId.New(),
+            MapSnapshotKind.Static,
+            "DeadLandsHex",
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            true,
+            [
+                new MapItemOccurrenceCandidate(
+                    0,
+                    null,
+                    20,
+                    0.5,
+                    0.5,
+                    0,
+                    null),
+            ],
+            []);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => kernel.RecordAcceptedAsync(
+                write,
                 TestContext.Current.CancellationToken));
     }
 
@@ -177,6 +226,8 @@ public sealed class MapSnapshotKernelTests
                 write.SourceVersion,
                 write.SourceLastUpdatedMs,
                 write.SourceUpdatedAt,
+                write.SourceMapItemsArrayPresent,
+                write.SourceMapTextItemsArrayPresent,
                 write.Items.Count,
                 write.TextItems.Count,
                 write.NormalizationCompletedAt);
