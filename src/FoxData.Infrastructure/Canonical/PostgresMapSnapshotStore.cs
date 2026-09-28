@@ -64,6 +64,12 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
             snapshot.Id,
             cancellationToken);
 
+        EnsureDurableGraphIntegrity(
+            normalizationRun,
+            snapshot,
+            items,
+            textItems);
+
         return new MapSnapshotResult(
             normalizationRun,
             snapshot,
@@ -735,6 +741,50 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
         }
 
         return result;
+    }
+
+    private static void EnsureDurableGraphIntegrity(
+        NormalizationRunDescriptor normalizationRun,
+        MapSnapshotDescriptor snapshot,
+        IReadOnlyList<MapItemOccurrenceDescriptor> items,
+        IReadOnlyList<MapTextOccurrenceDescriptor> textItems)
+    {
+        if (snapshot.NormalizationRunId != normalizationRun.Id ||
+            snapshot.SourceParseRunId != normalizationRun.SourceParseRunId ||
+            snapshot.ItemCount != items.Count ||
+            snapshot.TextItemCount != textItems.Count)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Durable map snapshot graph does not match its normalization run or child counts.");
+        }
+
+        if ((!snapshot.SourceMapItemsArrayPresent && items.Count != 0) ||
+            (!snapshot.SourceMapTextItemsArrayPresent &&
+                textItems.Count != 0))
+        {
+            throw new CanonicalStateIntegrityException(
+                "Durable map snapshot has child occurrences for a source array recorded as absent.");
+        }
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (items[index].MapSnapshotId != snapshot.Id ||
+                items[index].SourceOrdinal != index)
+            {
+                throw new CanonicalStateIntegrityException(
+                    "Durable map item occurrences are not a complete ordinal sequence for their snapshot.");
+            }
+        }
+
+        for (var index = 0; index < textItems.Count; index++)
+        {
+            if (textItems[index].MapSnapshotId != snapshot.Id ||
+                textItems[index].SourceOrdinal != index)
+            {
+                throw new CanonicalStateIntegrityException(
+                    "Durable map text occurrences are not a complete ordinal sequence for their snapshot.");
+            }
+        }
     }
 
     private static void EnsureSnapshotEquivalent(
