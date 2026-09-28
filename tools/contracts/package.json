@@ -8,10 +8,13 @@
   "scripts": {
     "lint:openapi": "redocly lint ../../.work/contracts/openapi/public-v1.yaml ../../.work/contracts/openapi/compat-warapi-v1.yaml",
     "lint:asyncapi": "asyncapi validate ../../.work/contracts/asyncapi/events-v1.yaml",
-    "lint": "npm run lint:openapi && npm run lint:asyncapi"
+    "lint": "npm run lint:openapi && npm run lint:asyncapi && npm run lint:internal-source",
+    "lint:internal-source": "node validate-internal-source.mjs"
   },
   "devDependencies": {
     "@asyncapi/cli": "6.1.0",
-    "@redocly/cli": "2.53.3"
+    "@redocly/cli": "2.53.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "2.1.1"
   }
 }
