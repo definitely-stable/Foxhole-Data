@@ -36,6 +36,8 @@ public sealed record MapSnapshotDescriptor(
     long? SourceVersion,
     long? SourceLastUpdatedMs,
     DateTimeOffset? SourceUpdatedAt,
+    bool SourceMapItemsArrayPresent,
+    bool SourceMapTextItemsArrayPresent,
     int ItemCount,
     int TextItemCount,
     DateTimeOffset RecordedAt);
@@ -64,6 +66,7 @@ public sealed record MapSnapshotWrite(
     SourceParseRunId SourceParseRunId,
     string NormalizerVersion,
     string CapabilityKey,
+    string SemanticKey,
     DateTimeOffset NormalizationStartedAt,
     DateTimeOffset NormalizationCompletedAt,
     FetchId RepresentationFetchId,
@@ -74,6 +77,8 @@ public sealed record MapSnapshotWrite(
     long? SourceVersion,
     long? SourceLastUpdatedMs,
     DateTimeOffset? SourceUpdatedAt,
+    bool SourceMapItemsArrayPresent,
+    bool SourceMapTextItemsArrayPresent,
     IReadOnlyList<MapItemOccurrenceCandidate> Items,
     IReadOnlyList<MapTextOccurrenceCandidate> TextItems);
 
