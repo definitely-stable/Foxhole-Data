@@ -1,6 +1,6 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion.
+Status: active execution companion. M6-E1 implemented; M6-E2 next.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
@@ -726,8 +726,28 @@ M6-H completion gate + completion record
 
 Each PR must include affected normative docs, executable tests, no M7/M8 scope creep, format/build and all relevant test/smoke gates.
 
-# Immediate next implementation task
+# Current execution checkpoint
 
-Start with M6-E1.
+M6-E1 — implemented:
+
+- `warapi-map-quality-policy.schema.json`;
+- embedded `warapi-map-quality-policy@1.json`;
+- explicit quality-effect to terminal-decision aggregation;
+- exact eight-rule structural shell;
+- fail-closed source registry tied to `warapi-map-taxonomy@1`;
+- runtime semantic validation of rule/effect/parameter identity;
+- Contracts CI validation including exact rule-set/version uniqueness;
+- SourceTests covering stable identity, aggregation, parameters and unknown-version failure.
+
+Next implementation task:
+
+~~~text
+M6-E2
+MapQualityKernel
++ PostgresMapQualityStore
++ atomic quality/accepted-observation transaction
+~~~
+
+M6-E3 follows with the evidence-driven chronology barrier, baseline concurrency tests and Worker integration.
 
 Do not implement mass-NONE thresholds before M6-E3 is green.
