@@ -106,6 +106,8 @@ M6 MUST also retain the stronger defensive rules already established by FoxData:
 
 Research evidence for these decisions is summarized in [research/M6_MAP_QUALITY_2026-09.md](research/M6_MAP_QUALITY_2026-09.md).
 
+Concrete implementation ordering for the remaining M6-E through M6-H work is maintained in [M6_EXECUTION_PLAN.md](M6_EXECUTION_PLAN.md).
+
 ## 3. Architectural boundary
 
 M6 extends the existing pipeline as:
