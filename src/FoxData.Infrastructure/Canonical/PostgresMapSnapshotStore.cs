@@ -96,28 +96,15 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
             write,
             cancellationToken);
 
-        var snapshot = await RecordSnapshotAsync(
+        var snapshotWrite = await RecordSnapshotAsync(
             connection,
             transaction,
             normalizationRun,
             write,
             cancellationToken);
+        var snapshot = snapshotWrite.Snapshot;
 
-        var existingItems = await GetItemsAsync(
-            connection,
-            transaction,
-            snapshot.Id,
-            cancellationToken);
-        var existingTextItems = await GetTextItemsAsync(
-            connection,
-            transaction,
-            snapshot.Id,
-            cancellationToken);
-
-        if (existingItems.Count == 0 &&
-            existingTextItems.Count == 0 &&
-            snapshot.ItemCount == write.Items.Count &&
-            snapshot.TextItemCount == write.TextItems.Count)
+        if (snapshotWrite.Created)
         {
             await InsertItemsAsync(
                 connection,
@@ -131,18 +118,18 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
                 snapshot.Id,
                 write.TextItems,
                 cancellationToken);
-
-            existingItems = await GetItemsAsync(
-                connection,
-                transaction,
-                snapshot.Id,
-                cancellationToken);
-            existingTextItems = await GetTextItemsAsync(
-                connection,
-                transaction,
-                snapshot.Id,
-                cancellationToken);
         }
+
+        var existingItems = await GetItemsAsync(
+            connection,
+            transaction,
+            snapshot.Id,
+            cancellationToken);
+        var existingTextItems = await GetTextItemsAsync(
+            connection,
+            transaction,
+            snapshot.Id,
+            cancellationToken);
 
         EnsureOccurrencesEquivalent(
             snapshot,
@@ -286,7 +273,7 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
         return existing;
     }
 
-    private static async Task<MapSnapshotDescriptor> RecordSnapshotAsync(
+    private static async Task<(MapSnapshotDescriptor Snapshot, bool Created)> RecordSnapshotAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         NormalizationRunDescriptor normalizationRun,
@@ -354,7 +341,7 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
         var created = await ReadSnapshotAsync(insert, cancellationToken);
         if (created is not null)
         {
-            return created;
+            return (created, true);
         }
 
         var existing = await GetSnapshotByNormalizationRunAsync(
@@ -370,7 +357,7 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
             normalizationRun,
             write);
 
-        return existing;
+        return (existing, false);
     }
 
     private static async Task InsertItemsAsync(
