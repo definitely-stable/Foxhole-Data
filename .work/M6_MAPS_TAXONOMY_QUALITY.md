@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A implemented; next slice M6-B.
+Status: in progress. M6-A and M6-B implemented; next slice M6-C.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -240,6 +240,8 @@ Minimum fields:
 - sourceVersion nullable;
 - sourceLastUpdatedMs nullable;
 - sourceUpdatedAt nullable when safely representable;
+- sourceMapItemsArrayPresent;
+- sourceMapTextItemsArrayPresent;
 - itemCount;
 - textItemCount;
 - recordedAt.
@@ -379,26 +381,14 @@ M6 runtime observations are immutable.
 
 No M6 table contains ObjectiveId.
 
-### 5.7 Array-presence extension required by M6-B/C
+### 5.7 Array-presence preservation — delivered by M6-B
 
-The current source DTO intentionally permits `mapItems` and `mapTextItems` to deserialize as null for tolerant parsing.
-
-M6 MUST preserve the distinction between:
-
-~~~text
-mapItems: []
-~~~
-
-and a representation in which the array was null or absent.
-
-The M6-A foundation currently stores occurrence rows plus counts, so both cases would otherwise collapse to count zero.
-
-Before M6-B is considered complete, extend the snapshot contract/schema with deterministic source-shape metadata equivalent to:
+M6-B extends the M6-A snapshot contract and persistence schema with:
 
 - `sourceMapItemsArrayPresent`;
 - `sourceMapTextItemsArrayPresent`.
 
-Exact names may follow repository conventions, but the semantics are required.
+The current tolerant source DTO permits `mapItems` and `mapTextItems` to deserialize as null. Counts alone cannot distinguish a present empty array from a null/missing array, so the shape flags are durable source-derived metadata.
 
 Rules:
 
@@ -408,9 +398,9 @@ Rules:
 - empty-but-present array remains flag true with count = 0;
 - parser-incompatible non-array shapes remain parser rejection and do not create a snapshot.
 
-This gives M6-E quality enough information to distinguish a legitimate empty array from missing/null source structure without rereading mutable interpretation state.
+Both Application validation and PostgreSQL CHECK constraints enforce these invariants.
 
-M6 does not need to distinguish explicit JSON null from a missing property in v1; both are structurally absent at normalization level. Raw bytes and structural fingerprint preserve the original distinction for future parser versions.
+M6 v1 deliberately does not distinguish explicit JSON null from a missing property at normalization level. Exact raw bytes and the structural fingerprint remain available for a future parser/normalizer version that needs that distinction.
 
 ## 6. Storage and indexing constraints
 
@@ -1215,30 +1205,58 @@ Acceptance:
 
 ### M6-B — Static map normalization
 
-Goal: deterministically materialize body-bearing static representations as normalized source snapshots.
+Status: complete.
 
-Implement:
+Goal: deterministically materialize body-bearing static representations as normalized source snapshots without requiring canonical WarRegion context.
+
+Delivered:
 
 1. `warapi-static-map-normalizer@1`;
-2. exact SourceParseRun replay and metadata verification;
-3. exact sourceMapName extraction from `map-static/<name>`;
-4. map-context resolution through M5;
-5. atomic snapshot + occurrence write;
-6. raw sourceRegionId/scorched/version/lastUpdated preservation;
-7. nullable/open item/text fields;
-8. no quality acceptance yet;
-9. Worker integration after durable static parse;
-10. local replay tests.
+2. exact SourceParseRunId-based replay from durable body-bearing evidence;
+3. fail-closed verification of source/endpoint capability, semantic key, adapter/parser/fingerprint identity, parse outcome, structural fingerprint, unknown counters and decoded length;
+4. exact case-sensitive sourceMapName extraction from `map-static/<name>`;
+5. source-local normalization independent from M5 War/WarRegion availability;
+6. atomic PostgreSQL transaction for:
+   - normalization_run;
+   - map_snapshot;
+   - all map item occurrences;
+   - all map text occurrences;
+7. set-based PostgreSQL occurrence insertion using `unnest`, avoiding one round-trip per source occurrence;
+8. exact source occurrence multiplicity and source-array ordinal preservation without value-based deduplication;
+9. raw preservation of sourceRegionId, scorchedVictoryTowns, source version, raw lastUpdated, teamId, iconType, x/y, flags, viewDirection and text-marker fields;
+10. safe conversion of source lastUpdated to UTC only when representable; unrepresentable raw milliseconds remain durable while sourceUpdatedAt is null;
+11. durable empty-array versus null/missing-array metadata and database constraints;
+12. terminal rejected normalization for unsuccessful source parses with no fabricated map snapshot;
+13. live Worker wiring immediately after the durable static SourceParseRun is recorded;
+14. idempotent replay returning the existing normalization/snapshot/occurrence graph;
+15. no extra source request, no taxonomy interpretation, no quality decision and no ObjectiveId.
+
+The generic `PostgresMapSnapshotStore` introduced here is intentionally reusable by M6-C dynamic normalization. It revalidates exact source-parse provenance inside the same transaction that commits normalized content.
+
+Implementation verification head `aa45b8ce1b1ba7524d257c1e350a93b8b63f3314` passed:
+
+- Release build and CLI bootstrap;
+- 28 unit tests;
+- 93 integration tests;
+- 15 recovery tests;
+- 114 source tests;
+- 4 contract tests;
+- 254 tests total, 0 failed, 0 skipped;
+- Docker Compose migration/API readiness/OpenAPI/Worker smoke;
+- Contracts workflow;
+- Dependency Review.
 
 Acceptance:
 
-- identical replay returns same snapshot/children;
-- static representation changes create new snapshots;
-- duplicate items remain duplicated;
-- no item/objective identity inferred;
-- no new upstream request required for recovery;
-- snapshot normalization succeeds from durable source evidence even when WarRegion context is temporarily unavailable;
-- empty source arrays remain distinguishable from null/missing arrays.
+- identical replay returns the same snapshot/children — verified;
+- static representation changes remain separate snapshots — supported by representation identity and append-only normalization;
+- duplicate items remain duplicated — verified;
+- unknown/open values survive normalization — verified;
+- no item/objective identity is inferred — verified by contract boundary;
+- static normalization does not require WarRegion context — verified;
+- empty arrays remain distinguishable from null/missing arrays — verified;
+- malformed/unsuccessful source parse creates terminal rejection but no snapshot — verified;
+- 304 does not create a duplicate parse or normalized snapshot because normalization is invoked only for a new body-bearing SourceParseRun — preserved.
 
 ### M6-C — Dynamic map normalization
 
