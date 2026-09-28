@@ -501,6 +501,416 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task StaticMapNormalizationPersistsSourceSnapshotWithoutWarContext()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-static-normalization");
+
+        var firstEndpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+        var secondEndpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/MarbanHollow",
+            TestContext.Current.CancellationToken);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """
+                    {
+                      "regionId":-7,
+                      "scorchedVictoryTowns":-2,
+                      "mapItems":[
+                        {
+                          "teamId":"FUTURE_TEAM",
+                          "iconType":97,
+                          "x":0.5,
+                          "y":0.25,
+                          "flags":64,
+                          "viewDirection":90
+                        },
+                        {
+                          "teamId":"FUTURE_TEAM",
+                          "iconType":97,
+                          "x":0.5,
+                          "y":0.25,
+                          "flags":64,
+                          "viewDirection":90
+                        }
+                      ],
+                      "mapTextItems":[],
+                      "lastUpdated":9223372036854775807,
+                      "version":-3
+                    }
+                    """),
+                "\"static-deadlands-v1\"",
+                "max-age=21600"));
+
+        var firstJob = await fixture.EnqueueAndClaimAsync(
+            firstEndpoint.Resource.Id,
+            "test:m6-static:first");
+        await fixture.Executor.ExecuteAsync(
+            firstJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            firstEndpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddSeconds(1),
+                HttpStatusCode.OK,
+                Encoding.UTF8.GetBytes(
+                    """
+                    {
+                      "regionId":2,
+                      "scorchedVictoryTowns":0,
+                      "lastUpdated":1000,
+                      "version":1
+                    }
+                    """),
+                "\"static-marban-v1\"",
+                "max-age=21600"));
+
+        var secondJob = await fixture.EnqueueAndClaimAsync(
+            secondEndpoint.Resource.Id,
+            "test:m6-static:second");
+        await fixture.Executor.ExecuteAsync(
+            secondJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            secondEndpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        await using (var snapshotCommand =
+            fixture.DataSource.CreateCommand(
+                """
+                SELECT
+                    source_map_name,
+                    source_region_id,
+                    source_scorched_victory_towns,
+                    source_version,
+                    source_last_updated_ms,
+                    source_updated_at,
+                    source_map_items_array_present,
+                    source_map_text_items_array_present,
+                    item_count,
+                    text_item_count
+                FROM evidence.map_snapshots
+                ORDER BY source_map_name;
+                """))
+        await using (var reader = await snapshotCommand.ExecuteReaderAsync(
+            TestContext.Current.CancellationToken))
+        {
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal("DeadLandsHex", reader.GetString(0));
+            Assert.Equal(-7, reader.GetInt32(1));
+            Assert.Equal(-2, reader.GetInt32(2));
+            Assert.Equal(-3L, reader.GetInt64(3));
+            Assert.Equal(long.MaxValue, reader.GetInt64(4));
+            Assert.True(reader.IsDBNull(5));
+            Assert.True(reader.GetBoolean(6));
+            Assert.True(reader.GetBoolean(7));
+            Assert.Equal(2, reader.GetInt32(8));
+            Assert.Equal(0, reader.GetInt32(9));
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal("MarbanHollow", reader.GetString(0));
+            Assert.False(reader.GetBoolean(6));
+            Assert.False(reader.GetBoolean(7));
+            Assert.Equal(0, reader.GetInt32(8));
+            Assert.Equal(0, reader.GetInt32(9));
+
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        await using (var occurrenceCommand =
+            fixture.DataSource.CreateCommand(
+                """
+                SELECT
+                    raw_team_id,
+                    raw_icon_type,
+                    x,
+                    y,
+                    raw_flags,
+                    raw_view_direction
+                FROM evidence.map_item_occurrences
+                ORDER BY source_ordinal;
+                """))
+        await using (var reader = await occurrenceCommand.ExecuteReaderAsync(
+            TestContext.Current.CancellationToken))
+        {
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal("FUTURE_TEAM", reader.GetString(0));
+            Assert.Equal(97, reader.GetInt32(1));
+            Assert.Equal(0.5d, reader.GetDouble(2));
+            Assert.Equal(0.25d, reader.GetDouble(3));
+            Assert.Equal(64, reader.GetInt32(4));
+            Assert.Equal(90, reader.GetInt32(5));
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal("FUTURE_TEAM", reader.GetString(0));
+            Assert.Equal(97, reader.GetInt32(1));
+
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        await using (var contextCommand =
+            fixture.DataSource.CreateCommand(
+                "SELECT COUNT(*) FROM runtime.war_regions;"))
+        {
+            Assert.Equal(
+                0L,
+                (long)(await contextCommand.ExecuteScalarAsync(
+                    TestContext.Current.CancellationToken))!);
+        }
+
+        var firstEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            firstEndpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(firstEvidence?.RepresentationFetch);
+
+        var parseRun = await fixture.ParseRuns.GetAsync(
+            firstEvidence.RepresentationFetch.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            WarApiVersions.Parser,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(parseRun);
+
+        var replay = await fixture.StaticMapNormalization.NormalizeAsync(
+            parseRun.Id,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            WarApiStaticMapNormalizationStatus.Normalized,
+            replay.Status);
+        Assert.NotNull(replay.Snapshot);
+
+        await using var countCommand = fixture.DataSource.CreateCommand(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM evidence.normalization_runs
+                 WHERE normalizer_version = 'warapi-static-map-normalizer@1'),
+                (SELECT COUNT(*) FROM evidence.map_snapshots),
+                (SELECT COUNT(*) FROM evidence.map_item_occurrences);
+            """);
+        await using var countReader = await countCommand.ExecuteReaderAsync(
+            TestContext.Current.CancellationToken);
+        Assert.True(await countReader.ReadAsync(
+            TestContext.Current.CancellationToken));
+        Assert.Equal(2L, countReader.GetInt64(0));
+        Assert.Equal(2L, countReader.GetInt64(1));
+        Assert.Equal(2L, countReader.GetInt64(2));
+    }
+
+    [Fact]
+    public async Task StaticMapRevisionCreatesSnapshotBut304DoesNotDuplicateIt()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-static-revision");
+
+        var endpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var firstBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[],
+              "mapTextItems":[],
+              "lastUpdated":1000,
+              "version":1
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                firstBody,
+                "\"static-v1\"",
+                "max-age=21600"));
+
+        var firstJob = await fixture.EnqueueAndClaimAsync(
+            endpoint.Resource.Id,
+            "test:m6-static-revision:first");
+        await fixture.Executor.ExecuteAsync(
+            firstJob,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var firstEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(firstEvidence);
+        await fixture.MakeSuccessorAvailableAsync(
+            firstEvidence.CurrentFetch.Id);
+
+        var secondBody = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId":1,
+              "mapItems":[
+                {
+                  "teamId":"NONE",
+                  "iconType":20,
+                  "x":0.4,
+                  "y":0.6,
+                  "flags":0
+                }
+              ],
+              "mapTextItems":[],
+              "lastUpdated":2000,
+              "version":2
+            }
+            """);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddHours(6),
+                HttpStatusCode.OK,
+                secondBody,
+                "\"static-v2\"",
+                "max-age=21600"));
+
+        var secondClaim =
+            await fixture.Ingestion.ClaimNextForSourceAsync(
+                fixture.WorkerId,
+                WarApiCatalog.SourceKey,
+                TimeSpan.FromMinutes(2),
+                TestContext.Current.CancellationToken);
+        Assert.True(secondClaim.Claimed);
+        Assert.Equal(endpoint.Resource.Id, secondClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            secondClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        var secondEvidence = await fixture.EvidenceReader.GetCurrentAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(secondEvidence);
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.source_parse_runs"));
+
+        await fixture.MakeSuccessorAvailableAsync(
+            secondEvidence.CurrentFetch.Id);
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now.AddHours(12),
+                HttpStatusCode.NotModified,
+                body: null,
+                "\"static-v2\"",
+                "max-age=21600"));
+
+        var thirdClaim =
+            await fixture.Ingestion.ClaimNextForSourceAsync(
+                fixture.WorkerId,
+                WarApiCatalog.SourceKey,
+                TimeSpan.FromMinutes(2),
+                TestContext.Current.CancellationToken);
+        Assert.True(thirdClaim.Claimed);
+        Assert.Equal(endpoint.Resource.Id, thirdClaim.Job!.EndpointId);
+
+        await fixture.Executor.ExecuteAsync(
+            thirdClaim.Job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.map_snapshots"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.source_parse_runs"));
+        Assert.Equal(
+            2L,
+            await fixture.CountRowsAsync(
+                "evidence.normalization_runs",
+                "normalizer_version = 'warapi-static-map-normalizer@1'"));
+    }
+
+    [Fact]
+    public async Task StaticMapFailedParseRecordsRejectedNormalizationWithoutSnapshot()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            "m6-static-rejected");
+
+        var endpoint = await fixture.Registry.RegisterEndpointAsync(
+            fixture.Shard.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        fixture.Transport.Enqueue(
+            CreateResponse(
+                fixture.Now,
+                HttpStatusCode.OK,
+                """{"regionId":"""u8.ToArray(),
+                "\"static-bad\"",
+                "max-age=21600"));
+
+        var job = await fixture.EnqueueAndClaimAsync(
+            endpoint.Resource.Id,
+            "test:m6-static:bad");
+        await fixture.Executor.ExecuteAsync(
+            job,
+            fixture.WorkerId,
+            TestContext.Current.CancellationToken);
+        await fixture.Reconciler.ReconcileAsync(
+            endpoint.Resource.Id,
+            TestContext.Current.CancellationToken);
+
+        await using var command = fixture.DataSource.CreateCommand(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM evidence.normalization_runs
+                 WHERE normalizer_version = 'warapi-static-map-normalizer@1'
+                   AND outcome = 'rejected'
+                   AND error_code = 'source_parse_unsuccessful'),
+                (SELECT COUNT(*) FROM evidence.map_snapshots);
+            """);
+        await using var reader = await command.ExecuteReaderAsync(
+            TestContext.Current.CancellationToken);
+        Assert.True(await reader.ReadAsync(
+            TestContext.Current.CancellationToken));
+        Assert.Equal(1L, reader.GetInt64(0));
+        Assert.Equal(0L, reader.GetInt64(1));
+    }
+
+    [Fact]
     public async Task M4ProbeAcceleratesSelectedMapButCacheStillControlsSuccessor()
     {
         var probe = new WarApiMeasurementProbeProfile(
@@ -931,6 +1341,14 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 normalization,
                 options,
                 timeProvider);
+        var staticMapNormalization =
+            new WarApiStaticMapNormalizationCoordinator(
+                canonicalEvidence,
+                new MapSnapshotKernel(
+                    new PostgresMapSnapshotStore(dataSource)),
+                normalization,
+                options,
+                timeProvider);
 
         var resolver = new WarApiRegistryResolver(registry);
         var rateGovernor = new WarApiOutboundRateGovernor(
@@ -961,6 +1379,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             warNormalization,
             regionNormalization,
             warReportNormalization,
+            staticMapNormalization,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
@@ -974,6 +1393,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             scheduleDecisions,
             executor,
             reconciler,
+            staticMapNormalization,
             transport,
             shard.Resource,
             war.Resource,
@@ -1112,6 +1532,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         ISourceScheduleDecisionStore scheduleDecisions,
         WarApiAttemptExecutor executor,
         WarApiReconciler reconciler,
+        WarApiStaticMapNormalizationCoordinator staticMapNormalization,
         QueueTransport transport,
         ShardDescriptor shard,
         EndpointDescriptor warEndpoint,
@@ -1129,6 +1550,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             scheduleDecisions;
         public WarApiAttemptExecutor Executor { get; } = executor;
         public WarApiReconciler Reconciler { get; } = reconciler;
+        public WarApiStaticMapNormalizationCoordinator StaticMapNormalization { get; } =
+            staticMapNormalization;
         public QueueTransport Transport { get; } = transport;
         public ShardDescriptor Shard { get; } = shard;
         public EndpointDescriptor WarEndpoint { get; } = warEndpoint;
@@ -1276,6 +1699,18 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 attemptId,
                 TestContext.Current.CancellationToken)
                 ?? throw new InvalidOperationException("Attempt disappeared.");
+        }
+
+        public async Task<long> CountRowsAsync(
+            string table,
+            string? predicate = null)
+        {
+            var sql = predicate is null
+                ? $"SELECT COUNT(*) FROM {table};"
+                : $"SELECT COUNT(*) FROM {table} WHERE {predicate};";
+            await using var command = DataSource.CreateCommand(sql);
+            return (long)(await command.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!;
         }
 
         public async Task<long> CountPayloadsAsync()

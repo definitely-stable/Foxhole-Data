@@ -38,6 +38,10 @@ public sealed class MapSnapshotKernel(IMapSnapshotStore store)
             128,
             nameof(write.CapabilityKey));
         ValidateRequiredText(
+            write.SemanticKey,
+            256,
+            nameof(write.SemanticKey));
+        ValidateRequiredText(
             write.SourceMapName,
             256,
             nameof(write.SourceMapName));
@@ -63,6 +67,22 @@ public sealed class MapSnapshotKernel(IMapSnapshotStore store)
 
         ValidateItemOrdinals(write.Items);
         ValidateTextOrdinals(write.TextItems);
+
+        if (!write.SourceMapItemsArrayPresent &&
+            write.Items.Count != 0)
+        {
+            throw new ArgumentException(
+                "Map item occurrences cannot exist when the source mapItems array was null or absent.",
+                nameof(write));
+        }
+
+        if (!write.SourceMapTextItemsArrayPresent &&
+            write.TextItems.Count != 0)
+        {
+            throw new ArgumentException(
+                "Map text occurrences cannot exist when the source mapTextItems array was null or absent.",
+                nameof(write));
+        }
 
         return store.RecordAcceptedAsync(
             write,

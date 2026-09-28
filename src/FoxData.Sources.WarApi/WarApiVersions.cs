@@ -10,6 +10,7 @@ public static class WarApiVersions
     public const string WarNormalizer = "warapi-war-normalizer@1";
     public const string RegionNormalizer = "warapi-region-normalizer@1";
     public const string WarReportNormalizer = "warapi-war-report-normalizer@1";
+    public const string StaticMapNormalizer = "warapi-static-map-normalizer@1";
     public const string CoverageReprocessor = "warapi-coverage-reprocessor@1";
 
     public static string SchedulingPolicy(

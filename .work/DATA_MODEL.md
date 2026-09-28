@@ -232,7 +232,7 @@ Immutable accepted observations:
 
 M6 separates representation-derived normalized content from war-scoped quality-accepted observations.
 
-Planned derived evidence:
+M6-A/B implemented derived evidence:
 
 `map_snapshots`:
 
@@ -247,8 +247,8 @@ Planned derived evidence:
 - sourceVersion nullable;
 - sourceLastUpdatedMs nullable;
 - sourceUpdatedAt nullable;
-- sourceMapItemsArrayPresent (M6-B extension);
-- sourceMapTextItemsArrayPresent (M6-B extension);
+- sourceMapItemsArrayPresent;
+- sourceMapTextItemsArrayPresent;
 - itemCount;
 - textItemCount;
 - recordedAt.
@@ -275,7 +275,7 @@ Planned derived evidence:
 
 The occurrence ordinal is representation-local provenance and MUST NOT become objective identity.
 
-M6-B must distinguish an empty-but-present source array from a null/missing source array. Counts alone are insufficient because both would otherwise appear as zero occurrences.
+M6-B persists source-array presence separately from occurrence counts, so an empty-but-present array remains distinguishable from a null/missing array.
 
 Planned quality state:
 

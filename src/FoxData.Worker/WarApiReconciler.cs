@@ -23,6 +23,7 @@ public sealed class WarApiReconciler(
     WarApiWarNormalizationCoordinator warNormalization,
     WarApiRegionNormalizationCoordinator regionNormalization,
     WarApiWarReportNormalizationCoordinator warReportNormalization,
+    WarApiStaticMapNormalizationCoordinator staticMapNormalization,
     TimeProvider timeProvider,
     ILogger<WarApiReconciler> logger)
 {
@@ -113,6 +114,14 @@ public sealed class WarApiReconciler(
                     WarApiCapabilities.RegionWarReport)
             {
                 await warReportNormalization.NormalizeAsync(
+                    parse.Run.Id,
+                    cancellationToken);
+            }
+
+            if (context.SourceEndpoint.Capability ==
+                    WarApiCapabilities.StaticMapState)
+            {
+                await staticMapNormalization.NormalizeAsync(
                     parse.Run.Id,
                     cancellationToken);
             }
