@@ -1341,11 +1341,19 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 normalization,
                 options,
                 timeProvider);
+        var mapSnapshotKernel = new MapSnapshotKernel(
+            new PostgresMapSnapshotStore(dataSource));
         var staticMapNormalization =
             new WarApiStaticMapNormalizationCoordinator(
                 canonicalEvidence,
-                new MapSnapshotKernel(
-                    new PostgresMapSnapshotStore(dataSource)),
+                mapSnapshotKernel,
+                normalization,
+                options,
+                timeProvider);
+        var dynamicMapNormalization =
+            new WarApiDynamicMapNormalizationCoordinator(
+                canonicalEvidence,
+                mapSnapshotKernel,
                 normalization,
                 options,
                 timeProvider);
@@ -1380,6 +1388,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             regionNormalization,
             warReportNormalization,
             staticMapNormalization,
+            dynamicMapNormalization,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
@@ -1394,6 +1403,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             executor,
             reconciler,
             staticMapNormalization,
+            dynamicMapNormalization,
             transport,
             shard.Resource,
             war.Resource,
@@ -1533,6 +1543,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         WarApiAttemptExecutor executor,
         WarApiReconciler reconciler,
         WarApiStaticMapNormalizationCoordinator staticMapNormalization,
+        WarApiDynamicMapNormalizationCoordinator dynamicMapNormalization,
         QueueTransport transport,
         ShardDescriptor shard,
         EndpointDescriptor warEndpoint,
@@ -1552,6 +1563,8 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         public WarApiReconciler Reconciler { get; } = reconciler;
         public WarApiStaticMapNormalizationCoordinator StaticMapNormalization { get; } =
             staticMapNormalization;
+        public WarApiDynamicMapNormalizationCoordinator DynamicMapNormalization { get; } =
+            dynamicMapNormalization;
         public QueueTransport Transport { get; } = transport;
         public ShardDescriptor Shard { get; } = shard;
         public EndpointDescriptor WarEndpoint { get; } = warEndpoint;
