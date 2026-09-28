@@ -1026,15 +1026,13 @@ A successful accepted QualityRun cannot exist without its runtime map observatio
 
 Quality evaluation that depends on a prior accepted baseline must prevent two concurrent candidates for the same WarRegion/capability from silently selecting inconsistent baselines.
 
-M6-E must choose and test one of:
+M6-E must choose and test one PostgreSQL-enforced serialization strategy.
 
-- PostgreSQL advisory/row lock scoped to WarRegion + capability;
-- SERIALIZABLE transaction with deterministic retry at the durable work boundary;
-- another PostgreSQL-enforced equivalent.
+The current execution plan selects `SELECT ... FOR UPDATE` on the target `runtime.war_regions` row as the v1 serialization boundary. This deliberately serializes static and dynamic quality acceptance for one WarRegion until measurements justify a finer scope.
 
 Do not rely on in-process locks because Worker process death and future horizontal workers must remain safe.
 
-The implementation decision and measured contention must be documented in M6-E. An ADR is required only if this introduces a new cross-system infrastructure guarantee.
+M6-E must prove the row-lock strategy under concurrent integration tests and record measured contention. If measurements show unacceptable serialization, a later version may move to transaction-level advisory locking or SERIALIZABLE retry, but that change must preserve the same chronology/baseline semantics. An ADR is required only if this introduces a new cross-system infrastructure guarantee.
 
 ## 21. Observability
 
