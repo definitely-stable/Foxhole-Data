@@ -931,6 +931,14 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 normalization,
                 options,
                 timeProvider);
+        var staticMapNormalization =
+            new WarApiStaticMapNormalizationCoordinator(
+                canonicalEvidence,
+                new MapSnapshotKernel(
+                    new PostgresMapSnapshotStore(dataSource)),
+                normalization,
+                options,
+                timeProvider);
 
         var resolver = new WarApiRegistryResolver(registry);
         var rateGovernor = new WarApiOutboundRateGovernor(
@@ -961,6 +969,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             warNormalization,
             regionNormalization,
             warReportNormalization,
+            staticMapNormalization,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 
