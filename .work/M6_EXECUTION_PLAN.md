@@ -1,6 +1,6 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E1 implemented; M6-E2 next.
+Status: active execution companion. M6-E1 and M6-E2 implemented; M6-E3 next.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
