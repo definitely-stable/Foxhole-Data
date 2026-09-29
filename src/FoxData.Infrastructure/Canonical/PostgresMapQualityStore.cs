@@ -430,6 +430,12 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             throw new CanonicalStateIntegrityException(
                 "Map quality WarRegion source map identity differs from the normalized snapshot.");
         }
+
+        if (warRegion.FirstSeenAt > validation.RetrievedAt)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Map quality validation predates the proven WarRegion membership boundary.");
+        }
     }
 
     private static async Task<MapObservationDescriptor?>
