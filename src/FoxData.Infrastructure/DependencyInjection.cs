@@ -2,6 +2,7 @@ using System.Globalization;
 using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
+using FoxData.Application.Quality;
 using FoxData.Application.Sources;
 using FoxData.Infrastructure.Canonical;
 using FoxData.Infrastructure.Configuration;
