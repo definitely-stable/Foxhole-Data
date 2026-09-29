@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-D implemented; next slice M6-E.
+Status: in progress. M6-A through M6-D and M6-E1/E2 implemented; M6-E3 next.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
