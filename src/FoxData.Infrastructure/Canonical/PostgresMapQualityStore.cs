@@ -295,6 +295,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 validation_attempt.outcome_code,
                 representation_fetch.endpoint_id,
                 representation_fetch.payload_id,
+                representation_attempt.outcome_code,
                 endpoint.shard_id,
                 endpoint.capability_key,
                 endpoint.semantic_key
@@ -303,6 +304,8 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 ON validation_attempt.id = validation_fetch.attempt_id
             INNER JOIN evidence.fetches AS representation_fetch
                 ON representation_fetch.id = @representation_fetch_id
+            INNER JOIN ingest.attempts AS representation_attempt
+                ON representation_attempt.id = representation_fetch.attempt_id
             INNER JOIN sources.endpoints AS endpoint
                 ON endpoint.id = validation_fetch.endpoint_id
             WHERE validation_fetch.id = @validation_fetch_id;
@@ -341,9 +344,10 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             reader.IsDBNull(8)
                 ? null
                 : new PayloadId(reader.GetGuid(8)),
-            new ShardId(reader.GetGuid(9)),
-            reader.GetString(10),
-            reader.GetString(11));
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            new ShardId(reader.GetGuid(10)),
+            reader.GetString(11),
+            reader.GetString(12));
     }
 
     private static void EnsureBindingProvenance(
@@ -373,10 +377,14 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         if (!string.Equals(
                 validation.AttemptOutcomeCode,
                 "captured_current",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                validation.RepresentationAttemptOutcomeCode,
+                "captured_current",
                 StringComparison.Ordinal))
         {
             throw new CanonicalStateIntegrityException(
-                "Map quality binding requires authoritative captured_current validation evidence.");
+                "Map quality binding requires authoritative captured_current validation and representation evidence.");
         }
 
         if (validation.EndpointId !=
@@ -770,6 +778,12 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         MapSnapshotDescriptor snapshot,
         WarRegionDescriptor warRegion)
     {
+        if (snapshot.SourceRegionId is < 0)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Accepted map quality cannot enrich WarRegion with a negative sourceRegionId.");
+        }
+
         if (snapshot.SourceRegionId is { } supplied &&
             warRegion.SourceRegionId is { } existing &&
             supplied != existing)
@@ -1332,6 +1346,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         string? AttemptOutcomeCode,
         EndpointId RepresentationEndpointId,
         PayloadId? RepresentationPayloadId,
+        string? RepresentationAttemptOutcomeCode,
         ShardId ShardId,
         string CapabilityKey,
         string SemanticKey);
