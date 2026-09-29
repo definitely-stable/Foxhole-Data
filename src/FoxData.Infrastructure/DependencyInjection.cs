@@ -89,6 +89,8 @@ public static class DependencyInjection
         services.AddScoped<WarReportCanonicalKernel>();
         services.AddScoped<IMapSnapshotStore, PostgresMapSnapshotStore>();
         services.AddScoped<MapSnapshotKernel>();
+        services.AddScoped<IMapQualityStore, PostgresMapQualityStore>();
+        services.AddScoped<MapQualityKernel>();
         services.AddScoped<ICoverageStore, PostgresCoverageStore>();
 
         services.AddSingleton<PostgresHealthCheck>();
