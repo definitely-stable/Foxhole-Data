@@ -1,5 +1,7 @@
 using FoxData.Application.Canonical;
+using FoxData.Application.Quality;
 using FoxData.Core.Evidence;
+using FoxData.Core.Quality;
 using FoxData.Core.Runtime;
 
 namespace FoxData.UnitTests;
@@ -92,6 +94,9 @@ public sealed class MapQualityKernelTests
             MapQualityDecision.Accepted,
             now,
             now.AddMilliseconds(1),
+            MapSnapshotKind.Dynamic,
+            now,
+            null,
             [CreateFinding()]);
 
     private static MapQualityFindingCandidate CreateFinding() =>
@@ -99,7 +104,7 @@ public sealed class MapQualityKernelTests
             "taxonomy.unknown-icon",
             "taxonomy.unknown-icon@1",
             "taxonomy.unknown-icon-config@1",
-            MapQualityEffect.Informational,
+            "informational",
             null,
             null,
             "unknown_icon",
@@ -136,15 +141,6 @@ public sealed class MapQualityKernelTests
                 write.StartedAt,
                 write.CompletedAt,
                 write.CompletedAt);
-            var warRegion = new WarRegionDescriptor(
-                write.WarRegionId,
-                WarId.New(),
-                RegionId.New(),
-                "DeadLandsHex",
-                null,
-                write.StartedAt,
-                write.StartedAt,
-                write.StartedAt);
             MapObservationDescriptor? observation =
                 write.Decision == MapQualityDecision.Accepted
                     ? new MapObservationDescriptor(
@@ -153,9 +149,9 @@ public sealed class MapQualityKernelTests
                         write.MapSnapshotId,
                         run.Id,
                         write.ValidationFetchId,
-                        MapSnapshotKind.Dynamic,
-                        write.CompletedAt,
-                        null,
+                        write.Kind,
+                        write.ObservedAt,
+                        write.SourceUpdatedAt,
                         write.CompletedAt)
                     : null;
 
@@ -163,8 +159,7 @@ public sealed class MapQualityKernelTests
                 new MapQualityResult(
                     run,
                     [],
-                    observation,
-                    warRegion));
+                    observation));
         }
     }
 }
