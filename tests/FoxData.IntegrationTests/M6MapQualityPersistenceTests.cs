@@ -2,6 +2,7 @@ using System.Text;
 using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
+using FoxData.Application.Quality;
 using FoxData.Application.Sources;
 using FoxData.Core.Evidence;
 using FoxData.Core.Ingestion;
@@ -48,8 +49,12 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
         Assert.NotNull(first.Observation);
         Assert.Equal(first.Run.Id, replay.Run.Id);
         Assert.Equal(first.Observation!.Id, replay.Observation!.Id);
-        Assert.Equal(7, first.WarRegion.SourceRegionId);
-        Assert.Equal(7, replay.WarRegion.SourceRegionId);
+        Assert.Equal(
+            7,
+            await fixture.ReadWarRegionSourceRegionIdAsync());
+        Assert.Equal(
+            7,
+            await fixture.ReadWarRegionSourceRegionIdAsync());
         Assert.Equal(
             snapshot.Snapshot.RepresentationFetchId,
             first.Observation.ValidationFetchId);
@@ -82,7 +87,8 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
             TestContext.Current.CancellationToken);
 
         Assert.Null(result.Observation);
-        Assert.Null(result.WarRegion.SourceRegionId);
+        Assert.Null(
+            await fixture.ReadWarRegionSourceRegionIdAsync());
         Assert.Equal(1L, await fixture.CountAsync(
             "quality.map_quality_runs"));
         Assert.Equal(0L, await fixture.CountAsync(
@@ -320,6 +326,8 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
         : IAsyncDisposable
     {
         private int _sequence;
+        private readonly Dictionary<MapSnapshotId, DateTimeOffset>
+            _retrievedAtBySnapshot = [];
 
         public NpgsqlDataSource DataSource { get; } = dataSource;
         public WarRegionId WarRegionId { get; } = warRegionId;
@@ -334,7 +342,7 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
         {
             _sequence++;
             var body = Encoding.UTF8.GetBytes(
-                $"{{\"regionId\":{(sourceRegionId?.ToString() ?? "null")},\"mapItems\":[]}}");
+                $"{{\"regionId\":{(sourceRegionId?.ToString() ?? "null")},\"mapItems\":[{{\"teamId\":\"{rawTeamId}\",\"iconType\":20,\"x\":0.5,\"y\":0.5,\"flags\":0}}],\"mapTextItems\":[]}}");
 
             var capture = await CaptureAsync(
                 $"{key}-{_sequence}",
@@ -361,7 +369,7 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
                     DecodedByteLength: body.LongLength),
                 TestContext.Current.CancellationToken);
 
-            return await snapshots.RecordAcceptedAsync(
+            var snapshot = await snapshots.RecordAcceptedAsync(
                 new MapSnapshotWrite(
                     parse.Id,
                     "warapi-dynamic-map-normalizer@1",
@@ -391,13 +399,21 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
                     ],
                     []),
                 TestContext.Current.CancellationToken);
+
+            _retrievedAtBySnapshot[snapshot.Snapshot.Id] =
+                retrievedAt;
+            return snapshot;
         }
 
         public MapQualityWrite CreateQualityWrite(
             MapSnapshotResult snapshot,
             MapQualityDecision decision,
-            MapObservationId? baseline) =>
-            new(
+            MapObservationId? baseline)
+        {
+            var observedAt =
+                _retrievedAtBySnapshot[snapshot.Snapshot.Id];
+
+            return new MapQualityWrite(
                 snapshot.Snapshot.Id,
                 WarRegionId,
                 snapshot.Snapshot.RepresentationFetchId,
@@ -407,17 +423,21 @@ public sealed class M6MapQualityPersistenceTests(PostgresFixture postgres)
                 decision,
                 Start.AddMinutes(10),
                 Start.AddMinutes(10).AddMilliseconds(1),
+                snapshot.Snapshot.Kind,
+                observedAt,
+                snapshot.Snapshot.SourceUpdatedAt,
                 [
                     new MapQualityFindingCandidate(
                         "taxonomy.unknown-team",
                         "taxonomy.unknown-team@1",
                         "taxonomy.unknown-team-config@1",
-                        MapQualityEffect.Informational,
+                        "informational",
                         snapshot.Items[0].Id,
                         null,
                         "test_finding",
                         """{"count":1}"""),
                 ]);
+        }
 
         public async Task InsertQualityRunAsync(
             Guid qualityRunId,
