@@ -1093,7 +1093,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             finding.RuleKey,
             finding.RuleVersion,
             finding.ConfigurationVersion,
-            ToStorage(finding.Effect),
+            finding.Effect,
             finding.MapItemOccurrenceId?.ToString() ?? string.Empty,
             finding.MapTextOccurrenceId?.ToString() ?? string.Empty,
             finding.DetailCode ?? string.Empty,
