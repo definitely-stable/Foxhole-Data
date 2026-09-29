@@ -2,7 +2,9 @@ using System.Data;
 using System.Text;
 using System.Text.Json;
 using FoxData.Application.Canonical;
+using FoxData.Application.Quality;
 using FoxData.Core.Evidence;
+using FoxData.Core.Quality;
 using FoxData.Core.Runtime;
 using FoxData.Core.Sources;
 using Npgsql;
@@ -88,6 +90,10 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         EnsureBindingProvenance(
             snapshot,
             warRegionContext,
+            validation);
+        EnsureWriteDerivedValues(
+            write,
+            snapshot,
             validation);
 
         var expectedBaseline =
@@ -189,8 +195,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         var resultCreated = new MapQualityResult(
             run,
             findings,
-            observation,
-            warRegion);
+            observation);
 
         EnsureFindingsEquivalent(findings, write.Findings);
         EnsureDecisionObservationInvariant(resultCreated);
@@ -446,6 +451,20 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         }
     }
 
+    private static void EnsureWriteDerivedValues(
+        MapQualityWrite write,
+        MapSnapshotDescriptor snapshot,
+        ValidationContext validation)
+    {
+        if (write.Kind != snapshot.Kind ||
+            write.ObservedAt != validation.RetrievedAt ||
+            write.SourceUpdatedAt != snapshot.SourceUpdatedAt)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Map quality write kind/time metadata differs from its durable snapshot and validation evidence.");
+        }
+    }
+
     private static async Task<MapObservationDescriptor?>
         GetLatestAcceptedBaselineAsync(
             NpgsqlConnection connection,
@@ -698,7 +717,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 command,
                 "configuration_version",
                 finding.ConfigurationVersion);
-            AddText(command, "effect", ToStorage(finding.Effect));
+            AddText(command, "effect", finding.Effect);
             AddNullableUuid(
                 command,
                 "map_item_occurrence_id",
@@ -860,19 +879,21 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             transaction,
             run.Id,
             cancellationToken);
-        var warRegion = await GetWarRegionAsync(
-            connection,
-            transaction,
-            run.WarRegionId,
-            cancellationToken)
-            ?? throw new CanonicalStateIntegrityException(
+
+        if (await GetWarRegionAsync(
+                connection,
+                transaction,
+                run.WarRegionId,
+                cancellationToken) is null)
+        {
+            throw new CanonicalStateIntegrityException(
                 $"Quality run {run.Id} references missing WarRegion {run.WarRegionId}.");
+        }
 
         var result = new MapQualityResult(
             run,
             findings,
-            observation,
-            warRegion);
+            observation);
         EnsureDecisionObservationInvariant(result);
         return result;
     }
@@ -919,7 +940,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                     reader.GetString(2),
                     reader.GetString(3),
                     reader.GetString(4),
-                    ParseEffect(reader.GetString(5)),
+                    reader.GetString(5),
                     reader.IsDBNull(6)
                         ? null
                         : new MapItemOccurrenceId(
@@ -1059,7 +1080,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             finding.RuleKey,
             finding.RuleVersion,
             finding.ConfigurationVersion,
-            ToStorage(finding.Effect),
+            finding.Effect,
             finding.MapItemOccurrenceId?.ToString() ?? string.Empty,
             finding.MapTextOccurrenceId?.ToString() ?? string.Empty,
             finding.DetailCode ?? string.Empty,
@@ -1233,16 +1254,6 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 $"Unknown durable map quality decision '{value}'."),
         };
 
-    private static MapQualityEffect ParseEffect(string value) =>
-        value switch
-        {
-            "informational" => MapQualityEffect.Informational,
-            "suspect" => MapQualityEffect.Suspect,
-            "quarantined" => MapQualityEffect.Quarantined,
-            _ => throw new CanonicalStateIntegrityException(
-                $"Unknown durable map quality effect '{value}'."),
-        };
-
     private static string ToStorage(MapQualityDecision value) =>
         value switch
         {
@@ -1253,18 +1264,6 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 nameof(value),
                 value,
                 "Unknown map quality decision."),
-        };
-
-    private static string ToStorage(MapQualityEffect value) =>
-        value switch
-        {
-            MapQualityEffect.Informational => "informational",
-            MapQualityEffect.Suspect => "suspect",
-            MapQualityEffect.Quarantined => "quarantined",
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(value),
-                value,
-                "Unknown map quality effect."),
         };
 
     private static string ToStorage(MapSnapshotKind value) =>
