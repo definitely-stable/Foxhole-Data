@@ -289,7 +289,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         var endpointCapabilityKey = reader.GetString(19);
         var endpointSemanticKey = reader.GetString(20);
         var validationEndpointId = reader.GetGuid(21);
-        var validationStatus = reader.IsDBNull(22)
+        int? validationStatus = reader.IsDBNull(22)
             ? null
             : reader.GetInt32(22);
         var validationHasPayload = !reader.IsDBNull(23);
