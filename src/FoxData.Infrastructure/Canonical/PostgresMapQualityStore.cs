@@ -67,13 +67,14 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             ?? throw new CanonicalStateIntegrityException(
                 $"Map snapshot {write.MapSnapshotId} does not exist.");
 
-        var warRegion = await LockWarRegionAsync(
+        var warRegionContext = await LockWarRegionAsync(
             connection,
             transaction,
             write.WarRegionId,
             cancellationToken)
             ?? throw new CanonicalStateIntegrityException(
                 $"War-region {write.WarRegionId} does not exist.");
+        var warRegion = warRegionContext.WarRegion;
 
         var validation = await GetValidationContextAsync(
             connection,
@@ -86,7 +87,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
 
         EnsureBindingProvenance(
             snapshot,
-            warRegion,
+            warRegionContext,
             validation);
 
         var expectedBaseline =
@@ -232,7 +233,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         return ReadSnapshot(reader);
     }
 
-    private static async Task<WarRegionDescriptor?> LockWarRegionAsync(
+    private static async Task<WarRegionLockContext?> LockWarRegionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         WarRegionId warRegionId,
@@ -250,10 +251,13 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 membership.source_region_id,
                 membership.first_seen_at,
                 membership.last_seen_at,
-                membership.created_at
+                membership.created_at,
+                war.shard_id
             FROM runtime.war_regions AS membership
+            INNER JOIN runtime.wars AS war
+                ON war.id = membership.war_id
             WHERE membership.id = @id
-            FOR UPDATE;
+            FOR UPDATE OF membership;
             """;
         AddUuid(command, "id", warRegionId.Value);
 
@@ -265,7 +269,9 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             return null;
         }
 
-        return ReadWarRegion(reader);
+        return new WarRegionLockContext(
+            ReadWarRegion(reader),
+            new ShardId(reader.GetGuid(8)));
     }
 
     private static async Task<ValidationContext?> GetValidationContextAsync(
@@ -342,9 +348,11 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
 
     private static void EnsureBindingProvenance(
         MapSnapshotDescriptor snapshot,
-        WarRegionDescriptor warRegion,
+        WarRegionLockContext warRegionContext,
         ValidationContext validation)
     {
+        var warRegion = warRegionContext.WarRegion;
+
         var expectedCapability = snapshot.Kind switch
         {
             MapSnapshotKind.Static => "static-map-state",
@@ -390,6 +398,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         var bodyBearingValidation =
             validation.ValidationFetchId ==
                 snapshot.RepresentationFetchId &&
+            validation.StatusCode == 200 &&
             validation.ValidationPayloadId is not null;
 
         var notModifiedValidation =
@@ -405,6 +414,12 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         {
             throw new CanonicalStateIntegrityException(
                 "Map quality validation Fetch is neither the body-bearing representation nor an exact 304 validation of it.");
+        }
+
+        if (validation.ShardId != warRegionContext.ShardId)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Map quality validation endpoint shard differs from the WarRegion war shard.");
         }
 
         if (!string.Equals(
@@ -1296,6 +1311,10 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         DateTimeOffset? value) =>
         command.Parameters.Add(name, NpgsqlDbType.TimestampTz).Value =
             (object?)value ?? DBNull.Value;
+
+    private sealed record WarRegionLockContext(
+        WarRegionDescriptor WarRegion,
+        ShardId ShardId);
 
     private sealed record ValidationContext(
         FetchId ValidationFetchId,
