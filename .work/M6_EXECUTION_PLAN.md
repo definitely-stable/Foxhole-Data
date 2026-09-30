@@ -1,10 +1,31 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E1 and M6-E2 implemented; M6-E3 next.
+Status: active execution companion. M6-E1 and M6-E2 merged; M6-E3 in progress in PR #48.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
+
+## Current implementation checkpoint (2026-09-30)
+
+- M6-E2 is on main as #47, with passing main CI/Contracts.
+- M6-E3 lives in PR #48 and is not complete until CI and recovery gates pass.
+- Both the preliminary ordering reader and the locked quality transaction use the
+  same source-evidence chronology query. The preliminary read is advisory only.
+- The store refuses an incorrect or omitted latest accepted baseline, checks
+  exact source-endpoint/war shard agreement and proven first-seen membership.
+- The War API coordinator evaluates the versioned eight-rule structural shell
+  after map normalization. Historic restart/mass-NONE rules remain M6-F work.
+- The narrowly scoped E3 Worker recovery replays already-normalized,
+  body-bearing 200 snapshots missing current-version QualityRuns. Missing
+  parse/normalization stages, 304 continuity and versioned reprocessing stay
+  explicitly allocated to M6-G.
+- The source-evidence barrier currently scans authoritative body-bearing 200
+  candidates; M6-G must extend chronology to any additional 304 quality
+  bindings *before* enabling same-war 304 acceptance, so older 304 work cannot
+  retroactively change a later baseline.
+- E3 cannot close merely because no terminal writes occurred: deferred work
+  must remain observable and local recovery must be exercised without HTTP.
 
 ## Current baseline
 
@@ -728,26 +749,10 @@ Each PR must include affected normative docs, executable tests, no M7/M8 scope c
 
 # Current execution checkpoint
 
-M6-E1 — implemented:
+M6-E1: merged PR #45.
+M6-E2: merged PR #47.
+M6-E3: active implementation PR #48; completion **not claimed** until
+full CI, concurrency and local-recovery evidence is green.
 
-- `warapi-map-quality-policy.schema.json`;
-- embedded `warapi-map-quality-policy@1.json`;
-- explicit quality-effect to terminal-decision aggregation;
-- exact eight-rule structural shell;
-- fail-closed source registry tied to `warapi-map-taxonomy@1`;
-- runtime semantic validation of rule/effect/parameter identity;
-- Contracts CI validation including exact rule-set/version uniqueness;
-- SourceTests covering stable identity, aggregation, parameters and unknown-version failure.
-
-Next implementation task:
-
-~~~text
-M6-E2
-MapQualityKernel
-+ PostgresMapQualityStore
-+ atomic quality/accepted-observation transaction
-~~~
-
-M6-E3 follows with the evidence-driven chronology barrier, baseline concurrency tests and Worker integration.
-
-Do not implement mass-NONE thresholds before M6-E3 is green.
+Next after E3 acceptance: M6-F1 golden fixtures and offline extraction,
+then M6-F2 calibration. Do not move anomaly thresholds into E3.

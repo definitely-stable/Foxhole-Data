@@ -1354,7 +1354,7 @@ Acceptance:
 M6-E MUST record the exact taxonomy version used by every QualityRun. It consumes taxonomy interpretation but does not mutate normalized occurrence rows.
 ### M6-E — Quality kernel and accepted-observation transaction
 
-Progress: E1 quality-policy contract/registry implemented; E2 persistence/kernel next.
+Progress: E1 and E2 merged (#45/#47); E3 chronology, source-neutral ordering reader, War API coordinator, Worker and local normalized-snapshot repair under implementation in #48. E3 acceptance pending verification.
 
 Goal: introduce versioned quality decisions without anomaly heuristics being hidden inside normalizers.
 
