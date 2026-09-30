@@ -54,4 +54,14 @@ public static class WarApiTelemetry
         Meter.CreateCounter<long>(
             "foxdata.canonical.normalization.runs",
             description: "Versioned canonical normalization outcomes.");
+
+    public static readonly Counter<long> MapQualityRuns =
+        Meter.CreateCounter<long>(
+            "foxdata.canonical.map_quality.runs",
+            description: "Versioned terminal map quality outcomes.");
+
+    public static readonly Counter<long> MapQualityDeferred =
+        Meter.CreateCounter<long>(
+            "foxdata.canonical.map_quality.deferred",
+            description: "Map quality evaluations deferred for durable prerequisites.");
 }
