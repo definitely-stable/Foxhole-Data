@@ -466,6 +466,43 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Late304CannotRewriteAlreadyTerminalBaselineChain()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+        var later = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(20),
+            "validation-later");
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: later,
+                baselineMapObservationId: first.Observation!.Id),
+            TestContext.Current.CancellationToken);
+
+        // Simulates local out-of-order discovery of earlier validation.
+        var older = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10),
+            "validation-older");
+        var exception =
+            await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+                () => fixture.Kernel.RecordAsync(
+                    fixture.CreateWrite(
+                        MapQualityDecision.Accepted,
+                        validationFetchId: older,
+                        baselineMapObservationId: first.Observation.Id),
+                    TestContext.Current.CancellationToken));
+
+        Assert.Equal("later_quality_already_terminal", exception.Reason);
+        Assert.Equal(2L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
     public async Task DatabaseRejectsObservationForNonAcceptedQualityRun()
     {
         await using var fixture = await CreateFixtureAsync(
@@ -857,13 +894,14 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
                 findings ?? []);
 
         public async Task<FetchId> CreateValidation304Async(
-            DateTimeOffset retrievedAt)
+            DateTimeOffset retrievedAt,
+            string idempotencyKey = "m6-e2-validation-304")
         {
             var capture = await CaptureAsync(
                 ingestion,
                 evidence,
                 EndpointId,
-                "m6-e2-validation-304",
+                idempotencyKey,
                 retrievedAt,
                 304,
                 body: null,

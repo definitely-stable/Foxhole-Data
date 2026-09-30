@@ -204,6 +204,45 @@ internal static class MapQualityOrderingQueries
             return MapQualityOrderingPlan.Deferred(observedAt, blocker);
         }
 
+        // A late candidate may not change the correct baseline of an
+        // already terminal *later* quality run. M6-G versioned rebuild is
+        // required to replay such backfilled source evidence.
+        await using var later = connection.CreateCommand();
+        later.Transaction = transaction;
+        later.CommandText =
+            """
+            SELECT EXISTS
+            (
+                SELECT 1
+                FROM quality.map_quality_runs AS run
+                JOIN evidence.fetches AS validation
+                    ON validation.id = run.validation_fetch_id
+                JOIN evidence.map_snapshots AS later_snapshot
+                    ON later_snapshot.id = run.map_snapshot_id
+                JOIN evidence.map_snapshots AS target
+                    ON target.id = @snapshot_id
+                WHERE run.war_region_id = @region_id
+                  AND later_snapshot.capability_kind = target.capability_kind
+                  AND run.taxonomy_version = @taxonomy_version
+                  AND run.quality_policy_version = @policy_version
+                  AND (validation.retrieved_at, validation.id)
+                        > (@observed_at, @validation_id)
+            );
+            """;
+        Uuid(later, "snapshot_id", snapshotId.Value);
+        Uuid(later, "region_id", regionId.Value);
+        Uuid(later, "validation_id", validationId.Value);
+        Timestamp(later, "observed_at", observedAt);
+        String(later, "taxonomy_version", taxonomyVersion);
+        String(later, "policy_version", policyVersion);
+        if ((bool)(await later.ExecuteScalarAsync(
+            cancellationToken) ?? false))
+        {
+            return MapQualityOrderingPlan.Deferred(
+                observedAt,
+                "later_quality_already_terminal");
+        }
+
         await using var baseline = connection.CreateCommand();
         baseline.Transaction = transaction;
         baseline.CommandText =

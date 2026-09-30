@@ -20,6 +20,9 @@ This document translates the normative M6 contract into implementation order aga
   body-bearing 200 snapshots missing current-version QualityRuns. Missing
   parse/normalization stages, 304 continuity and versioned reprocessing stay
   explicitly allocated to M6-G.
+- The same locked transaction refuses late same-version quality backfill if
+  any later terminal result already exists for the WarRegion/capability.
+  Such history must be explicitly rebuilt under a new version in M6-G.
 - The source-evidence barrier currently scans authoritative body-bearing 200
   candidates; M6-G must extend chronology to any additional 304 quality
   bindings *before* enabling same-war 304 acceptance, so older 304 work cannot
