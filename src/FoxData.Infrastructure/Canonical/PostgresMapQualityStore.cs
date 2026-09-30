@@ -92,6 +92,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(write);
+        MapQualityDecisionSafety.Validate(write);
 
         await using var connection =
             await dataSource.OpenConnectionAsync(cancellationToken);

@@ -12,6 +12,9 @@ This document translates the normative M6 contract into implementation order aga
 - M6-E3 lives in PR #48 and is not complete until CI and recovery gates pass.
 - Both the preliminary ordering reader and the locked quality transaction use the
   same source-evidence chronology query. The preliminary read is advisory only.
+- The source-neutral kernel and PostgreSQL store also fail closed when a
+  caller attempts to downgrade suspect/quarantined findings to an accepted
+  or less severe terminal decision.
 - The store refuses an incorrect or omitted latest accepted baseline, checks
   exact source-endpoint/war shard agreement and proven first-seen membership.
 - The War API coordinator evaluates the versioned eight-rule structural shell
