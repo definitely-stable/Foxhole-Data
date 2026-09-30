@@ -466,6 +466,51 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task ConcurrentDistinctBodyCandidatesCannotBypassChronology()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var later = await fixture.CreateLater200Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(5));
+        var laterWrite = fixture.CreateWrite(
+            MapQualityDecision.Accepted) with
+        {
+            MapSnapshotId = later.Snapshot.Snapshot.Id,
+            ValidationFetchId = later.FetchId,
+            StartedAt = later.RetrievedAt.AddSeconds(1),
+            CompletedAt = later.RetrievedAt.AddSeconds(2),
+        };
+
+        // Both Workers attempt writes for different durable Fetches.
+        // The later candidate must never commit with a missing baseline.
+        var laterTask = fixture.Kernel.RecordAsync(
+            laterWrite,
+            TestContext.Current.CancellationToken);
+        var earlierTask = fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+            () => laterTask);
+        var earlier = await earlierTask;
+        Assert.Equal(1L, await fixture.CountAsync(
+            "runtime.map_observations"));
+
+        var acceptedLater = await fixture.Kernel.RecordAsync(
+            laterWrite with
+            {
+                BaselineMapObservationId = earlier.Observation!.Id,
+            },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            earlier.Observation.Id,
+            acceptedLater.Run.BaselineMapObservationId);
+        Assert.Equal(2L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
     public async Task Late304CannotRewriteAlreadyTerminalBaselineChain()
     {
         await using var fixture = await CreateFixtureAsync(
@@ -720,6 +765,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             dataSource,
             ingestion,
             evidence,
+            parseRuns,
             endpoint.Resource.Id,
             parse.Id,
             snapshotKernel,
@@ -764,6 +810,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     private static async Task<CaptureResult> CaptureAsync(
         IngestionKernel ingestion,
         EvidenceKernel evidence,
+        ISourceParseRunStore parseRuns,
         FoxData.Core.Sources.EndpointId endpointId,
         string idempotencyKey,
         DateTimeOffset retrievedAt,
@@ -908,6 +955,75 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
                 priorFetchId: RepresentationFetchId);
 
             return capture.Fetch!.Id;
+        }
+
+        public async Task<(
+            MapSnapshotResult Snapshot,
+            FetchId FetchId,
+            DateTimeOffset RetrievedAt)> CreateLater200Async(
+            DateTimeOffset retrievedAt)
+        {
+            var response = await CaptureAsync(
+                ingestion,
+                evidence,
+                EndpointId,
+                "later-distinct-body-200",
+                retrievedAt,
+                200,
+                "{}"u8.ToArray(),
+                priorFetchId: null);
+            var parse = await parseRuns.RecordAsync(
+                new SourceParseRunWrite(
+                    response.Fetch!.Id,
+                    "dynamic-map-state",
+                    "warapi-adapter@1",
+                    "warapi-parser@1",
+                    "json-shape@1",
+                    "shape-m6-e2",
+                    "parsed",
+                    0,
+                    0,
+                    null,
+                    retrievedAt.AddMilliseconds(1),
+                    retrievedAt.AddMilliseconds(2),
+                    SourceVersion: 2,
+                    SourceLastUpdated:
+                        SourceUpdatedAt.ToUnixTimeMilliseconds(),
+                    DecodedByteLength: 2),
+                TestContext.Current.CancellationToken);
+
+            var normalized = await snapshotKernel.RecordAcceptedAsync(
+                new MapSnapshotWrite(
+                    parse.Id,
+                    "warapi-dynamic-map-normalizer@1",
+                    "dynamic-map-state",
+                    "map-dynamic/DeadLandsHex",
+                    retrievedAt.AddMilliseconds(3),
+                    retrievedAt.AddMilliseconds(4),
+                    response.Fetch.Id,
+                    MapSnapshotKind.Dynamic,
+                    "DeadLandsHex",
+                    Snapshot.SourceRegionId,
+                    0,
+                    2,
+                    SourceUpdatedAt.ToUnixTimeMilliseconds(),
+                    SourceUpdatedAt,
+                    SourceMapItemsArrayPresent: true,
+                    SourceMapTextItemsArrayPresent: true,
+                    Items:
+                    [
+                        new MapItemOccurrenceCandidate(
+                            0,
+                            "WARDENS",
+                            97,
+                            0.5d,
+                            0.25d,
+                            0,
+                            0),
+                    ],
+                    TextItems: []),
+                TestContext.Current.CancellationToken);
+            return (normalized, response.Fetch.Id, retrievedAt);
         }
 
         public async Task<MapSnapshotResult> CreateAuxiliarySnapshotAsync()
