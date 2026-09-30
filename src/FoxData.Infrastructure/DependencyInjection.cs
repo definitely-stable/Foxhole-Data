@@ -90,6 +90,8 @@ public static class DependencyInjection
         services.AddScoped<IMapSnapshotStore, PostgresMapSnapshotStore>();
         services.AddScoped<MapSnapshotKernel>();
         services.AddScoped<IMapQualityStore, PostgresMapQualityStore>();
+        services.AddScoped<IMapQualityOrderingReader, PostgresMapQualityOrderingReader>();
+        services.AddScoped<IMapQualityPendingReader, PostgresMapQualityPendingReader>();
         services.AddScoped<MapQualityKernel>();
         services.AddScoped<ICoverageStore, PostgresCoverageStore>();
 

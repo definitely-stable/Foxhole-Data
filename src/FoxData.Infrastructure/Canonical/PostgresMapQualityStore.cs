@@ -11,6 +11,37 @@ namespace FoxData.Infrastructure.Canonical;
 public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
     : IMapQualityStore
 {
+    public async Task<MapQualityResult?> GetAsync(
+        MapSnapshotId mapSnapshotId,
+        WarRegionId warRegionId,
+        FetchId validationFetchId,
+        string taxonomyVersion,
+        string qualityPolicyVersion,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await dataSource.OpenConnectionAsync(cancellationToken);
+        var key = new MapQualityWrite(
+            mapSnapshotId,
+            warRegionId,
+            validationFetchId,
+            taxonomyVersion,
+            qualityPolicyVersion,
+            null,
+            MapQualityDecision.Accepted,
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch,
+            []);
+        var run = await GetRunByIdentityAsync(
+            connection,
+            null,
+            key,
+            cancellationToken);
+        return run is null
+            ? null
+            : await GetByRunIdAsync(run.Id, cancellationToken);
+    }
+
     public async Task<MapQualityResult?> GetByRunIdAsync(
         MapQualityRunId runId,
         CancellationToken cancellationToken)
@@ -61,6 +92,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(write);
+        MapQualityDecisionSafety.Validate(write);
 
         await using var connection =
             await dataSource.OpenConnectionAsync(cancellationToken);
@@ -131,15 +163,29 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             write.Findings,
             cancellationToken);
 
-        if (write.BaselineMapObservationId is { } baselineId)
+        // Preliminary quality plans can become stale. Recompute the entire
+        // authoritative Fetch barrier and baseline after acquiring this
+        // WarRegion row lock, immediately before the immutable write.
+        var ordering = await MapQualityOrderingQueries.GetPlanAsync(
+            connection,
+            transaction,
+            write.MapSnapshotId,
+            write.WarRegionId,
+            write.ValidationFetchId,
+            write.TaxonomyVersion,
+            write.QualityPolicyVersion,
+            cancellationToken);
+        if (ordering.Status == MapQualityOrderingStatus.Deferred)
         {
-            await EnsureBaselineValidAsync(
-                connection,
-                transaction,
-                baselineId,
-                write,
-                context,
-                cancellationToken);
+            throw new MapQualityOrderingDeferredException(
+                ordering.DeferredReason!);
+        }
+
+        if (ordering.ObservedAt != context.ValidationRetrievedAt ||
+            ordering.Baseline?.Id != write.BaselineMapObservationId)
+        {
+            throw new MapQualityOrderingDeferredException(
+                "quality_baseline_changed");
         }
 
         if (write.Decision == MapQualityDecision.Accepted)
@@ -232,7 +278,9 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                 validation_fetch.payload_id,
                 validation_fetch.prior_fetch_id,
                 validation_fetch.retrieved_at,
-                validation_attempt.outcome_code
+                validation_attempt.outcome_code,
+                endpoint.shard_id,
+                war.shard_id
             FROM evidence.map_snapshots AS snapshot
             INNER JOIN evidence.fetches AS representation_fetch
                 ON representation_fetch.id =
@@ -242,6 +290,8 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
                    representation_fetch.attempt_id
             INNER JOIN sources.endpoints AS endpoint
                 ON endpoint.id = representation_fetch.endpoint_id
+            INNER JOIN runtime.wars AS war
+                ON war.id = @war_id
             INNER JOIN evidence.fetches AS validation_fetch
                 ON validation_fetch.id = @validation_fetch_id
             INNER JOIN ingest.attempts AS validation_attempt
@@ -251,6 +301,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
 
         AddUuid(command, "map_snapshot_id", write.MapSnapshotId.Value);
         AddUuid(command, "validation_fetch_id", write.ValidationFetchId.Value);
+        AddUuid(command, "war_id", warRegion.WarId.Value);
 
         await using var reader = await command.ExecuteReaderAsync(
             CommandBehavior.SingleRow,
@@ -300,6 +351,15 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
             reader.GetFieldValue<DateTimeOffset>(25);
         var validationOutcome =
             reader.IsDBNull(26) ? null : reader.GetString(26);
+        var sourceShardId = reader.GetGuid(27);
+        var warShardId = reader.GetGuid(28);
+
+        if (sourceShardId != warShardId ||
+            validationRetrievedAt < warRegion.FirstSeenAt)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Map quality validation belongs to a different shard or precedes proven WarRegion membership.");
+        }
 
         if (!string.Equals(
                 representationOutcome,
@@ -396,70 +456,6 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
         return new QualityContext(
             snapshot,
             validationRetrievedAt);
-    }
-
-    private static async Task EnsureBaselineValidAsync(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        MapObservationId baselineId,
-        MapQualityWrite write,
-        QualityContext context,
-        CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText =
-            """
-            SELECT
-                observation.war_region_id,
-                observation.capability_kind,
-                observation.observed_at,
-                quality.taxonomy_version,
-                quality.quality_policy_version,
-                quality.decision
-            FROM runtime.map_observations AS observation
-            INNER JOIN quality.map_quality_runs AS quality
-                ON quality.id = observation.quality_run_id
-            WHERE observation.id = @baseline_id;
-            """;
-
-        AddUuid(command, "baseline_id", baselineId.Value);
-
-        await using var reader = await command.ExecuteReaderAsync(
-            CommandBehavior.SingleRow,
-            cancellationToken);
-
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new CanonicalStateIntegrityException(
-                $"Baseline map observation {baselineId} does not exist.");
-        }
-
-        var baselineWarRegionId =
-            new WarRegionId(reader.GetGuid(0));
-        var baselineKind = ParseKind(reader.GetString(1));
-        var baselineObservedAt =
-            reader.GetFieldValue<DateTimeOffset>(2);
-        var baselineTaxonomy = reader.GetString(3);
-        var baselinePolicy = reader.GetString(4);
-        var baselineDecision = ParseDecision(reader.GetString(5));
-
-        if (baselineWarRegionId != write.WarRegionId ||
-            baselineKind != context.Snapshot.Kind ||
-            baselineObservedAt >= context.ValidationRetrievedAt ||
-            !string.Equals(
-                baselineTaxonomy,
-                write.TaxonomyVersion,
-                StringComparison.Ordinal) ||
-            !string.Equals(
-                baselinePolicy,
-                write.QualityPolicyVersion,
-                StringComparison.Ordinal) ||
-            baselineDecision != MapQualityDecision.Accepted)
-        {
-            throw new CanonicalStateIntegrityException(
-                "Supplied baseline is not an earlier accepted observation in the same WarRegion/capability/version stream.");
-        }
     }
 
     private static async Task ValidateFindingReferencesAsync(
@@ -898,7 +894,7 @@ public sealed class PostgresMapQualityStore(NpgsqlDataSource dataSource)
     private static async Task<MapQualityRunDescriptor?>
         GetRunByIdentityAsync(
             NpgsqlConnection connection,
-            NpgsqlTransaction transaction,
+            NpgsqlTransaction? transaction,
             MapQualityWrite write,
             CancellationToken cancellationToken)
     {

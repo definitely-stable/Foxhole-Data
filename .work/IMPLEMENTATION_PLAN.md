@@ -141,7 +141,7 @@ Implementation slices:
 
 ## M6 — maps, taxonomy and quality
 
-Status: in progress. M6-A through M6-D complete; M6-E next.
+Status: in progress. M6-A through M6-D and M6-E1/E2 complete; M6-E3 in progress (PR #48).
 
 Detailed normative plan: [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
 Execution sequence for the remaining slices: [M6_EXECUTION_PLAN.md](M6_EXECUTION_PLAN.md).
@@ -157,8 +157,8 @@ Implementation slices:
 - M6-B static map normalization — complete;
 - M6-C dynamic map normalization — complete;
 - M6-D versioned taxonomy — complete;
-- M6-E quality kernel and accepted-observation transaction — next;
-- M6-F calibrated historical anomaly rules, including warapi#92/#120 — pending;
+- M6-E quality kernel and accepted-observation transaction — E1/E2 complete, E3 chronology/Worker integration in progress;
+- M6-F new versioned calibrated anomaly policy@2, including warapi#92/#120, without mutating the persisted structural-only @1 — pending;
 - M6-G static/dynamic coverage, local recovery and versioned reprocessing — pending;
 - M6-H deterministic completion gate and M6 completion record — pending.
 

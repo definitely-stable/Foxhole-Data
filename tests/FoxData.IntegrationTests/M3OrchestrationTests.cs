@@ -1781,6 +1781,14 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
                 options,
                 timeProvider);
 
+        var qualityStore = new PostgresMapQualityStore(dataSource);
+        var qualityCoordinator = new WarApiMapQualityCoordinator(
+            mapContextResolver,
+            new PostgresMapQualityOrderingReader(dataSource),
+            qualityStore,
+            new MapQualityKernel(qualityStore),
+            timeProvider);
+
         var resolver = new WarApiRegistryResolver(registry);
         var rateGovernor = new WarApiOutboundRateGovernor(
             timeProvider,
@@ -1812,6 +1820,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
             warReportNormalization,
             staticMapNormalization,
             dynamicMapNormalization,
+            qualityCoordinator,
             timeProvider,
             NullLogger<WarApiReconciler>.Instance);
 

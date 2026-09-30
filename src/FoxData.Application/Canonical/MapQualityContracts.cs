@@ -1,6 +1,7 @@
 using FoxData.Core.Evidence;
 using FoxData.Core.Quality;
 using FoxData.Core.Runtime;
+using FoxData.Core.Sources;
 
 namespace FoxData.Application.Canonical;
 
@@ -84,8 +85,92 @@ public sealed record MapQualityResult(
     MapObservationDescriptor? Observation,
     WarRegionDescriptor WarRegion);
 
+public enum MapQualityOrderingStatus
+{
+    Ready,
+    Deferred,
+}
+
+public sealed record MapQualityOrderingPlan(
+    MapQualityOrderingStatus Status,
+    string? DeferredReason,
+    DateTimeOffset ObservedAt,
+    MapObservationDescriptor? Baseline,
+    string? CurrentStructuralFingerprint,
+    string? BaselineStructuralFingerprint)
+{
+    public static MapQualityOrderingPlan Deferred(
+        DateTimeOffset observedAt,
+        string reason) =>
+        new(
+            MapQualityOrderingStatus.Deferred,
+            reason,
+            observedAt,
+            null,
+            null,
+            null);
+
+    public static MapQualityOrderingPlan Ready(
+        DateTimeOffset observedAt,
+        MapObservationDescriptor? baseline,
+        string? currentStructuralFingerprint,
+        string? baselineStructuralFingerprint) =>
+        new(
+            MapQualityOrderingStatus.Ready,
+            null,
+            observedAt,
+            baseline,
+            currentStructuralFingerprint,
+            baselineStructuralFingerprint);
+}
+
+public sealed class MapQualityOrderingDeferredException(
+    string reason)
+    : Exception(
+        $"Map quality ordering is deferred: {reason}.")
+{
+    public string Reason { get; } = reason;
+}
+
+public interface IMapQualityOrderingReader
+{
+    Task<MapQualityOrderingPlan> GetPlanAsync(
+        MapSnapshotId mapSnapshotId,
+        WarRegionId warRegionId,
+        FetchId validationFetchId,
+        string taxonomyVersion,
+        string qualityPolicyVersion,
+        CancellationToken cancellationToken);
+}
+
+public sealed record MapQualityPendingSnapshot(
+    NormalizationRunId NormalizationRunId,
+    ShardId ShardId,
+    FetchId RepresentationFetchId,
+    DateTimeOffset RetrievedAt);
+
+public interface IMapQualityPendingReader
+{
+    Task<IReadOnlyList<MapQualityPendingSnapshot>> GetPendingAsync(
+        string sourceKey,
+        string taxonomyVersion,
+        string qualityPolicyVersion,
+        DateTimeOffset? afterRetrievedAt,
+        FetchId? afterFetchId,
+        int batchSize,
+        CancellationToken cancellationToken);
+}
+
 public interface IMapQualityStore
 {
+    Task<MapQualityResult?> GetAsync(
+        MapSnapshotId mapSnapshotId,
+        WarRegionId warRegionId,
+        FetchId validationFetchId,
+        string taxonomyVersion,
+        string qualityPolicyVersion,
+        CancellationToken cancellationToken);
+
     Task<MapQualityResult?> GetByRunIdAsync(
         MapQualityRunId runId,
         CancellationToken cancellationToken);

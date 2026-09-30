@@ -66,6 +66,8 @@ public sealed class MapQualityKernel(IMapQualityStore store)
             ValidateFinding(finding);
         }
 
+        MapQualityDecisionSafety.Validate(write);
+
         return store.RecordAsync(
             write,
             cancellationToken);

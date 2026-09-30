@@ -41,12 +41,14 @@ builder.Services.AddScoped<WarApiMapContextResolver>();
 builder.Services.AddScoped<WarApiWarReportNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiStaticMapNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiDynamicMapNormalizationCoordinator>();
+builder.Services.AddScoped<WarApiMapQualityCoordinator>();
 builder.Services.AddScoped<WarApiCoverageRecoveryCoordinator>();
 builder.Services.AddScoped<WarApiReconciler>();
 
 builder.Services.AddHostedService<BootstrapWorker>();
 builder.Services.AddHostedService<IngestionRecoveryWorker>();
 builder.Services.AddHostedService<WarApiCoverageRecoveryWorker>();
+builder.Services.AddHostedService<WarApiMapQualityRecoveryWorker>();
 builder.Services.AddHostedService<WarApiPlannerWorker>();
 builder.Services.AddHostedService<WarApiExecutorWorker>();
 

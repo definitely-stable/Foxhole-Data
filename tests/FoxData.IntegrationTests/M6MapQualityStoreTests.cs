@@ -261,6 +261,293 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task LaterValidationWaitsForEarlierDurableQuality()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: 13,
+            warRegionSourceRegionId: null);
+        var validation = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10));
+        var ordering = new PostgresMapQualityOrderingReader(
+            fixture.DataSource);
+
+        var deferred = await ordering.GetPlanAsync(
+            fixture.Snapshot.Id,
+            fixture.WarRegionId,
+            validation,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(MapQualityOrderingStatus.Deferred, deferred.Status);
+        Assert.Equal("earlier_quality_missing", deferred.DeferredReason);
+
+        await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+            () => fixture.Kernel.RecordAsync(
+                fixture.CreateWrite(
+                    MapQualityDecision.Accepted,
+                    validationFetchId: validation),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(0L, await fixture.CountAsync(
+            "quality.map_quality_runs"));
+
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+        var ready = await ordering.GetPlanAsync(
+            fixture.Snapshot.Id,
+            fixture.WarRegionId,
+            validation,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(MapQualityOrderingStatus.Ready, ready.Status);
+        Assert.Equal(first.Observation!.Id, ready.Baseline!.Id);
+
+        var second = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: validation,
+                baselineMapObservationId: ready.Baseline.Id),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(first.Observation.Id, second.Run.BaselineMapObservationId);
+    }
+
+    [Fact]
+    public async Task OmittingLatestAcceptedBaselineFailsClosed()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+        var validation = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10));
+
+        var exception =
+            await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+                () => fixture.Kernel.RecordAsync(
+                    fixture.CreateWrite(
+                        MapQualityDecision.Accepted,
+                        validationFetchId: validation),
+                    TestContext.Current.CancellationToken));
+        Assert.Equal("quality_baseline_changed", exception.Reason);
+        Assert.Equal(1L, await fixture.CountAsync(
+            "quality.map_quality_runs"));
+        Assert.Equal(1L, await fixture.CountAsync(
+            "runtime.map_observations"));
+
+        var next = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: validation,
+                baselineMapObservationId: first.Observation!.Id),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(first.Observation.Id, next.Run.BaselineMapObservationId);
+    }
+
+    [Fact]
+    public async Task PendingReaderFindsUncommittedQualityAndStopsAfterTerminalResult()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var pending = new PostgresMapQualityPendingReader(
+            fixture.DataSource);
+
+        var before = await pending.GetPendingAsync(
+            "official-war-api",
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Single(before);
+        Assert.Equal(
+            fixture.RepresentationFetchId,
+            before[0].RepresentationFetchId);
+        Assert.Equal(
+            fixture.Snapshot.NormalizationRunId,
+            before[0].NormalizationRunId);
+
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Suspect),
+            TestContext.Current.CancellationToken);
+
+        var after = await pending.GetPendingAsync(
+            "official-war-api",
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Empty(after);
+    }
+
+    [Fact]
+    public async Task ConcurrentSameIdentityQualityWritesConverge()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: 13,
+            warRegionSourceRegionId: null);
+        var write = fixture.CreateWrite(MapQualityDecision.Accepted);
+
+        var both = await Task.WhenAll(
+            fixture.Kernel.RecordAsync(
+                write,
+                TestContext.Current.CancellationToken),
+            fixture.Kernel.RecordAsync(
+                write,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(both[0].Run.Id, both[1].Run.Id);
+        Assert.Equal(both[0].Observation!.Id, both[1].Observation!.Id);
+        Assert.Equal(1L, await fixture.CountAsync(
+            "quality.map_quality_runs"));
+        Assert.Equal(1L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
+    public async Task QualityStoreRejectsCrossShardWarRegion()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        await using (var command = fixture.DataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                WITH new_shard AS
+                (
+                    INSERT INTO sources.shards
+                        (id, source_id, key, display_name, environment)
+                    SELECT
+                        @new_shard_id,
+                        shard.source_id,
+                        'quality-test-other-shard',
+                        'Other test shard',
+                        'live'
+                    FROM sources.shards AS shard
+                    JOIN sources.endpoints AS endpoint
+                        ON endpoint.shard_id = shard.id
+                    WHERE endpoint.id = @endpoint_id
+                    RETURNING id
+                )
+                UPDATE runtime.wars
+                SET shard_id = (SELECT id FROM new_shard)
+                WHERE id = (
+                    SELECT war_id
+                    FROM runtime.war_regions
+                    WHERE id = @war_region_id
+                );
+                """;
+            command.Parameters.AddWithValue(
+                "new_shard_id",
+                Guid.CreateVersion7());
+            command.Parameters.AddWithValue(
+                "endpoint_id",
+                fixture.EndpointId.Value);
+            command.Parameters.AddWithValue(
+                "war_region_id",
+                fixture.WarRegionId.Value);
+            await command.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken);
+        }
+
+        await Assert.ThrowsAsync<CanonicalStateIntegrityException>(
+            () => fixture.Kernel.RecordAsync(
+                fixture.CreateWrite(MapQualityDecision.Accepted),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(0L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
+    public async Task ConcurrentDistinctBodyCandidatesCannotBypassChronology()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var later = await fixture.CreateLater200Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(5));
+        var laterWrite = fixture.CreateWrite(
+            MapQualityDecision.Accepted) with
+        {
+            MapSnapshotId = later.Snapshot.Snapshot.Id,
+            ValidationFetchId = later.FetchId,
+            StartedAt = later.RetrievedAt.AddSeconds(1),
+            CompletedAt = later.RetrievedAt.AddSeconds(2),
+        };
+
+        // Both Workers attempt writes for different durable Fetches.
+        // The later candidate must never commit with a missing baseline.
+        var laterTask = fixture.Kernel.RecordAsync(
+            laterWrite,
+            TestContext.Current.CancellationToken);
+        var earlierTask = fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+            () => laterTask);
+        var earlier = await earlierTask;
+        Assert.Equal(1L, await fixture.CountAsync(
+            "runtime.map_observations"));
+
+        var acceptedLater = await fixture.Kernel.RecordAsync(
+            laterWrite with
+            {
+                BaselineMapObservationId = earlier.Observation!.Id,
+            },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            earlier.Observation.Id,
+            acceptedLater.Run.BaselineMapObservationId);
+        Assert.Equal(2L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
+    public async Task Late304CannotRewriteAlreadyTerminalBaselineChain()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+        var later = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(20),
+            "validation-later");
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: later,
+                baselineMapObservationId: first.Observation!.Id),
+            TestContext.Current.CancellationToken);
+
+        // Simulates local out-of-order discovery of earlier validation.
+        var older = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10),
+            "validation-older");
+        var exception =
+            await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+                () => fixture.Kernel.RecordAsync(
+                    fixture.CreateWrite(
+                        MapQualityDecision.Accepted,
+                        validationFetchId: older,
+                        baselineMapObservationId: first.Observation.Id),
+                    TestContext.Current.CancellationToken));
+
+        Assert.Equal("later_quality_already_terminal", exception.Reason);
+        Assert.Equal(2L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
     public async Task DatabaseRejectsObservationForNonAcceptedQualityRun()
     {
         await using var fixture = await CreateFixtureAsync(
@@ -478,6 +765,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             dataSource,
             ingestion,
             evidence,
+            parseRuns,
             endpoint.Resource.Id,
             parse.Id,
             snapshotKernel,
@@ -609,6 +897,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
         NpgsqlDataSource dataSource,
         IngestionKernel ingestion,
         EvidenceKernel evidence,
+        ISourceParseRunStore parseRuns,
         FoxData.Core.Sources.EndpointId endpointId,
         SourceParseRunId sourceParseRunId,
         MapSnapshotKernel snapshotKernel,
@@ -622,6 +911,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
         : IAsyncDisposable
     {
         public NpgsqlDataSource DataSource { get; } = dataSource;
+        public FoxData.Core.Sources.EndpointId EndpointId { get; } = endpointId;
         public MapQualityKernel Kernel { get; } = kernel;
         public MapSnapshotDescriptor Snapshot { get; } = snapshot;
         public MapItemOccurrenceDescriptor Item { get; } = item;
@@ -651,19 +941,89 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
                 findings ?? []);
 
         public async Task<FetchId> CreateValidation304Async(
-            DateTimeOffset retrievedAt)
+            DateTimeOffset retrievedAt,
+            string idempotencyKey = "m6-e2-validation-304")
         {
             var capture = await CaptureAsync(
                 ingestion,
                 evidence,
-                endpointId,
-                "m6-e2-validation-304",
+                EndpointId,
+                idempotencyKey,
                 retrievedAt,
                 304,
                 body: null,
                 priorFetchId: RepresentationFetchId);
 
             return capture.Fetch!.Id;
+        }
+
+        public async Task<(
+            MapSnapshotResult Snapshot,
+            FetchId FetchId,
+            DateTimeOffset RetrievedAt)> CreateLater200Async(
+            DateTimeOffset retrievedAt)
+        {
+            var response = await CaptureAsync(
+                ingestion,
+                evidence,
+                EndpointId,
+                "later-distinct-body-200",
+                retrievedAt,
+                200,
+                "{}"u8.ToArray(),
+                priorFetchId: null);
+            var parse = await parseRuns.RecordAsync(
+                new SourceParseRunWrite(
+                    response.Fetch!.Id,
+                    "dynamic-map-state",
+                    "warapi-adapter@1",
+                    "warapi-parser@1",
+                    "json-shape@1",
+                    "shape-m6-e2",
+                    "parsed",
+                    0,
+                    0,
+                    null,
+                    retrievedAt.AddMilliseconds(1),
+                    retrievedAt.AddMilliseconds(2),
+                    SourceVersion: 2,
+                    SourceLastUpdated:
+                        SourceUpdatedAt.ToUnixTimeMilliseconds(),
+                    DecodedByteLength: 2),
+                TestContext.Current.CancellationToken);
+
+            var normalized = await snapshotKernel.RecordAcceptedAsync(
+                new MapSnapshotWrite(
+                    parse.Id,
+                    "warapi-dynamic-map-normalizer@1",
+                    "dynamic-map-state",
+                    "map-dynamic/DeadLandsHex",
+                    retrievedAt.AddMilliseconds(3),
+                    retrievedAt.AddMilliseconds(4),
+                    response.Fetch.Id,
+                    MapSnapshotKind.Dynamic,
+                    "DeadLandsHex",
+                    Snapshot.SourceRegionId,
+                    0,
+                    2,
+                    SourceUpdatedAt.ToUnixTimeMilliseconds(),
+                    SourceUpdatedAt,
+                    SourceMapItemsArrayPresent: true,
+                    SourceMapTextItemsArrayPresent: true,
+                    Items:
+                    [
+                        new MapItemOccurrenceCandidate(
+                            0,
+                            "WARDENS",
+                            97,
+                            0.5d,
+                            0.25d,
+                            0,
+                            0),
+                    ],
+                    TextItems: []),
+                TestContext.Current.CancellationToken);
+            return (normalized, response.Fetch.Id, retrievedAt);
         }
 
         public async Task<MapSnapshotResult> CreateAuxiliarySnapshotAsync()

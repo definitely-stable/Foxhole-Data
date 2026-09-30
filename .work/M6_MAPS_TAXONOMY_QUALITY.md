@@ -893,7 +893,7 @@ M6-F MUST NOT freeze arbitrary anomaly thresholds directly in C#.
 Create a versioned configuration artifact, for example:
 
 ~~~text
-warapi-map-quality-policy@1.json
+warapi-map-quality-policy@2.json
 ~~~
 
 The implementation workflow is:
@@ -901,10 +901,10 @@ The implementation workflow is:
 1. define candidate features and rule keys;
 2. replay them offline over historical/golden fixtures and available M4 evidence;
 3. inspect false-positive candidates;
-4. freeze thresholds/configuration as versioned repository data;
-5. record the configuration version in every QualityRun;
-6. regression-test exact policy behavior;
-7. change thresholds only by publishing a new policy/configuration version.
+4. publish calibrated anomaly policy@2 as immutable versioned repository data, retaining the already-used structural-only policy@1 unchanged;
+5. record the full selected quality-policy version on every QualityRun and each rule configuration version on its findings;
+6. regression-test both frozen structural-only @1 and calibrated @2 behavior;
+7. change any rules or thresholds only by publishing another new policy version.
 
 A dedicated heavy external data-quality framework is not required for M6. The required logic is source-specific, deterministic, small enough to keep under FoxData's own versioned contracts, and must integrate directly with durable evidence provenance.
 
@@ -1354,7 +1354,7 @@ Acceptance:
 M6-E MUST record the exact taxonomy version used by every QualityRun. It consumes taxonomy interpretation but does not mutate normalized occurrence rows.
 ### M6-E — Quality kernel and accepted-observation transaction
 
-Progress: E1 quality-policy contract/registry implemented; E2 persistence/kernel next.
+Progress: E1 and E2 merged (#45/#47); E3 chronology, source-neutral ordering reader, War API coordinator, Worker and local normalized-snapshot repair under implementation in #48. E3 acceptance pending verification.
 
 Goal: introduce versioned quality decisions without anomaly heuristics being hidden inside normalizers.
 
@@ -1388,7 +1388,7 @@ Acceptance:
 - accepted observation and quality run cannot diverge after crash;
 - baseline selection is deterministic under concurrent/out-of-order processing.
 
-### M6-F — Historical anomaly rules and calibrated policy v1
+### M6-F — Historical anomaly rules and calibrated policy v2
 
 Goal: freeze the first operational map-quality policy.
 

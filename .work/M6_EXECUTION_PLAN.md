@@ -1,10 +1,37 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E1 and M6-E2 implemented; M6-E3 next.
+Status: active execution companion. M6-E1 and M6-E2 merged; M6-E3 in progress in PR #48.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
+
+## Current implementation checkpoint (2026-09-30)
+
+- M6-E2 is on main as #47, with passing main CI/Contracts.
+- M6-E3 lives in PR #48 and is not complete until CI and recovery gates pass.
+- Both the preliminary ordering reader and the locked quality transaction use the
+  same source-evidence chronology query. The preliminary read is advisory only.
+- The source-neutral kernel and PostgreSQL store also fail closed when a
+  caller attempts to downgrade suspect/quarantined findings to an accepted
+  or less severe terminal decision.
+- The store refuses an incorrect or omitted latest accepted baseline, checks
+  exact source-endpoint/war shard agreement and proven first-seen membership.
+- The War API coordinator evaluates the versioned eight-rule structural shell
+  after map normalization. Historic restart/mass-NONE rules remain M6-F work.
+- The narrowly scoped E3 Worker recovery replays already-normalized,
+  body-bearing 200 snapshots missing current-version QualityRuns. Missing
+  parse/normalization stages, 304 continuity and versioned reprocessing stay
+  explicitly allocated to M6-G.
+- The same locked transaction refuses late same-version quality backfill if
+  any later terminal result already exists for the WarRegion/capability.
+  Such history must be explicitly rebuilt under a new version in M6-G.
+- The source-evidence barrier currently scans authoritative body-bearing 200
+  candidates; M6-G must extend chronology to any additional 304 quality
+  bindings *before* enabling same-war 304 acceptance, so older 304 work cannot
+  retroactively change a later baseline.
+- E3 cannot close merely because no terminal writes occurred: deferred work
+  must remain observable and local recovery must be exercised without HTTP.
 
 ## Current baseline
 
@@ -87,7 +114,7 @@ Add:
   warapi-map-quality-policy@1.json
 ~~~
 
-M6-E policy@1 is a structural shell, not the final historical-anomaly threshold set.
+M6-E policy@1 is the immutable structural-only shell. Once E3 starts persisting QualityRuns, do not add rules or thresholds to that same policy version. M6-F publishes a distinct calibrated policy@2.
 
 Initial rule families:
 
@@ -323,7 +350,7 @@ M6-E closes only when:
 
 Do not begin M6-F before this.
 
-# M6-F — calibrated anomaly policy v1
+# M6-F — calibrated anomaly policy v2
 
 ## F1. Golden fixture catalog
 
@@ -376,9 +403,9 @@ Record:
 
 The calibration harness must run offline and must not require the public War API.
 
-## F4. Freeze policy@1
+## F4. Publish policy@2 without mutating policy@1
 
-After calibration, commit explicit thresholds/configuration into the versioned policy JSON.
+After calibration, publish a new warapi-map-quality-policy@2.json with its own full policy identity. Preserve policy@1 unchanged for deterministic historical reprocessing. The calibrated policy may include the structural rules carried forward from @1, but its entire rule set and thresholds are frozen together.
 
 Mass-NONE must be composite. A high NONE share alone is insufficient.
 
@@ -707,7 +734,7 @@ Create .work/M6_COMPLETION.md containing:
 | M6-C | A/B core | dynamic snapshots | anomaly acceptance |
 | M6-D | raw normalized values | versioned taxonomy | rewrite raw values |
 | M6-E | A-D | quality + accepted observations | freeze uncalibrated anomaly thresholds |
-| M6-F | E + fixtures/evidence | calibrated policy@1 | objective matching |
+| M6-F | E + fixtures/evidence | calibrated policy@2, frozen structural @1 | objective matching |
 | M6-G | E/F | deterministic recovery | new HTTP for durable work |
 | M6-H | A-G | completion proof | new domain features |
 
@@ -718,7 +745,7 @@ M6-E1 policy contracts + validation
 M6-E2 quality kernel/store + atomic transaction
 M6-E3 coordinator + chronology/concurrency tests + Worker integration
 M6-F1 golden fixtures + offline feature extraction
-M6-F2 calibrated policy@1 + anomaly rules
+M6-F2 calibrated policy@2 + anomaly rules
 M6-G1 source-neutral coverage-plan refactor
 M6-G2 M6 recovery + 304 continuity
 M6-H completion gate + completion record
@@ -728,26 +755,10 @@ Each PR must include affected normative docs, executable tests, no M7/M8 scope c
 
 # Current execution checkpoint
 
-M6-E1 — implemented:
+M6-E1: merged PR #45.
+M6-E2: merged PR #47.
+M6-E3: active implementation PR #48; completion **not claimed** until
+full CI, concurrency and local-recovery evidence is green.
 
-- `warapi-map-quality-policy.schema.json`;
-- embedded `warapi-map-quality-policy@1.json`;
-- explicit quality-effect to terminal-decision aggregation;
-- exact eight-rule structural shell;
-- fail-closed source registry tied to `warapi-map-taxonomy@1`;
-- runtime semantic validation of rule/effect/parameter identity;
-- Contracts CI validation including exact rule-set/version uniqueness;
-- SourceTests covering stable identity, aggregation, parameters and unknown-version failure.
-
-Next implementation task:
-
-~~~text
-M6-E2
-MapQualityKernel
-+ PostgresMapQualityStore
-+ atomic quality/accepted-observation transaction
-~~~
-
-M6-E3 follows with the evidence-driven chronology barrier, baseline concurrency tests and Worker integration.
-
-Do not implement mass-NONE thresholds before M6-E3 is green.
+Next after E3 acceptance: M6-F1 golden fixtures and offline extraction,
+then M6-F2 calibration. Do not move anomaly thresholds into E3.

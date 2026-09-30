@@ -25,6 +25,7 @@ public sealed class WarApiReconciler(
     WarApiWarReportNormalizationCoordinator warReportNormalization,
     WarApiStaticMapNormalizationCoordinator staticMapNormalization,
     WarApiDynamicMapNormalizationCoordinator dynamicMapNormalization,
+    WarApiMapQualityCoordinator mapQuality,
     TimeProvider timeProvider,
     ILogger<WarApiReconciler> logger)
 {
@@ -122,17 +123,35 @@ public sealed class WarApiReconciler(
             if (context.SourceEndpoint.Capability ==
                     WarApiCapabilities.StaticMapState)
             {
-                await staticMapNormalization.NormalizeAsync(
+                var normalized = await staticMapNormalization.NormalizeAsync(
                     parse.Run.Id,
                     cancellationToken);
+                if (normalized.Snapshot is not null)
+                {
+                    await mapQuality.EvaluateAsync(
+                        normalized.Snapshot,
+                        context.Shard.Id,
+                        snapshot.CurrentFetch.Id,
+                        snapshot.CurrentFetch.RetrievedAt,
+                        cancellationToken);
+                }
             }
 
             if (context.SourceEndpoint.Capability ==
                     WarApiCapabilities.DynamicMapState)
             {
-                await dynamicMapNormalization.NormalizeAsync(
+                var normalized = await dynamicMapNormalization.NormalizeAsync(
                     parse.Run.Id,
                     cancellationToken);
+                if (normalized.Snapshot is not null)
+                {
+                    await mapQuality.EvaluateAsync(
+                        normalized.Snapshot,
+                        context.Shard.Id,
+                        snapshot.CurrentFetch.Id,
+                        snapshot.CurrentFetch.RetrievedAt,
+                        cancellationToken);
+                }
             }
         }
 
