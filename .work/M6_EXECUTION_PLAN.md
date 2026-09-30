@@ -114,7 +114,7 @@ Add:
   warapi-map-quality-policy@1.json
 ~~~
 
-M6-E policy@1 is a structural shell, not the final historical-anomaly threshold set.
+M6-E policy@1 is the immutable structural-only shell. Once E3 starts persisting QualityRuns, do not add rules or thresholds to that same policy version. M6-F publishes a distinct calibrated policy@2.
 
 Initial rule families:
 
@@ -350,7 +350,7 @@ M6-E closes only when:
 
 Do not begin M6-F before this.
 
-# M6-F — calibrated anomaly policy v1
+# M6-F — calibrated anomaly policy v2
 
 ## F1. Golden fixture catalog
 
@@ -403,9 +403,9 @@ Record:
 
 The calibration harness must run offline and must not require the public War API.
 
-## F4. Freeze policy@1
+## F4. Publish policy@2 without mutating policy@1
 
-After calibration, commit explicit thresholds/configuration into the versioned policy JSON.
+After calibration, publish a new warapi-map-quality-policy@2.json with its own full policy identity. Preserve policy@1 unchanged for deterministic historical reprocessing. The calibrated policy may include the structural rules carried forward from @1, but its entire rule set and thresholds are frozen together.
 
 Mass-NONE must be composite. A high NONE share alone is insufficient.
 
@@ -734,7 +734,7 @@ Create .work/M6_COMPLETION.md containing:
 | M6-C | A/B core | dynamic snapshots | anomaly acceptance |
 | M6-D | raw normalized values | versioned taxonomy | rewrite raw values |
 | M6-E | A-D | quality + accepted observations | freeze uncalibrated anomaly thresholds |
-| M6-F | E + fixtures/evidence | calibrated policy@1 | objective matching |
+| M6-F | E + fixtures/evidence | calibrated policy@2, frozen structural @1 | objective matching |
 | M6-G | E/F | deterministic recovery | new HTTP for durable work |
 | M6-H | A-G | completion proof | new domain features |
 
@@ -745,7 +745,7 @@ M6-E1 policy contracts + validation
 M6-E2 quality kernel/store + atomic transaction
 M6-E3 coordinator + chronology/concurrency tests + Worker integration
 M6-F1 golden fixtures + offline feature extraction
-M6-F2 calibrated policy@1 + anomaly rules
+M6-F2 calibrated policy@2 + anomaly rules
 M6-G1 source-neutral coverage-plan refactor
 M6-G2 M6 recovery + 304 continuity
 M6-H completion gate + completion record
