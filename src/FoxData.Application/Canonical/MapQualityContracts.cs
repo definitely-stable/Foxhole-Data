@@ -1,6 +1,7 @@
 using FoxData.Core.Evidence;
 using FoxData.Core.Quality;
 using FoxData.Core.Runtime;
+using FoxData.Core.Sources;
 
 namespace FoxData.Application.Canonical;
 
@@ -139,6 +140,24 @@ public interface IMapQualityOrderingReader
         FetchId validationFetchId,
         string taxonomyVersion,
         string qualityPolicyVersion,
+        CancellationToken cancellationToken);
+}
+
+public sealed record MapQualityPendingSnapshot(
+    NormalizationRunId NormalizationRunId,
+    ShardId ShardId,
+    FetchId RepresentationFetchId,
+    DateTimeOffset RetrievedAt);
+
+public interface IMapQualityPendingReader
+{
+    Task<IReadOnlyList<MapQualityPendingSnapshot>> GetPendingAsync(
+        string sourceKey,
+        string taxonomyVersion,
+        string qualityPolicyVersion,
+        DateTimeOffset? afterRetrievedAt,
+        FetchId? afterFetchId,
+        int batchSize,
         CancellationToken cancellationToken);
 }
 
