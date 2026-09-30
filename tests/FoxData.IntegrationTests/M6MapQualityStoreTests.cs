@@ -261,6 +261,92 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task LaterValidationWaitsForEarlierDurableQuality()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: 13,
+            warRegionSourceRegionId: null);
+        var validation = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10));
+        var ordering = new PostgresMapQualityOrderingReader(
+            fixture.DataSource);
+
+        var deferred = await ordering.GetPlanAsync(
+            fixture.Snapshot.Id,
+            fixture.WarRegionId,
+            validation,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(MapQualityOrderingStatus.Deferred, deferred.Status);
+        Assert.Equal("earlier_quality_missing", deferred.DeferredReason);
+
+        await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+            () => fixture.Kernel.RecordAsync(
+                fixture.CreateWrite(
+                    MapQualityDecision.Accepted,
+                    validationFetchId: validation),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(0L, await fixture.CountAsync(
+            "quality.map_quality_runs"));
+
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+        var ready = await ordering.GetPlanAsync(
+            fixture.Snapshot.Id,
+            fixture.WarRegionId,
+            validation,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(MapQualityOrderingStatus.Ready, ready.Status);
+        Assert.Equal(first.Observation!.Id, ready.Baseline!.Id);
+
+        var second = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: validation,
+                baselineMapObservationId: ready.Baseline.Id),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(first.Observation.Id, second.Run.BaselineMapObservationId);
+    }
+
+    [Fact]
+    public async Task OmittingLatestAcceptedBaselineFailsClosed()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Accepted),
+            TestContext.Current.CancellationToken);
+        var validation = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10));
+
+        var exception =
+            await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
+                () => fixture.Kernel.RecordAsync(
+                    fixture.CreateWrite(
+                        MapQualityDecision.Accepted,
+                        validationFetchId: validation),
+                    TestContext.Current.CancellationToken));
+        Assert.Equal("quality_baseline_changed", exception.Reason);
+        Assert.Equal(1L, await fixture.CountAsync(
+            "quality.map_quality_runs"));
+        Assert.Equal(1L, await fixture.CountAsync(
+            "runtime.map_observations"));
+
+        var next = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: validation,
+                baselineMapObservationId: first.Observation!.Id),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(first.Observation.Id, next.Run.BaselineMapObservationId);
+    }
+
+    [Fact]
     public async Task DatabaseRejectsObservationForNonAcceptedQualityRun()
     {
         await using var fixture = await CreateFixtureAsync(
