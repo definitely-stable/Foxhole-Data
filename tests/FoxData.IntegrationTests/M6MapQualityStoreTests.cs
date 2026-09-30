@@ -810,7 +810,6 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     private static async Task<CaptureResult> CaptureAsync(
         IngestionKernel ingestion,
         EvidenceKernel evidence,
-        ISourceParseRunStore parseRuns,
         FoxData.Core.Sources.EndpointId endpointId,
         string idempotencyKey,
         DateTimeOffset retrievedAt,
@@ -898,6 +897,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
         NpgsqlDataSource dataSource,
         IngestionKernel ingestion,
         EvidenceKernel evidence,
+        ISourceParseRunStore parseRuns,
         FoxData.Core.Sources.EndpointId endpointId,
         SourceParseRunId sourceParseRunId,
         MapSnapshotKernel snapshotKernel,
