@@ -862,7 +862,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             var capture = await CaptureAsync(
                 ingestion,
                 evidence,
-                endpointId,
+                EndpointId,
                 "m6-e2-validation-304",
                 retrievedAt,
                 304,
