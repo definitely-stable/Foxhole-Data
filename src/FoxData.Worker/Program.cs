@@ -48,6 +48,7 @@ builder.Services.AddScoped<WarApiReconciler>();
 builder.Services.AddHostedService<BootstrapWorker>();
 builder.Services.AddHostedService<IngestionRecoveryWorker>();
 builder.Services.AddHostedService<WarApiCoverageRecoveryWorker>();
+builder.Services.AddHostedService<WarApiMapQualityRecoveryWorker>();
 builder.Services.AddHostedService<WarApiPlannerWorker>();
 builder.Services.AddHostedService<WarApiExecutorWorker>();
 

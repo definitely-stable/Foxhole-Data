@@ -347,6 +347,125 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task PendingReaderFindsUncommittedQualityAndStopsAfterTerminalResult()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        var pending = new PostgresMapQualityPendingReader(
+            fixture.DataSource);
+
+        var before = await pending.GetPendingAsync(
+            "official-war-api",
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Single(before);
+        Assert.Equal(
+            fixture.RepresentationFetchId,
+            before[0].RepresentationFetchId);
+        Assert.Equal(
+            fixture.Snapshot.NormalizationRunId,
+            before[0].NormalizationRunId);
+
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(MapQualityDecision.Suspect),
+            TestContext.Current.CancellationToken);
+
+        var after = await pending.GetPendingAsync(
+            "official-war-api",
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Empty(after);
+    }
+
+    [Fact]
+    public async Task ConcurrentSameIdentityQualityWritesConverge()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: 13,
+            warRegionSourceRegionId: null);
+        var write = fixture.CreateWrite(MapQualityDecision.Accepted);
+
+        var both = await Task.WhenAll(
+            fixture.Kernel.RecordAsync(
+                write,
+                TestContext.Current.CancellationToken),
+            fixture.Kernel.RecordAsync(
+                write,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(both[0].Run.Id, both[1].Run.Id);
+        Assert.Equal(both[0].Observation!.Id, both[1].Observation!.Id);
+        Assert.Equal(1L, await fixture.CountAsync(
+            "quality.map_quality_runs"));
+        Assert.Equal(1L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
+    public async Task QualityStoreRejectsCrossShardWarRegion()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+        await using (var command = fixture.DataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                WITH new_shard AS
+                (
+                    INSERT INTO sources.shards
+                        (id, source_id, key, display_name, environment)
+                    SELECT
+                        @new_shard_id,
+                        shard.source_id,
+                        'quality-test-other-shard',
+                        'Other test shard',
+                        'live'
+                    FROM sources.shards AS shard
+                    JOIN sources.endpoints AS endpoint
+                        ON endpoint.shard_id = shard.id
+                    WHERE endpoint.id = @endpoint_id
+                    RETURNING id
+                )
+                UPDATE runtime.wars
+                SET shard_id = (SELECT id FROM new_shard)
+                WHERE id = (
+                    SELECT war_id
+                    FROM runtime.war_regions
+                    WHERE id = @war_region_id
+                );
+                """;
+            command.Parameters.AddWithValue(
+                "new_shard_id",
+                Guid.CreateVersion7());
+            command.Parameters.AddWithValue(
+                "endpoint_id",
+                fixture.EndpointId.Value);
+            command.Parameters.AddWithValue(
+                "war_region_id",
+                fixture.WarRegionId.Value);
+            await command.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken);
+        }
+
+        await Assert.ThrowsAsync<CanonicalStateIntegrityException>(
+            () => fixture.Kernel.RecordAsync(
+                fixture.CreateWrite(MapQualityDecision.Accepted),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(0L, await fixture.CountAsync(
+            "runtime.map_observations"));
+    }
+
+    [Fact]
     public async Task DatabaseRejectsObservationForNonAcceptedQualityRun()
     {
         await using var fixture = await CreateFixtureAsync(
@@ -708,6 +827,7 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
         : IAsyncDisposable
     {
         public NpgsqlDataSource DataSource { get; } = dataSource;
+        public FoxData.Core.Sources.EndpointId EndpointId { get; } = endpointId;
         public MapQualityKernel Kernel { get; } = kernel;
         public MapSnapshotDescriptor Snapshot { get; } = snapshot;
         public MapItemOccurrenceDescriptor Item { get; } = item;
