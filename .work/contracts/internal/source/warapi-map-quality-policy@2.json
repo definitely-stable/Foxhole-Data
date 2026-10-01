@@ -1,0 +1,156 @@
+{
+  "version": "warapi-map-quality@2",
+  "source": "official-war-api",
+  "taxonomyVersion": "warapi-map-taxonomy@1",
+  "reviewedAt": "2026-10-01",
+  "aggregation": {
+    "noFindingsDecision": "accepted",
+    "informationalDecision": "accepted",
+    "suspectDecision": "suspect",
+    "quarantinedDecision": "quarantined"
+  },
+  "rules": [
+    {
+      "key": "region-id.valid",
+      "ruleVersion": "region-id.valid@1",
+      "configurationVersion": "region-id.valid-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "allowNull": true,
+        "minimum": 0
+      }
+    },
+    {
+      "key": "region-id.conflict",
+      "ruleVersion": "region-id.conflict@1",
+      "configurationVersion": "region-id.conflict-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "blockOnConflict": true
+      }
+    },
+    {
+      "key": "coordinate.valid",
+      "ruleVersion": "coordinate.valid@1",
+      "configurationVersion": "coordinate.valid-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "minimum": 0,
+        "maximum": 1,
+        "requireFinite": true
+      }
+    },
+    {
+      "key": "source-time.representable",
+      "ruleVersion": "source-time.representable@1",
+      "configurationVersion": "source-time.representable-config@1",
+      "effect": "suspect",
+      "parameters": {
+        "allowMissing": true,
+        "requireSafeUtcWhenPresent": true
+      }
+    },
+    {
+      "key": "schema.structure-changed",
+      "ruleVersion": "schema.structure-changed@1",
+      "configurationVersion": "schema.structure-changed-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "taxonomy.unknown-icon",
+      "ruleVersion": "taxonomy.unknown-icon@1",
+      "configurationVersion": "taxonomy.unknown-icon-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "taxonomy.unknown-team",
+      "ruleVersion": "taxonomy.unknown-team@1",
+      "configurationVersion": "taxonomy.unknown-team-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "taxonomy.unknown-flag-bits",
+      "ruleVersion": "taxonomy.unknown-flag-bits@1",
+      "configurationVersion": "taxonomy.unknown-flag-bits-config@1",
+      "effect": "informational",
+      "parameters": {}
+    },
+    {
+      "key": "source-version.regression",
+      "ruleVersion": "source-version.regression@1",
+      "configurationVersion": "source-version.regression-config@1",
+      "effect": "informational",
+      "parameters": {
+        "triggerBelowDelta": 0
+      }
+    },
+    {
+      "key": "source-version.gap",
+      "ruleVersion": "source-version.gap@1",
+      "configurationVersion": "source-version.gap-config@1",
+      "effect": "informational",
+      "parameters": {
+        "minimumMissingVersions": 1
+      }
+    },
+    {
+      "key": "source-last-updated.regression",
+      "ruleVersion": "source-last-updated.regression@1",
+      "configurationVersion": "source-last-updated.regression-config@1",
+      "effect": "suspect",
+      "parameters": {
+        "triggerBelowDeltaMilliseconds": 0
+      }
+    },
+    {
+      "key": "representation.near-empty",
+      "ruleVersion": "representation.near-empty@1",
+      "configurationVersion": "representation.near-empty-config@1",
+      "effect": "suspect",
+      "parameters": {
+        "minimumBaselineOccurrences": 8,
+        "maximumTotalOccurrenceRatio": 0.2
+      }
+    },
+    {
+      "key": "representation.mass-disappearance",
+      "ruleVersion": "representation.mass-disappearance@1",
+      "configurationVersion": "representation.mass-disappearance-config@1",
+      "effect": "suspect",
+      "parameters": {
+        "minimumBaselineItems": 12,
+        "maximumItemCountRatio": 0.5
+      }
+    },
+    {
+      "key": "representation.duplicate-occurrence",
+      "ruleVersion": "representation.duplicate-occurrence@1",
+      "configurationVersion": "representation.duplicate-occurrence-config@1",
+      "effect": "informational",
+      "parameters": {
+        "minimumExcessCount": 1
+      }
+    },
+    {
+      "key": "ownership.restart-collapse",
+      "ruleVersion": "ownership.restart-collapse@1",
+      "configurationVersion": "ownership.restart-collapse-config@1",
+      "effect": "quarantined",
+      "parameters": {
+        "minimumBaselineItems": 12,
+        "minimumBaselineOwnedShare": 0.5,
+        "minimumCurrentNoneShare": 0.9,
+        "minimumNoneShareIncrease": 0.5,
+        "maximumCurrentOwnedShare": 0.1,
+        "minimumOwnedShareDrop": 0.5,
+        "maximumItemCountRatio": 0.8,
+        "maximumDistinctIconTypeRatio": 0.75,
+        "minimumCorroboratingSignals": 1,
+        "versionRegressionCountsAsCorroboratingSignal": true
+      }
+    }
+  ]
+}

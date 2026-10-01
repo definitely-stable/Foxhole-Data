@@ -13,7 +13,14 @@ public static class WarApiVersions
     public const string StaticMapNormalizer = "warapi-static-map-normalizer@1";
     public const string DynamicMapNormalizer = "warapi-dynamic-map-normalizer@1";
     public const string MapTaxonomy = "warapi-map-taxonomy@1";
-    public const string MapQualityPolicy = "warapi-map-quality@1";
+    public const string MapQualityPolicyV1 = "warapi-map-quality@1";
+    public const string MapQualityPolicyV2 = "warapi-map-quality@2";
+
+    // Runtime remains pinned to @1 until M6-G can perform ordered
+    // versioned reprocessing. F2 publishes/calibrates @2 without
+    // silently backfilling historical snapshots through E3 recovery.
+    public const string MapQualityPolicy = MapQualityPolicyV1;
+    public const string LatestMapQualityPolicy = MapQualityPolicyV2;
     public const string CoverageReprocessor = "warapi-coverage-reprocessor@1";
 
     public static string SchedulingPolicy(
