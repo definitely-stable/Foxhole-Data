@@ -4,7 +4,7 @@
   "policyVersion": "warapi-map-quality@2",
   "cases": [
     {
-      "fixtureId": "healthy-dynamic-baseline",
+      "fixtureId": "healthy-dynamic-baseline-clean",
       "expectedDecision": "accepted",
       "requiredRuleKeys": [],
       "forbiddenRuleKeys": [],
@@ -32,7 +32,7 @@
       "falsePositiveNote": "Minimized #120 restart symptom must hit the same composite family."
     },
     {
-      "fixtureId": "healthy-recovery",
+      "fixtureId": "healthy-recovery-clean",
       "expectedDecision": "accepted",
       "requiredRuleKeys": [],
       "forbiddenRuleKeys": [
@@ -115,7 +115,7 @@
       "falsePositiveNote": "Existing structural safety rule remains blocking."
     },
     {
-      "fixtureId": "source-region-conflict",
+      "fixtureId": "source-region-conflict-clean",
       "expectedDecision": "quarantined",
       "requiredRuleKeys": [
         "region-id.conflict"
@@ -124,7 +124,7 @@
       "falsePositiveNote": "Existing accepted-region conflict remains blocking."
     },
     {
-      "fixtureId": "source-version-regression",
+      "fixtureId": "source-version-regression-clean",
       "expectedDecision": "accepted",
       "requiredRuleKeys": [
         "source-version.regression"
@@ -135,7 +135,7 @@
       "falsePositiveNote": "M4 requires version regression to be non-blocking alone."
     },
     {
-      "fixtureId": "last-updated-regression",
+      "fixtureId": "last-updated-regression-clean",
       "expectedDecision": "suspect",
       "requiredRuleKeys": [
         "source-last-updated.regression"
@@ -144,7 +144,7 @@
       "falsePositiveNote": "Unobserved-in-M4 timestamp regression is fail-closed as suspect, not quarantine."
     },
     {
-      "fixtureId": "source-version-gap",
+      "fixtureId": "source-version-gap-clean",
       "expectedDecision": "accepted",
       "requiredRuleKeys": [
         "source-version.gap"
