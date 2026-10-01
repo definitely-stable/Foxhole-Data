@@ -166,61 +166,6 @@
       "sourceUrl": null,
       "baselineFixtureId": "healthy-dynamic-baseline",
       "notes": "lastUpdated regression feature without policy threshold."
-    },
-    {
-      "id": "source-version-gap",
-      "file": "source-version-gap.json",
-      "capabilityKey": "dynamic-map-state",
-      "sourceMapName": "FishermansRowHex",
-      "role": "progression-gap",
-      "provenanceKind": "synthetic",
-      "sourceUrl": null,
-      "baselineFixtureId": "healthy-dynamic-baseline",
-      "notes": "Isolated version-gap negative control calibrated against M4 where gaps were common."
-    },
-    {
-      "id": "near-empty-representation",
-      "file": "near-empty-representation.json",
-      "capabilityKey": "dynamic-map-state",
-      "sourceMapName": "FishermansRowHex",
-      "role": "count-collapse",
-      "provenanceKind": "synthetic",
-      "sourceUrl": null,
-      "baselineFixtureId": "healthy-dynamic-baseline",
-      "notes": "Synthetic severe total-occurrence collapse without ownership-NONE restart signature."
-    },
-    {
-      "id": "mass-disappearance",
-      "file": "mass-disappearance.json",
-      "capabilityKey": "dynamic-map-state",
-      "sourceMapName": "FishermansRowHex",
-      "role": "count-collapse",
-      "provenanceKind": "synthetic",
-      "sourceUrl": null,
-      "baselineFixtureId": "healthy-dynamic-baseline",
-      "notes": "Synthetic item-count collapse retaining mixed faction ownership."
-    },
-    {
-      "id": "stable-neutral-continuation",
-      "file": "stable-neutral-continuation.json",
-      "capabilityKey": "dynamic-map-state",
-      "sourceMapName": "DeadLandsHex",
-      "role": "false-positive-guard",
-      "provenanceKind": "synthetic",
-      "sourceUrl": null,
-      "baselineFixtureId": "war-start-neutral",
-      "notes": "High-NONE baseline continuation proving NONE share alone cannot imply restart."
-    },
-    {
-      "id": "unknown-taxonomy-healthy-shape",
-      "file": "unknown-taxonomy-healthy-shape.json",
-      "capabilityKey": "dynamic-map-state",
-      "sourceMapName": "FishermansRowHex",
-      "role": "false-positive-guard",
-      "provenanceKind": "synthetic",
-      "sourceUrl": null,
-      "baselineFixtureId": "healthy-dynamic-baseline",
-      "notes": "Healthy-shaped representation with one unknown team, icon and flag-bit occurrence."
     }
   ],
   "contextFixtures": [
