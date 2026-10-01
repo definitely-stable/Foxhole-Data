@@ -1,0 +1,201 @@
+{
+  "version": "m6-map-quality-calibration-expectations@1",
+  "reviewedAt": "2026-10-01",
+  "policyVersion": "warapi-map-quality@2",
+  "cases": [
+    {
+      "fixtureId": "healthy-dynamic-baseline",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Positive healthy baseline control."
+    },
+    {
+      "fixtureId": "warapi-92-restart-mass-none",
+      "expectedDecision": "quarantined",
+      "requiredRuleKeys": [
+        "source-version.regression",
+        "ownership.restart-collapse"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Exact #92 payload must be blocked by the composite rule, not by NONE alone."
+    },
+    {
+      "fixtureId": "warapi-120-restart-transient",
+      "expectedDecision": "quarantined",
+      "requiredRuleKeys": [
+        "source-version.regression",
+        "representation.mass-disappearance",
+        "ownership.restart-collapse"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Minimized #120 restart symptom must hit the same composite family."
+    },
+    {
+      "fixtureId": "healthy-recovery",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Healthy recovery must not inherit quarantine semantics."
+    },
+    {
+      "fixtureId": "war-start-neutral",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "All-NONE with no baseline is a required false-positive guard."
+    },
+    {
+      "fixtureId": "warapi-137-icon97-viewdirection",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "taxonomy.unknown-icon"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Unknown icon/viewDirection is informational only."
+    },
+    {
+      "fixtureId": "warapi-115-duplicate-rocket-target",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "representation.duplicate-occurrence"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Duplicate source occurrences are retained and diagnostic, not blocked."
+    },
+    {
+      "fixtureId": "warapi-77-static-before",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Static baseline remains accepted."
+    },
+    {
+      "fixtureId": "warapi-77-static-changed",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Static representation change alone is not an anomaly decision."
+    },
+    {
+      "fixtureId": "unknown-team",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "taxonomy.unknown-team"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Unknown team alone remains informational."
+    },
+    {
+      "fixtureId": "unknown-flag-bits",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "taxonomy.unknown-flag-bits"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Unknown flag bits alone remain informational."
+    },
+    {
+      "fixtureId": "invalid-coordinate",
+      "expectedDecision": "quarantined",
+      "requiredRuleKeys": [
+        "coordinate.valid"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Existing structural safety rule remains blocking."
+    },
+    {
+      "fixtureId": "source-region-conflict",
+      "expectedDecision": "quarantined",
+      "requiredRuleKeys": [
+        "region-id.conflict"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Existing accepted-region conflict remains blocking."
+    },
+    {
+      "fixtureId": "source-version-regression",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "source-version.regression"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "M4 requires version regression to be non-blocking alone."
+    },
+    {
+      "fixtureId": "last-updated-regression",
+      "expectedDecision": "suspect",
+      "requiredRuleKeys": [
+        "source-last-updated.regression"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "Unobserved-in-M4 timestamp regression is fail-closed as suspect, not quarantine."
+    },
+    {
+      "fixtureId": "source-version-gap",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "source-version.gap"
+      ],
+      "forbiddenRuleKeys": [],
+      "falsePositiveNote": "M4 shows version gaps are common and non-blocking alone."
+    },
+    {
+      "fixtureId": "near-empty-representation",
+      "expectedDecision": "suspect",
+      "requiredRuleKeys": [
+        "representation.near-empty",
+        "representation.mass-disappearance"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Severe count collapse without ownership collapse is suspect, not quarantine."
+    },
+    {
+      "fixtureId": "mass-disappearance",
+      "expectedDecision": "suspect",
+      "requiredRuleKeys": [
+        "representation.mass-disappearance"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Large representation loss without restart ownership signature is suspect."
+    },
+    {
+      "fixtureId": "stable-neutral-continuation",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "High NONE share remains safe when baseline is also neutral."
+    },
+    {
+      "fixtureId": "unknown-taxonomy-healthy-shape",
+      "expectedDecision": "accepted",
+      "requiredRuleKeys": [
+        "taxonomy.unknown-icon",
+        "taxonomy.unknown-team",
+        "taxonomy.unknown-flag-bits"
+      ],
+      "forbiddenRuleKeys": [
+        "ownership.restart-collapse"
+      ],
+      "falsePositiveNote": "Unknown taxonomy values on a healthy-shaped baseline must not activate restart quarantine."
+    }
+  ]
+}
