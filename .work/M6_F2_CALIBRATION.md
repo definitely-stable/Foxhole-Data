@@ -1,6 +1,6 @@
 # M6-F2 map-quality calibration record
 
-Status: implementation calibration record for `warapi-map-quality@2`.
+Status: completed calibration record for `warapi-map-quality@2` in PR #50.
 Reviewed: 2026-10-01.
 Predecessor: M6-F1 golden fixture and deterministic feature layer.
 Runtime activation: deferred to M6-G versioned reprocessing.
@@ -104,6 +104,15 @@ The runner fails when the expected decision differs, a required rule does not hi
 or a forbidden rule hits. Each report retains candidate/baseline hashes, structural
 fingerprints, features, findings, rule/config identities and deterministic metrics.
 CI runs calibration twice and requires byte-identical output.
+
+Final review hardening additionally requires:
+
+- one-to-one coverage between the versioned fixture catalog and expectations;
+- same capability/source-map identity between every candidate and its declared baseline;
+- required/forbidden expectation rule keys to exist in policy@2 and never overlap;
+- exact retained M4 projection values and source artifact identity, not merely sign checks;
+- exact policy@2 parameter values in both JSON Schema and the embedded runtime loader,
+  so changing a threshold requires a new policy version.
 
 ## Verified offline calibration outcome
 
