@@ -61,6 +61,12 @@ public sealed record WarApiMapQualityFeatureSnapshot(
 
 public sealed record WarApiMapQualityFeatureVector(
     bool HasBaseline,
+    int? RegionId,
+    int? BaselineRegionId,
+    long? SourceVersion,
+    long? BaselineSourceVersion,
+    long? SourceLastUpdated,
+    long? BaselineSourceLastUpdated,
     bool MapItemsPresent,
     bool MapTextItemsPresent,
     bool? BaselineMapItemsPresent,
@@ -74,6 +80,11 @@ public sealed record WarApiMapQualityFeatureVector(
     int ColonialCount,
     int OtherTeamCount,
     int MissingTeamCount,
+    int? BaselineNoneCount,
+    int? BaselineWardenCount,
+    int? BaselineColonialCount,
+    int? BaselineOtherTeamCount,
+    int? BaselineMissingTeamCount,
     double? NoneShare,
     double? BaselineNoneShare,
     double? NoneShareDelta,
@@ -103,7 +114,8 @@ public sealed record WarApiMapQualityFeatureVector(
     int DuplicateItemExcessCount,
     int DuplicateTextGroupCount,
     int DuplicateTextExcessCount,
-    IReadOnlyDictionary<int, int> IconTypeCounts);
+    IReadOnlyDictionary<int, int> IconTypeCounts,
+    IReadOnlyDictionary<int, int>? BaselineIconTypeCounts);
 
 public static class WarApiMapQualityFeatureExtractor
 {
@@ -187,6 +199,12 @@ public static class WarApiMapQualityFeatureExtractor
 
         return new WarApiMapQualityFeatureVector(
             baseline is not null,
+            current.RegionId,
+            baseline?.RegionId,
+            current.SourceVersion,
+            baseline?.SourceVersion,
+            current.SourceLastUpdated,
+            baseline?.SourceLastUpdated,
             current.MapItemsPresent,
             current.MapTextItemsPresent,
             baseline?.MapItemsPresent,
@@ -200,6 +218,11 @@ public static class WarApiMapQualityFeatureExtractor
             currentTeams.Colonials,
             currentTeams.Other,
             currentTeams.Missing,
+            baselineTeams?.None,
+            baselineTeams?.Wardens,
+            baselineTeams?.Colonials,
+            baselineTeams?.Other,
+            baselineTeams?.Missing,
             currentNoneShare,
             baselineNoneShare,
             Difference(currentNoneShare, baselineNoneShare),
@@ -251,7 +274,8 @@ public static class WarApiMapQualityFeatureExtractor
             itemDuplicates.Excess,
             textDuplicates.Groups,
             textDuplicates.Excess,
-            currentIcons);
+            currentIcons,
+            baselineIcons);
     }
 
     private static TeamCounts CountTeams(
