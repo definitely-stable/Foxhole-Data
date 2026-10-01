@@ -120,6 +120,178 @@ public sealed class M5CanonicalRecoveryTests(
                 "runtime.war_observations"));
     }
 
+    [Fact]
+    public async Task CapabilityPlanControlsSelectionAndDependencyOrdering()
+    {
+        await MigrateAsync();
+        await ResetAsync();
+
+        await using var dataSource =
+            NpgsqlDataSource.Create(postgres.ConnectionString);
+        var registry = new SourceRegistry(
+            new PostgresSourceRegistryStore(dataSource));
+
+        var source = await registry.RegisterSourceAsync(
+            WarApiCatalog.SourceKey,
+            "Official Foxhole War API",
+            TestContext.Current.CancellationToken);
+        var shard = await registry.RegisterShardAsync(
+            source.Resource.Id,
+            "live-1",
+            "Live-1",
+            "live",
+            TestContext.Current.CancellationToken);
+        var warEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.RuntimeWarState.Key,
+            "war",
+            TestContext.Current.CancellationToken);
+        var mapsEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.ActiveMapList.Key,
+            "maps",
+            TestContext.Current.CancellationToken);
+
+        var ingestion = new IngestionKernel(
+            new PostgresIngestionKernelStore(dataSource));
+        var evidence = new EvidenceKernel(
+            new PostgresEvidenceKernelStore(dataSource));
+        var retrievedAt = new DateTimeOffset(
+            2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+
+        await CaptureRawAsync(
+            ingestion,
+            evidence,
+            warEndpoint.Resource.Id,
+            retrievedAt,
+            Encoding.UTF8.GetBytes(
+                """{"warId":"plan-war","warNumber":133,"winner":"NONE"}"""));
+        await CaptureRawAsync(
+            ingestion,
+            evidence,
+            mapsEndpoint.Resource.Id,
+            retrievedAt.AddSeconds(1),
+            Encoding.UTF8.GetBytes(
+                """["DeadLandsHex"]"""));
+
+        var store = new PostgresCoverageStore(dataSource);
+        var warOnly = new CoverageCapabilityPlan[]
+        {
+            new(
+                WarApiCapabilities.RuntimeWarState.Key,
+                WarApiVersions.Parser,
+                WarApiVersions.WarNormalizer,
+                DependencyRank: 9),
+        };
+
+        var filtered = await store.GetUncoveredAttemptsAsync(
+            WarApiCatalog.SourceKey,
+            warOnly,
+            64,
+            TestContext.Current.CancellationToken);
+
+        var single = Assert.Single(filtered);
+        Assert.Equal(
+            WarApiCapabilities.RuntimeWarState.Key,
+            single.CapabilityKey);
+
+        var plan = new CoverageCapabilityPlan[]
+        {
+            new(
+                WarApiCapabilities.ActiveMapList.Key,
+                WarApiVersions.Parser,
+                WarApiVersions.RegionNormalizer,
+                DependencyRank: 0),
+            new(
+                WarApiCapabilities.RuntimeWarState.Key,
+                WarApiVersions.Parser,
+                WarApiVersions.WarNormalizer,
+                DependencyRank: 10),
+        };
+
+        var uncovered = await store.GetUncoveredAttemptsAsync(
+            WarApiCatalog.SourceKey,
+            plan,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(2, uncovered.Count);
+
+        var parser = new WarApiParser();
+        var parseStore = new PostgresSourceParseRunStore(dataSource);
+        foreach (var candidate in uncovered)
+        {
+            Assert.NotNull(candidate.RepresentationFetchId);
+            Assert.NotNull(candidate.RepresentationBody);
+
+            var capability = candidate.CapabilityKey switch
+            {
+                "runtime-war-state" =>
+                    WarApiCapabilities.RuntimeWarState,
+                "active-map-list" =>
+                    WarApiCapabilities.ActiveMapList,
+                _ => throw new InvalidOperationException(
+                    $"Unexpected test capability '{candidate.CapabilityKey}'."),
+            };
+            var parsed = parser.Parse(
+                capability,
+                candidate.RepresentationBody);
+            Assert.True(parsed.Parsed);
+
+            var outcome = parsed.Outcome switch
+            {
+                WarApiParseOutcome.Parsed => "parsed",
+                WarApiParseOutcome.ParsedWithUnknowns =>
+                    "parsed_with_unknowns",
+                _ => throw new InvalidOperationException(
+                    "Test fixture must parse successfully."),
+            };
+            await parseStore.RecordAsync(
+                new SourceParseRunWrite(
+                    candidate.RepresentationFetchId.Value,
+                    candidate.CapabilityKey,
+                    WarApiVersions.Adapter,
+                    WarApiVersions.Parser,
+                    JsonStructuralFingerprinter.Algorithm,
+                    parsed.StructuralFingerprint,
+                    outcome,
+                    parsed.UnknownPropertyCount,
+                    parsed.UnknownCodeCount,
+                    parsed.ErrorCode,
+                    retrievedAt,
+                    retrievedAt.AddMilliseconds(1),
+                    parsed.SourceVersion,
+                    parsed.SourceLastUpdated,
+                    candidate.RepresentationBody.LongLength),
+                TestContext.Current.CancellationToken);
+        }
+
+        var pending =
+            await store.GetPendingCanonicalReprocessingAsync(
+                WarApiCatalog.SourceKey,
+                plan,
+                64,
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [
+                WarApiCapabilities.ActiveMapList.Key,
+                WarApiCapabilities.RuntimeWarState.Key,
+            ],
+            pending.Select(item => item.CapabilityKey).ToArray());
+
+        var invalidPlan = new CoverageCapabilityPlan[]
+        {
+            plan[0],
+            plan[0] with { DependencyRank = 1 },
+        };
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.GetUncoveredAttemptsAsync(
+                WarApiCatalog.SourceKey,
+                invalidPlan,
+                64,
+                TestContext.Current.CancellationToken));
+    }
+
     private static WarApiCoverageRecoveryCoordinator
         CreateRecoveryCoordinator(NpgsqlDataSource dataSource)
     {
