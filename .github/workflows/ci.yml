@@ -77,6 +77,13 @@ jobs:
           cmp --silent "$first" "$second"
           grep --quiet '"mismatchCount": 0' "$first"
 
+      - name: Persist M6 F2 calibration report
+        uses: actions/upload-artifact@v7
+        with:
+          name: m6-f2-calibration-${{ github.run_id }}
+          path: ${{ runner.temp }}/m6-f2-calibration-1.json
+          if-no-files-found: error
+
       - name: Unit tests
         run: >-
           dotnet test
