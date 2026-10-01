@@ -1,15 +1,15 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E1 and M6-E2 merged; M6-E3 in progress in PR #48.
+Status: active execution companion. M6-E is merged through PR #48; M6-F1 is in progress in PR #49.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
 
-## Current implementation checkpoint (2026-09-30)
+## Current implementation checkpoint (2026-10-01)
 
-- M6-E2 is on main as #47, with passing main CI/Contracts.
-- M6-E3 lives in PR #48 and is not complete until CI and recovery gates pass.
+- M6-E2 is on main as #47.
+- M6-E3 is on main as #48 with passing post-merge CI/Contracts.
 - Both the preliminary ordering reader and the locked quality transaction use the
   same source-evidence chronology query. The preliminary read is advisory only.
 - The source-neutral kernel and PostgreSQL store also fail closed when a
@@ -55,7 +55,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-The next slice is M6-E.
+The current slice is M6-F1: golden fixtures and deterministic offline feature extraction.
 
 ## Non-negotiable invariants
 
@@ -376,7 +376,7 @@ Incomplete upstream issue data must be labelled synthetic/minimized regression d
 
 ## F2. Deterministic feature extraction
 
-F1 implementation exposes these measurements as facts only; no thresholds or terminal decisions are encoded here.
+F1 implementation exposes these measurements as facts only; no thresholds or terminal decisions are encoded here. Raw iconType counts plus a concentration statistic are emitted rather than inventing undocumented icon families.
 
 Extract:
 
@@ -385,7 +385,8 @@ Extract:
 - NONE share;
 - owned-team share;
 - count ratios versus baseline;
-- icon-family distribution;
+- raw iconType distribution as the F1 evidence primitive;
+- policy-defined icon-family distribution only if policy@2 explicitly defines a versioned mapping;
 - composition concentration/collapse;
 - source version delta;
 - lastUpdated delta;
