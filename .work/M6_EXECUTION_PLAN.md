@@ -1,6 +1,6 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E is merged through PR #48; M6-F1 is merged as #49; M6-F2 calibrated policy@2 is implemented in PR #50 with runtime activation deliberately deferred to M6-G.
+Status: active execution companion. M6-E is merged through PR #48; M6-F1 is merged as #49; M6-F2 calibrated policy@2 is complete in PR #50 with runtime activation deliberately deferred to M6-G.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
@@ -55,7 +55,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-The current slice is M6-F2: fail-closed offline calibration and immutable policy@2 publication. Runtime selection remains policy@1 until M6-G ordered versioned reprocessing.
+M6-F2 is complete in PR #50. The next implementation slice is M6-G: coverage, recovery, ordered versioned reprocessing and controlled policy@2 activation.
 
 ## Non-negotiable invariants
 
@@ -381,7 +381,7 @@ followed by publication of immutable policy@2 only when false-positive analysis 
 
 # M6-F — calibrated anomaly policy v2
 
-Current slice: M6-F2 offline calibration + immutable policy@2 in PR #50. Runtime policy selection remains @1 until M6-G ordered versioned reprocessing.
+M6-F2 offline calibration + immutable policy@2 is complete in PR #50. Runtime policy selection remains @1 until M6-G ordered versioned reprocessing.
 
 ## F1. Golden fixture catalog
 
@@ -809,7 +809,7 @@ Each PR must include affected normative docs, executable tests, no M7/M8 scope c
 
 M6-E1: merged PR #45.
 M6-E2: merged PR #47.
-M6-E3: active implementation PR #48; completion **not claimed** until
-full CI, concurrency and local-recovery evidence is green.
+M6-E3: merged in PR #48 after full CI, concurrency and local-recovery
+evidence passed.
 
-M6-F1 is merged. M6-F2 calibration/policy@2 is the current slice; after acceptance proceed to M6-G coverage/recovery/versioned reprocessing. Do not activate @2 through the narrow E3 recovery path.
+M6-F1 is merged and M6-F2 is complete in PR #50. Proceed to M6-G coverage/recovery/versioned reprocessing after merge. Do not activate @2 through the narrow E3 recovery path.
