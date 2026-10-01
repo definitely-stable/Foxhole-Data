@@ -141,7 +141,15 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
     {
         var current = Load("invalid-coordinate.json");
 
-        var result = Evaluate(current, baseline: null);
+        var result = WarApiMapQualityPolicyEvaluator.Evaluate(
+            WarApiMapQualityPolicyRegistry.Get(
+                WarApiVersions.MapQualityPolicyV1),
+            current.Snapshot,
+            baseline: null,
+            current.Snapshot.RegionId,
+            current.StructuralFingerprint,
+            baselineStructuralFingerprint: null,
+            _taxonomy);
         var finding = Assert.Single(
             result.Findings,
             item => item.RuleKey == "coordinate.valid");
