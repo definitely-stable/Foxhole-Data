@@ -25,6 +25,17 @@
       "notes": "Exact JSON payload embedded in issue #92, captured 2021-10-11 14:18 GMT."
     },
     {
+      "id": "warapi-120-restart-transient",
+      "file": "warapi-120-restart-transient.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "historical-anomaly",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/120",
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "Issue #120 documents transient restart false changes but publishes no JSON; this fixture is an intentionally minimized synthetic representation of that symptom."
+    },
+    {
       "id": "healthy-recovery",
       "file": "healthy-recovery.json",
       "capabilityKey": "dynamic-map-state",
