@@ -402,8 +402,8 @@
               ],
               "properties": {
                 "triggerBelowDelta": {
-                  "type": "number",
-                  "maximum": 0
+                  "type": "integer",
+                  "const": 0
                 }
               }
             }
@@ -434,7 +434,7 @@
               "properties": {
                 "minimumMissingVersions": {
                   "type": "integer",
-                  "minimum": 1
+                  "const": 1
                 }
               }
             }
@@ -464,8 +464,8 @@
               ],
               "properties": {
                 "triggerBelowDeltaMilliseconds": {
-                  "type": "number",
-                  "maximum": 0
+                  "type": "integer",
+                  "const": 0
                 }
               }
             }
@@ -497,12 +497,11 @@
               "properties": {
                 "minimumBaselineOccurrences": {
                   "type": "integer",
-                  "minimum": 1
+                  "const": 8
                 },
                 "maximumTotalOccurrenceRatio": {
                   "type": "number",
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "const": 0.2
                 }
               }
             }
@@ -534,12 +533,11 @@
               "properties": {
                 "minimumBaselineItems": {
                   "type": "integer",
-                  "minimum": 1
+                  "const": 12
                 },
                 "maximumItemCountRatio": {
                   "type": "number",
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "const": 0.5
                 }
               }
             }
@@ -570,7 +568,7 @@
               "properties": {
                 "minimumExcessCount": {
                   "type": "integer",
-                  "minimum": 1
+                  "const": 1
                 }
               }
             }
@@ -610,50 +608,42 @@
               "properties": {
                 "minimumBaselineItems": {
                   "type": "integer",
-                  "minimum": 1
+                  "const": 12
                 },
                 "minimumBaselineOwnedShare": {
                   "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "const": 0.5
                 },
                 "minimumCurrentNoneShare": {
                   "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "const": 0.9
                 },
                 "minimumNoneShareIncrease": {
                   "type": "number",
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "const": 0.5
                 },
                 "maximumCurrentOwnedShare": {
                   "type": "number",
-                  "minimum": 0,
-                  "maximum": 1
+                  "const": 0.1
                 },
                 "minimumOwnedShareDrop": {
                   "type": "number",
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "const": 0.5
                 },
                 "maximumItemCountRatio": {
                   "type": "number",
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "const": 0.8
                 },
                 "maximumDistinctIconTypeRatio": {
                   "type": "number",
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "const": 0.75
                 },
                 "minimumCorroboratingSignals": {
                   "type": "integer",
-                  "minimum": 1,
-                  "maximum": 3
+                  "const": 1
                 },
                 "versionRegressionCountsAsCorroboratingSignal": {
-                  "type": "boolean"
+                  "const": true
                 }
               }
             }
