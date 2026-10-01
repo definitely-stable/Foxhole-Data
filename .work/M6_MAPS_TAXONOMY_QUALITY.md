@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-E complete; M6-F1 merged in PR #49; M6-F2 calibrated policy@2 is implemented in PR #50 with runtime activation deferred to M6-G.
+Status: in progress. M6-A through M6-F2 complete through PR #50; calibrated policy@2 runtime activation remains deferred to M6-G.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
