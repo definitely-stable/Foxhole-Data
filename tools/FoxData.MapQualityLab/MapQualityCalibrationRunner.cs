@@ -36,12 +36,14 @@ internal static class MapQualityCalibrationRunner
             var fixtures = catalog.Fixtures.ToDictionary(
                 item => item.Id,
                 StringComparer.Ordinal);
+            ValidateCatalogRelationships(catalog, fixtures);
             var profile = WarApiMapQualityPolicyRegistry.Get(
                 expectations.PolicyVersion);
             var taxonomy = new WarApiMapTaxonomyInterpreter(
                 WarApiMapTaxonomyRegistry.Get(
                     profile.TaxonomyVersion));
             ValidateM4PolicyConstraints(profile);
+            ValidateExpectationRules(expectations, profile);
 
             var cases = new List<CalibrationCase>();
             foreach (var expected in expectations.Cases
@@ -264,6 +266,21 @@ internal static class MapQualityCalibrationRunner
                 "Calibration expectations must not be empty.");
         }
 
+        if (catalog.Fixtures.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Calibration fixture catalog must not be empty.");
+        }
+
+        var fixtureIds = catalog.Fixtures
+            .Select(item => item.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (fixtureIds.Count != catalog.Fixtures.Count)
+        {
+            throw new InvalidOperationException(
+                "Calibration fixture catalog contains duplicate fixture IDs.");
+        }
+
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in expectations.Cases)
         {
@@ -274,6 +291,114 @@ internal static class MapQualityCalibrationRunner
             }
 
             _ = ParseDecision(item.ExpectedDecision);
+            if (string.IsNullOrWhiteSpace(item.FalsePositiveNote))
+            {
+                throw new InvalidOperationException(
+                    $"Calibration expectation '{item.FixtureId}' requires a false-positive note.");
+            }
+        }
+
+        if (!ids.SetEquals(fixtureIds))
+        {
+            var missingExpectations = fixtureIds
+                .Except(ids, StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal);
+            var missingFixtures = ids
+                .Except(fixtureIds, StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal);
+            throw new InvalidOperationException(
+                "Calibration fixtures and expectations must have one-to-one coverage. " +
+                $"Missing expectations: [{string.Join(", ", missingExpectations)}]; " +
+                $"missing fixtures: [{string.Join(", ", missingFixtures)}].");
+        }
+    }
+
+    private static void ValidateCatalogRelationships(
+        FixtureCatalog catalog,
+        IReadOnlyDictionary<string, FixtureEntry> fixtures)
+    {
+        foreach (var fixture in catalog.Fixtures)
+        {
+            if (string.IsNullOrWhiteSpace(fixture.Id) ||
+                string.IsNullOrWhiteSpace(fixture.File) ||
+                string.IsNullOrWhiteSpace(fixture.CapabilityKey) ||
+                string.IsNullOrWhiteSpace(fixture.SourceMapName) ||
+                string.IsNullOrWhiteSpace(fixture.Role) ||
+                string.IsNullOrWhiteSpace(fixture.ProvenanceKind))
+            {
+                throw new InvalidOperationException(
+                    "Calibration fixture metadata contains an empty required field.");
+            }
+
+            if (fixture.BaselineFixtureId is not { } baselineId)
+            {
+                continue;
+            }
+
+            if (!fixtures.TryGetValue(baselineId, out var baseline))
+            {
+                throw new InvalidOperationException(
+                    $"Fixture '{fixture.Id}' references unknown baseline '{baselineId}'.");
+            }
+
+            if (!string.Equals(
+                    fixture.CapabilityKey,
+                    baseline.CapabilityKey,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    fixture.SourceMapName,
+                    baseline.SourceMapName,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Fixture '{fixture.Id}' baseline must use the same capability and source map identity.");
+            }
+        }
+    }
+
+    private static void ValidateExpectationRules(
+        CalibrationExpectations expectations,
+        WarApiMapQualityPolicyProfile profile)
+    {
+        var knownRules = profile.Rules
+            .Select(rule => rule.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var expectation in expectations.Cases)
+        {
+            var required = expectation.RequiredRuleKeys
+                .ToHashSet(StringComparer.Ordinal);
+            var forbidden = expectation.ForbiddenRuleKeys
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (required.Count != expectation.RequiredRuleKeys.Count ||
+                forbidden.Count != expectation.ForbiddenRuleKeys.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Calibration expectation '{expectation.FixtureId}' contains duplicate rule keys.");
+            }
+
+            var overlap = required
+                .Intersect(forbidden, StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            if (overlap.Length != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Calibration expectation '{expectation.FixtureId}' both requires and forbids: {string.Join(", ", overlap)}.");
+            }
+
+            var unknown = required
+                .Concat(forbidden)
+                .Where(key => !knownRules.Contains(key))
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            if (unknown.Length != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Calibration expectation '{expectation.FixtureId}' references unknown policy rules: {string.Join(", ", unknown)}.");
+            }
         }
     }
 
