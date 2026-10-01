@@ -47,7 +47,7 @@ public sealed class WarApiCoverageRecoveryCoordinator(
 
         var uncovered = await coverageStore.GetUncoveredAttemptsAsync(
             WarApiCatalog.SourceKey,
-            WarApiVersions.Parser,
+            WarApiCoverageCapabilityPlans.M5Canonical,
             BatchSize,
             cancellationToken);
 
@@ -122,10 +122,7 @@ public sealed class WarApiCoverageRecoveryCoordinator(
         var canonicalCandidates =
             await coverageStore.GetPendingCanonicalReprocessingAsync(
                 WarApiCatalog.SourceKey,
-                WarApiVersions.Parser,
-                WarApiVersions.WarNormalizer,
-                WarApiVersions.RegionNormalizer,
-                WarApiVersions.WarReportNormalizer,
+                WarApiCoverageCapabilityPlans.M5Canonical,
                 BatchSize,
                 cancellationToken);
 
