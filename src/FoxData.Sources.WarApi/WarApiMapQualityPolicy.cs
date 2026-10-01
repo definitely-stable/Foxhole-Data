@@ -793,7 +793,7 @@ public static class WarApiMapQualityPolicyRegistry
             !property.TryGetDouble(out var value) ||
             !double.IsFinite(value) ||
             value > 1d ||
-            exclusiveMinimum ? value <= 0d : value < 0d)
+            (exclusiveMinimum ? value <= 0d : value < 0d))
         {
             throw new InvalidOperationException(
                 $"Quality rule '{ruleKey}' parameter '{propertyName}' must be within {(exclusiveMinimum ? "(0, 1]" : "[0, 1]")}.");
