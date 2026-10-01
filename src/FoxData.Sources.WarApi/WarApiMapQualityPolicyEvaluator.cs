@@ -112,10 +112,7 @@ public static class WarApiMapQualityPolicyEvaluator
             add(
                 "region-id.conflict",
                 "conflicting_region_id",
-                [
-                    ("acceptedRegionId", durableRegionId),
-                    ("candidateRegionId", candidateRegionId),
-                ]);
+                [("count", 1)]);
         }
 
         if (features.InvalidCoordinateCount != 0)
@@ -136,7 +133,7 @@ public static class WarApiMapQualityPolicyEvaluator
             add(
                 "source-time.representable",
                 "unrepresentable_source_timestamp",
-                [("sourceLastUpdated", current.SourceLastUpdated)]);
+                [("count", 1)]);
         }
 
         if (currentStructuralFingerprint is { } currentFingerprint &&
@@ -149,10 +146,7 @@ public static class WarApiMapQualityPolicyEvaluator
             add(
                 "schema.structure-changed",
                 "structural_fingerprint_changed",
-                [
-                    ("currentFingerprint", currentFingerprint),
-                    ("baselineFingerprint", baselineFingerprint),
-                ]);
+                [("count", 1)]);
         }
 
         if (features.UnknownIconCount != 0)
@@ -176,12 +170,7 @@ public static class WarApiMapQualityPolicyEvaluator
             add(
                 "taxonomy.unknown-flag-bits",
                 "unknown_flag_bits",
-                [
-                    ("occurrenceCount",
-                        features.UnknownFlagOccurrenceCount),
-                    ("unknownBitCount",
-                        features.UnknownFlagBitCount),
-                ]);
+                [("count", features.UnknownFlagOccurrenceCount)]);
         }
     }
 
