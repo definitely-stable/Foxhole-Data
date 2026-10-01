@@ -221,7 +221,9 @@ public sealed class M5CanonicalRecoveryTests(
         foreach (var candidate in uncovered)
         {
             Assert.NotNull(candidate.RepresentationFetchId);
-            Assert.NotNull(candidate.RepresentationBody);
+            var body = candidate.RepresentationBody
+                ?? throw new InvalidOperationException(
+                    "Uncovered body-bearing test candidate lost its representation body.");
 
             var capability = candidate.CapabilityKey switch
             {
@@ -234,7 +236,7 @@ public sealed class M5CanonicalRecoveryTests(
             };
             var parsed = parser.Parse(
                 capability,
-                candidate.RepresentationBody);
+                body);
             Assert.True(parsed.Parsed);
 
             var outcome = parsed.Outcome switch
@@ -261,7 +263,7 @@ public sealed class M5CanonicalRecoveryTests(
                     retrievedAt.AddMilliseconds(1),
                     parsed.SourceVersion,
                     parsed.SourceLastUpdated,
-                    candidate.RepresentationBody.LongLength),
+                    body.LongLength),
                 TestContext.Current.CancellationToken);
         }
 
