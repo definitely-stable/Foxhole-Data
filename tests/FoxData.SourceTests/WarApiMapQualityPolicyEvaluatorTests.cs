@@ -16,37 +16,37 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
     [Theory]
     [InlineData(
         "warapi-92-restart-mass-none.json",
-        "healthy-dynamic-baseline.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Quarantined,
         "ownership.restart-collapse")]
     [InlineData(
         "warapi-120-restart-transient.json",
-        "healthy-dynamic-baseline.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Quarantined,
         "ownership.restart-collapse")]
     [InlineData(
-        "source-version-regression.json",
-        "healthy-dynamic-baseline.json",
+        "source-version-regression-clean.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Accepted,
         "source-version.regression")]
     [InlineData(
-        "last-updated-regression.json",
-        "healthy-dynamic-baseline.json",
+        "last-updated-regression-clean.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Suspect,
         "source-last-updated.regression")]
     [InlineData(
-        "source-version-gap.json",
-        "healthy-dynamic-baseline.json",
+        "source-version-gap-clean.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Accepted,
         "source-version.gap")]
     [InlineData(
         "near-empty-representation.json",
-        "healthy-dynamic-baseline.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Suspect,
         "representation.near-empty")]
     [InlineData(
         "mass-disappearance.json",
-        "healthy-dynamic-baseline.json",
+        "healthy-dynamic-baseline-clean.json",
         WarApiMapQualityPolicyDecision.Suspect,
         "representation.mass-disappearance")]
     public void CalibratedCasesProduceExpectedDecisionAndRule(
@@ -86,7 +86,7 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
     [Fact]
     public void UnknownTaxonomyOnHealthyShapeRemainsAccepted()
     {
-        var baseline = Load("healthy-dynamic-baseline.json");
+        var baseline = Load("healthy-dynamic-baseline-clean.json");
         var current = Load(
             "unknown-taxonomy-healthy-shape.json");
 
@@ -156,7 +156,7 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
     {
         var current = Load(
             "warapi-92-restart-mass-none.json");
-        var baseline = Load("healthy-dynamic-baseline.json");
+        var baseline = Load("healthy-dynamic-baseline-clean.json");
 
         var first = Evaluate(current, baseline);
         var second = Evaluate(current, baseline);
@@ -207,12 +207,24 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
                 parsed.StructuralFingerprint));
     }
 
-    private static string FixturePath(string file) =>
-        Path.Combine(
+    private static string FixturePath(string file)
+    {
+        var calibration = Path.Combine(
+            AppContext.BaseDirectory,
+            "Calibration",
+            "M6",
+            file);
+        if (File.Exists(calibration))
+        {
+            return calibration;
+        }
+
+        return Path.Combine(
             AppContext.BaseDirectory,
             "Fixtures",
             "M6",
             file);
+    }
 
     private sealed record LoadedFixture(
         WarApiMapQualityFeatureSnapshot Snapshot,
