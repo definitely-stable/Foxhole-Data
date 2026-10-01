@@ -9,6 +9,12 @@ Runtime activation: deferred to M6-G versioned reprocessing.
 
 ### Historical/source-specific fixtures
 
+F2 does not modify `.work/fixtures/m6-map-quality/catalog.json` or any F1 fixture
+bytes. Its synthetic controls live in a separate
+`m6-map-quality-calibration-fixtures@1` catalog under `.work/calibration`.
+This keeps every F1 artifact hash reproducible while allowing calibration-specific
+controls to evolve only through a new calibration-corpus version.
+
 - warapi#92: exact upstream dynamic-map JSON from 2021-10-11 14:18 GMT;
 - warapi#120: restart false-state symptom represented by a labelled synthetic/minimized fixture because upstream published no JSON;
 - warapi#137: exact iconType 97/viewDirection occurrence inside a labelled synthetic wrapper;
