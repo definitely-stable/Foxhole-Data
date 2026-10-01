@@ -230,7 +230,7 @@ internal static class MapQualityCalibrationRunner
     {
         if (!string.Equals(
                 catalog.Version,
-                "m6-map-quality-fixtures@1",
+                "m6-map-quality-calibration-fixtures@1",
                 StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
@@ -426,7 +426,7 @@ internal static class MapQualityCalibrationRunner
     private static CalibrationOptions Parse(string[] args)
     {
         var catalog =
-            ".work/fixtures/m6-map-quality/catalog.json";
+            ".work/calibration/m6-map-quality/calibration-fixtures@1.json";
         var expectations =
             ".work/calibration/m6-map-quality/calibration-expectations@1.json";
         var m4Evidence =
