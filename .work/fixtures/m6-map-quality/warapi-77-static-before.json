@@ -1,0 +1,12 @@
+{
+  "regionId": 1,
+  "scorchedVictoryTowns": 0,
+  "mapItems": [
+    {"teamId":"NONE","iconType":22,"x":0.2,"y":0.3,"flags":0}
+  ],
+  "mapTextItems": [
+    {"text":"Deadlands","x":0.5,"y":0.5,"mapMarkerType":"Major"}
+  ],
+  "lastUpdated": 1605666182324,
+  "version": 3
+}

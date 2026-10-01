@@ -352,6 +352,8 @@ Do not begin M6-F before this.
 
 # M6-F — calibrated anomaly policy v2
 
+Current slice: M6-F1 golden fixtures + deterministic offline feature extraction. Calibration/thresholds remain M6-F2.
+
 ## F1. Golden fixture catalog
 
 Minimum fixtures:
@@ -373,6 +375,8 @@ Minimum fixtures:
 Incomplete upstream issue data must be labelled synthetic/minimized regression derived from the issue.
 
 ## F2. Deterministic feature extraction
+
+F1 implementation exposes these measurements as facts only; no thresholds or terminal decisions are encoded here.
 
 Extract:
 

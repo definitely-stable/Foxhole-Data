@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>foxdata-map-quality-lab</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/FoxData.Sources.WarApi/FoxData.Sources.WarApi.csproj" />
+  </ItemGroup>
+</Project>
