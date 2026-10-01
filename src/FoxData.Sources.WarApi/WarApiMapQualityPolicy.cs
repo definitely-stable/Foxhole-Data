@@ -224,7 +224,7 @@ public static class WarApiMapQualityPolicyRegistry
             quarantined != WarApiMapQualityPolicyDecision.Quarantined)
         {
             throw new InvalidOperationException(
-                "Quality policy aggregation does not match the v1 decision contract.");
+                "Quality policy aggregation does not match the frozen decision contract.");
         }
 
         return new WarApiMapQualityAggregationProfile(
@@ -458,11 +458,11 @@ public static class WarApiMapQualityPolicyRegistry
                     key,
                     parameters,
                     "triggerBelowDelta");
-                RequireNumberAtMost(
+                RequireNumber(
                     key,
                     parameters,
                     "triggerBelowDelta",
-                    0d);
+                    expected: 0d);
                 break;
 
             case "source-version.gap":
@@ -475,11 +475,11 @@ public static class WarApiMapQualityPolicyRegistry
                     key,
                     parameters,
                     "minimumMissingVersions");
-                RequireIntegerAtLeast(
+                RequireInteger(
                     key,
                     parameters,
                     "minimumMissingVersions",
-                    1);
+                    expected: 1);
                 break;
 
             case "source-last-updated.regression":
@@ -492,11 +492,11 @@ public static class WarApiMapQualityPolicyRegistry
                     key,
                     parameters,
                     "triggerBelowDeltaMilliseconds");
-                RequireNumberAtMost(
+                RequireNumber(
                     key,
                     parameters,
                     "triggerBelowDeltaMilliseconds",
-                    0d);
+                    expected: 0d);
                 break;
 
             case "representation.near-empty":
@@ -510,16 +510,16 @@ public static class WarApiMapQualityPolicyRegistry
                     parameters,
                     "minimumBaselineOccurrences",
                     "maximumTotalOccurrenceRatio");
-                RequireIntegerAtLeast(
+                RequireInteger(
                     key,
                     parameters,
                     "minimumBaselineOccurrences",
-                    1);
-                RequireUnitInterval(
+                    expected: 8);
+                RequireNumber(
                     key,
                     parameters,
                     "maximumTotalOccurrenceRatio",
-                    exclusiveMinimum: true);
+                    expected: 0.2d);
                 break;
 
             case "representation.mass-disappearance":
@@ -533,16 +533,16 @@ public static class WarApiMapQualityPolicyRegistry
                     parameters,
                     "minimumBaselineItems",
                     "maximumItemCountRatio");
-                RequireIntegerAtLeast(
+                RequireInteger(
                     key,
                     parameters,
                     "minimumBaselineItems",
-                    1);
-                RequireUnitInterval(
+                    expected: 12);
+                RequireNumber(
                     key,
                     parameters,
                     "maximumItemCountRatio",
-                    exclusiveMinimum: true);
+                    expected: 0.5d);
                 break;
 
             case "representation.duplicate-occurrence":
@@ -555,11 +555,11 @@ public static class WarApiMapQualityPolicyRegistry
                     key,
                     parameters,
                     "minimumExcessCount");
-                RequireIntegerAtLeast(
+                RequireInteger(
                     key,
                     parameters,
                     "minimumExcessCount",
-                    1);
+                    expected: 1);
                 break;
 
             case "ownership.restart-collapse":
@@ -581,43 +581,56 @@ public static class WarApiMapQualityPolicyRegistry
                     "maximumDistinctIconTypeRatio",
                     "minimumCorroboratingSignals",
                     "versionRegressionCountsAsCorroboratingSignal");
-                RequireIntegerAtLeast(
+                RequireInteger(
                     key,
                     parameters,
                     "minimumBaselineItems",
-                    1);
-                foreach (var name in new[]
-                         {
-                             "minimumBaselineOwnedShare",
-                             "minimumCurrentNoneShare",
-                             "minimumNoneShareIncrease",
-                             "maximumCurrentOwnedShare",
-                             "minimumOwnedShareDrop",
-                             "maximumItemCountRatio",
-                             "maximumDistinctIconTypeRatio",
-                         })
-                {
-                    RequireUnitInterval(
-                        key,
-                        parameters,
-                        name,
-                        exclusiveMinimum:
-                            name is "minimumNoneShareIncrease"
-                                or "minimumOwnedShareDrop"
-                                or "maximumItemCountRatio"
-                                or "maximumDistinctIconTypeRatio");
-                }
-
-                RequireIntegerRange(
+                    expected: 12);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumBaselineOwnedShare",
+                    expected: 0.5d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumCurrentNoneShare",
+                    expected: 0.9d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumNoneShareIncrease",
+                    expected: 0.5d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumCurrentOwnedShare",
+                    expected: 0.1d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumOwnedShareDrop",
+                    expected: 0.5d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumItemCountRatio",
+                    expected: 0.8d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumDistinctIconTypeRatio",
+                    expected: 0.75d);
+                RequireInteger(
                     key,
                     parameters,
                     "minimumCorroboratingSignals",
-                    1,
-                    3);
-                RequireBooleanType(
+                    expected: 1);
+                RequireBoolean(
                     key,
                     parameters,
-                    "versionRegressionCountsAsCorroboratingSignal");
+                    "versionRegressionCountsAsCorroboratingSignal",
+                    expected: true);
                 break;
 
             default:
