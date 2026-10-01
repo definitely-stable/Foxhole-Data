@@ -516,7 +516,7 @@ Prove:
 
 # M6-G — coverage, recovery and reprocessing
 
-Current slice: M6-G1 source-neutral coverage capability-plan refactor. G1 preserves the exact M5 capability set and behavior; static/dynamic coverage is introduced only by G2 after G1 acceptance.
+M6-G1 source-neutral coverage capability-plan refactor is complete in PR #51. The next slice is M6-G2: extend coverage semantics to static-map-state and dynamic-map-state without yet enabling policy@2 activation.
 
 ## G1. Generalize capability plan
 
@@ -543,7 +543,7 @@ G1 implementation checkpoint:
 - RecoveryTests prove plan filtering and supplied dependency ordering independently of source timestamps;
 - static/dynamic map capabilities are intentionally absent until G2.
 
-M5 behavior must remain identical.
+G1 acceptance: exact-head CI, Contracts, Dependency Review, RecoveryTests and Docker smoke are green; M5 behavior remains identical.
 
 ## G2. Extend coverage to M6 capabilities
 
