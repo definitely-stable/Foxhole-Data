@@ -73,7 +73,7 @@ jobs:
           first="$RUNNER_TEMP/m6-f2-calibration-1.json"
           second="$RUNNER_TEMP/m6-f2-calibration-2.json"
           dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- calibrate --catalog .work/calibration/m6-map-quality/calibration-fixtures@1.json --expectations .work/calibration/m6-map-quality/calibration-expectations@1.json --m4-evidence .work/calibration/m6-map-quality/m4-calibration-evidence@1.json --output "$first"
-          dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- calibrate --catalog .work/fixtures/m6-map-quality/catalog.json --expectations .work/calibration/m6-map-quality/calibration-expectations@1.json --m4-evidence .work/calibration/m6-map-quality/m4-calibration-evidence@1.json --output "$second"
+          dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- calibrate --catalog .work/calibration/m6-map-quality/calibration-fixtures@1.json --expectations .work/calibration/m6-map-quality/calibration-expectations@1.json --m4-evidence .work/calibration/m6-map-quality/m4-calibration-evidence@1.json --output "$second"
           cmp --silent "$first" "$second"
           grep --quiet '"mismatchCount": 0' "$first"
 
