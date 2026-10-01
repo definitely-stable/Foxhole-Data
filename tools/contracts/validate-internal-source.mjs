@@ -55,15 +55,21 @@ addFormats(ajv);
 
 let failed = false;
 const documents = new Map();
+const validators = new Map();
 
 for (const [schemaName, documentName] of pairs) {
-  const schema = JSON.parse(
-    fs.readFileSync(path.join(contracts, schemaName), "utf8")
-  );
+  let validate = validators.get(schemaName);
+  if (!validate) {
+    const schema = JSON.parse(
+      fs.readFileSync(path.join(contracts, schemaName), "utf8")
+    );
+    validate = ajv.compile(schema);
+    validators.set(schemaName, validate);
+  }
+
   const document = JSON.parse(
     fs.readFileSync(path.join(contracts, documentName), "utf8")
   );
-  const validate = ajv.compile(schema);
   documents.set(documentName, document);
 
   if (!validate(document)) {
