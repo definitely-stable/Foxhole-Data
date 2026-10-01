@@ -1,0 +1,15 @@
+{
+  "regionId": 15,
+  "scorchedVictoryTowns": 0,
+  "mapItems": [
+    {"teamId":"NONE","iconType":18,"x":0.40,"y":0.22,"flags":0},
+    {"teamId":"NONE","iconType":18,"x":0.53,"y":0.58,"flags":0},
+    {"teamId":"NONE","iconType":39,"x":0.50,"y":0.56,"flags":0},
+    {"teamId":"NONE","iconType":56,"x":0.70,"y":0.38,"flags":8},
+    {"teamId":"NONE","iconType":56,"x":0.46,"y":0.52,"flags":8},
+    {"teamId":"NONE","iconType":33,"x":0.36,"y":0.25,"flags":0}
+  ],
+  "mapTextItems": [],
+  "lastUpdated": 1700503900000,
+  "version": 1
+}
