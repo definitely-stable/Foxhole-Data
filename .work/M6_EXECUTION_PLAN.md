@@ -516,7 +516,7 @@ Prove:
 
 # M6-G — coverage, recovery and reprocessing
 
-M6-G1 source-neutral coverage capability-plan refactor is complete in PR #51. The next slice is M6-G2: extend coverage semantics to static-map-state and dynamic-map-state without yet enabling policy@2 activation.
+M6-G1 source-neutral coverage capability-plan refactor is complete in PR #51. Current slice: M6-G2/G3 static/dynamic coverage extension plus local parse repair; map normalization remains deferred to G4 and policy@2 activation remains deferred.
 
 ## G1. Generalize capability plan
 
@@ -571,6 +571,14 @@ For authoritative durable representation bytes with missing parser@1 run:
 - replay parser;
 - record normal SourceParseRun;
 - no new HTTP request.
+
+G2/G3 implementation boundary:
+
+- coverage+parse plan now includes `static-map-state` and `dynamic-map-state`;
+- canonical-normalization plan intentionally remains M5-only until G4;
+- a crash after durable map capture but before parser@1 is repaired from local representation bytes before coverage classification is finalized;
+- successful map recovery records `coverage=observed` and a normal SourceParseRun without issuing a new Fetch;
+- no map normalization, quality evaluation or policy@2 activation is allowed in this slice.
 
 ## G4. Normalization gap scanner
 
