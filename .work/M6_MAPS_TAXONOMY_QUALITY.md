@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-E complete; M6-F1 golden fixtures and deterministic offline feature extraction in progress.
+Status: in progress. M6-A through M6-E complete; M6-F1 golden fixtures and deterministic offline feature extraction implemented and verified in PR #49; M6-F2 calibration next.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1387,6 +1387,16 @@ Acceptance:
 - a quarantine never deletes evidence;
 - accepted observation and quality run cannot diverge after crash;
 - baseline selection is deterministic under concurrent/out-of-order processing.
+
+### M6-F1 implementation checkpoint
+
+The F1 evidence/feature layer is complete in PR #49. It deliberately stops before
+policy calibration. The fixture catalog distinguishes exact upstream bytes from
+synthetic/minimized regressions, and the offline feature lab records exact payload
+SHA-256 plus parser structural fingerprints so later calibration can be audited.
+
+F1 does not assign anomaly decisions. M6-F2 owns calibration, false-positive review
+against retained M4 evidence and publication of a new immutable policy@2.
 
 ### M6-F — Historical anomaly rules and calibrated policy v2
 

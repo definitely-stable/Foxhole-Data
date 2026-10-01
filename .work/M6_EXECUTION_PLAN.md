@@ -1,6 +1,6 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E is merged through PR #48; M6-F1 is in progress in PR #49.
+Status: active execution companion. M6-E is merged through PR #48; M6-F1 is implemented and exact-head verified in PR #49. M6-F2 calibration is next after merge.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
@@ -350,9 +350,38 @@ M6-E closes only when:
 
 Do not begin M6-F before this.
 
+## M6-F1 completion checkpoint (2026-10-01)
+
+Delivered and verified before merge:
+
+- versioned `m6-map-quality-fixtures@1` catalog;
+- exact upstream warapi#92 restart payload plus provenance-marked minimized/synthetic guards;
+- explicit warapi#120, #137, #115, #77 and HomeRegion evidence boundaries;
+- deterministic source-specific feature extractor with no anomaly thresholds;
+- candidate/baseline source values, exact team/raw-icon distributions, occurrence ratios,
+  NONE/owned shares, concentration, progression deltas, taxonomy diagnostics,
+  coordinate diagnostics, duplicate counts and null-vs-empty array presence;
+- SHA-256 and structural fingerprints in every offline candidate/baseline record;
+- offline `FoxData.MapQualityLab` requiring no public War API;
+- CI runs the lab twice and requires byte-identical JSONL output;
+- source tests prove historical #92 feature shape, no-baseline neutral handling,
+  isolated regressions, unknown taxonomy, duplicate occurrence, provenance labels
+  and missing-vs-empty array behavior.
+
+Not delivered by F1:
+
+- no thresholds;
+- no candidate policy decision;
+- no #92 quarantine assertion;
+- no `warapi-map-quality@2`;
+- no runtime Worker behavior change.
+
+Next slice: M6-F2 offline calibration over these fixtures plus retained M4 evidence,
+followed by publication of immutable policy@2 only when false-positive analysis is recorded.
+
 # M6-F — calibrated anomaly policy v2
 
-Current slice: M6-F1 golden fixtures + deterministic offline feature extraction. Calibration/thresholds remain M6-F2.
+Current slice: M6-F1 golden fixtures + deterministic offline feature extraction — implementation complete and verified in PR #49. Calibration/thresholds remain M6-F2 and are not part of F1.
 
 ## F1. Golden fixture catalog
 
