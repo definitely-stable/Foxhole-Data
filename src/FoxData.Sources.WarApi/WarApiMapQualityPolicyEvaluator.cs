@@ -225,7 +225,7 @@ public static class WarApiMapQualityPolicyEvaluator
             sourceTime.Parameters[
                 "triggerBelowDeltaMilliseconds"].GetDecimal();
         if (features.SourceLastUpdatedDeltaMilliseconds is
-                { } lastUpdatedDelta &&
+            { } lastUpdatedDelta &&
             lastUpdatedDelta < sourceTimeThreshold)
         {
             add(
