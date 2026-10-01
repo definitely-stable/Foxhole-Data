@@ -143,6 +143,99 @@ public sealed class WarApiMapQualityPolicyTests
     }
 
     [Fact]
+    public void V2ProfileLoadsCalibratedRulesWithoutChangingRuntimeSelection()
+    {
+        var profile = WarApiMapQualityPolicyRegistry.Get(
+            WarApiVersions.MapQualityPolicyV2);
+
+        Assert.Equal(
+            "warapi-map-quality@2",
+            profile.Version);
+        Assert.Equal(
+            new DateOnly(2026, 10, 1),
+            profile.ReviewedAt);
+        Assert.Equal(15, profile.Rules.Count);
+        Assert.Equal(
+            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicy);
+        Assert.Equal(
+            WarApiVersions.MapQualityPolicyV2,
+            WarApiVersions.LatestMapQualityPolicy);
+
+        AssertRule(
+            profile,
+            "source-version.regression",
+            WarApiMapQualityEffect.Informational);
+        AssertRule(
+            profile,
+            "source-version.gap",
+            WarApiMapQualityEffect.Informational);
+        AssertRule(
+            profile,
+            "source-last-updated.regression",
+            WarApiMapQualityEffect.Suspect);
+        AssertRule(
+            profile,
+            "representation.near-empty",
+            WarApiMapQualityEffect.Suspect);
+        AssertRule(
+            profile,
+            "representation.mass-disappearance",
+            WarApiMapQualityEffect.Suspect);
+        AssertRule(
+            profile,
+            "representation.duplicate-occurrence",
+            WarApiMapQualityEffect.Informational);
+        AssertRule(
+            profile,
+            "ownership.restart-collapse",
+            WarApiMapQualityEffect.Quarantined);
+    }
+
+    [Fact]
+    public void V2ThresholdsComeFromFrozenPolicyData()
+    {
+        var profile = WarApiMapQualityPolicyRegistry.Get(
+            WarApiVersions.MapQualityPolicyV2);
+
+        var restart = GetRule(
+            profile,
+            "ownership.restart-collapse");
+        Assert.Equal(
+            12,
+            restart.Parameters[
+                "minimumBaselineItems"].GetInt32());
+        Assert.Equal(
+            0.5d,
+            restart.Parameters[
+                "minimumBaselineOwnedShare"].GetDouble());
+        Assert.Equal(
+            0.9d,
+            restart.Parameters[
+                "minimumCurrentNoneShare"].GetDouble());
+        Assert.Equal(
+            0.8d,
+            restart.Parameters[
+                "maximumItemCountRatio"].GetDouble());
+        Assert.Equal(
+            0.75d,
+            restart.Parameters[
+                "maximumDistinctIconTypeRatio"].GetDouble());
+
+        var nearEmpty = GetRule(
+            profile,
+            "representation.near-empty");
+        Assert.Equal(
+            8,
+            nearEmpty.Parameters[
+                "minimumBaselineOccurrences"].GetInt32());
+        Assert.Equal(
+            0.2d,
+            nearEmpty.Parameters[
+                "maximumTotalOccurrenceRatio"].GetDouble());
+    }
+
+    [Fact]
     public void UnknownQualityPolicyVersionFailsClosed()
     {
         Assert.Throws<NotSupportedException>(
