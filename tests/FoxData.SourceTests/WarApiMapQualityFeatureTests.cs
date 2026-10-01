@@ -119,6 +119,37 @@ public sealed class WarApiMapQualityFeatureTests
     }
 
     [Fact]
+    public void MissingAndEmptyArraysRemainDistinctFeatureFacts()
+    {
+        var missing = WarApiMapQualityFeatureSnapshot.FromDto(
+            new WarApiMapDataDto());
+        var empty = WarApiMapQualityFeatureSnapshot.FromDto(
+            new WarApiMapDataDto
+            {
+                MapItems = [],
+                MapTextItems = [],
+            });
+
+        var missingFeatures =
+            WarApiMapQualityFeatureExtractor.Extract(
+                missing,
+                null,
+                _taxonomy);
+        var emptyFeatures =
+            WarApiMapQualityFeatureExtractor.Extract(
+                empty,
+                null,
+                _taxonomy);
+
+        Assert.False(missingFeatures.MapItemsPresent);
+        Assert.False(missingFeatures.MapTextItemsPresent);
+        Assert.True(emptyFeatures.MapItemsPresent);
+        Assert.True(emptyFeatures.MapTextItemsPresent);
+        Assert.Equal(0, missingFeatures.ItemCount);
+        Assert.Equal(0, emptyFeatures.ItemCount);
+    }
+
+    [Fact]
     public void FixtureCatalogMarksIncompleteUpstreamCasesAsSyntheticMinimized()
     {
         using var catalog = JsonDocument.Parse(
