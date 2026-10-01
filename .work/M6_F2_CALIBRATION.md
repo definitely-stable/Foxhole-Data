@@ -105,6 +105,39 @@ or a forbidden rule hits. Each report retains candidate/baseline hashes, structu
 fingerprints, features, findings, rule/config identities and deterministic metrics.
 CI runs calibration twice and requires byte-identical output.
 
+## Verified offline calibration outcome
+
+A successful CI replay over the isolated calibration corpus produced:
+
+- cases: 20;
+- matched: 20;
+- mismatches: 0;
+- accepted: 13;
+- suspect: 3;
+- quarantined: 4;
+- deterministic report SHA-256:
+  `b1aa86ce7c49d0916dc863fb4e14c5ba02599ce8e1cc6943181559cd55df1614`.
+
+Representative results:
+
+| case | decisive features | result / rule hits |
+| --- | --- | --- |
+| exact warapi#92 | item ratio 0.75; NONE 1.0 vs 0.0833; owned 0 vs 0.9167; distinct-icon ratio 0.5714; version delta -7 | quarantined; version regression + restart-collapse; all three corroborators true |
+| minimized warapi#120 | item ratio 0.25; NONE 1.0 vs 0.0833; distinct-icon ratio 0.2857; version delta -7 | quarantined; version regression + mass-disappearance + restart-collapse |
+| stable neutral continuation | item ratio 1.0; NONE 1.0 -> 1.0; owned 0 -> 0; version +1 | accepted; no findings |
+| isolated version regression | item ratio 1.0; ownership/composition unchanged; version delta -4 | accepted; informational version-regression only |
+| near-empty control | 2 vs 24 items; ratio 0.0833; ownership remains fully faction-owned | suspect; near-empty + mass-disappearance, no restart-collapse |
+
+The exact #92 source also carries five observations of raw flag bit 0x08 that
+taxonomy@1 treats as unknown. That produces only an informational taxonomy finding
+and is not a restart-corruption predicate. This is deliberate evidence that the
+quarantine depends on the composite ownership/corroboration rule rather than an
+unrelated unknown-code diagnostic.
+
+The complete report includes all feature vectors, hashes, rule/config identities,
+input metrics, decisions and false-positive notes and is persisted by CI as
+`m6-f2-calibration-<run-id>`.
+
 ## Runtime activation boundary
 
 F2 publishes and validates `warapi-map-quality@2`, but
