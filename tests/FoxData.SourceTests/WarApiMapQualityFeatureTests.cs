@@ -93,6 +93,7 @@ public sealed class WarApiMapQualityFeatureTests
             baseline,
             _taxonomy);
         Assert.Equal(-4m, version.SourceVersionDelta);
+        Assert.Equal(1d, version.ItemCountRatio);
 
         var updated = WarApiMapQualityFeatureExtractor.Extract(
             Load("last-updated-regression.json"),
@@ -101,12 +102,14 @@ public sealed class WarApiMapQualityFeatureTests
         Assert.Equal(
             -100000m,
             updated.SourceLastUpdatedDeltaMilliseconds);
+        Assert.Equal(1d, updated.ItemCountRatio);
 
         var conflict = WarApiMapQualityFeatureExtractor.Extract(
             Load("source-region-conflict.json"),
             baseline,
             _taxonomy);
         Assert.True(conflict.RegionIdChanged);
+        Assert.Equal(1d, conflict.ItemCountRatio);
 
         var coordinates = WarApiMapQualityFeatureExtractor.Extract(
             Load("invalid-coordinate.json"),
@@ -125,7 +128,7 @@ public sealed class WarApiMapQualityFeatureTests
             .EnumerateArray()
             .ToArray();
 
-        Assert.True(fixtures.Length >= 14);
+        Assert.True(fixtures.Length >= 15);
 
         var issue92 = Assert.Single(
             fixtures,
@@ -138,6 +141,7 @@ public sealed class WarApiMapQualityFeatureTests
         foreach (var id in new[]
                  {
                      "warapi-115-duplicate-rocket-target",
+                     "warapi-120-restart-transient",
                      "warapi-137-icon97-viewdirection",
                      "warapi-77-static-before",
                      "warapi-77-static-changed",
