@@ -138,6 +138,19 @@ public sealed class WarApiMapQualityFeatureTests
             "upstream-exact",
             issue92.GetProperty("provenanceKind").GetString());
 
+        var contextFixtures = catalog.RootElement
+            .GetProperty("contextFixtures")
+            .EnumerateArray()
+            .ToArray();
+        var homeRegion = Assert.Single(contextFixtures);
+        Assert.Equal(
+            "home-region-capability-asymmetry",
+            homeRegion.GetProperty("id").GetString());
+        Assert.True(
+            File.Exists(
+                FixturePath(
+                    homeRegion.GetProperty("file").GetString()!)));
+
         foreach (var id in new[]
                  {
                      "warapi-115-duplicate-rocket-target",
