@@ -47,7 +47,7 @@ public sealed class WarApiCoverageRecoveryCoordinator(
 
         var uncovered = await coverageStore.GetUncoveredAttemptsAsync(
             WarApiCatalog.SourceKey,
-            WarApiCoverageCapabilityPlans.M5Canonical,
+            WarApiCoverageCapabilityPlans.CoverageAndParse,
             BatchSize,
             cancellationToken);
 
