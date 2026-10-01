@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FoxData.Sources.WarApi;
 
 namespace FoxData.SourceTests;
@@ -161,7 +162,9 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
         var second = Evaluate(current, baseline);
 
         Assert.Equal(first.Decision, second.Decision);
-        Assert.Equal(first.Features, second.Features);
+        Assert.Equal(
+            JsonSerializer.Serialize(first.Features),
+            JsonSerializer.Serialize(second.Features));
         Assert.Equal(
             first.Findings.Select(
                 item => item.InputMetricsJson),
