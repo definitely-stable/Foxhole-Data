@@ -271,7 +271,10 @@ public sealed class WarApiMapQualityCoordinator(
                     finding.RuleKey),
                 new KeyValuePair<string, object?>(
                     "rule_version",
-                    finding.RuleVersion));
+                    finding.RuleVersion),
+                new KeyValuePair<string, object?>(
+                    "effect",
+                    finding.Effect.ToString().ToLowerInvariant()));
         }
 
         WarApiTelemetry.MapQualityRuns.Add(
