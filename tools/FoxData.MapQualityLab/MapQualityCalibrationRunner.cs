@@ -32,6 +32,7 @@ internal static class MapQualityCalibrationRunner
             var m4Evidence = m4Document.RootElement.Clone();
 
             ValidateInputs(catalog, expectations, m4Evidence);
+            ValidateRetainedM4Evidence(m4Evidence);
             var fixtures = catalog.Fixtures.ToDictionary(
                 item => item.Id,
                 StringComparer.Ordinal);
@@ -273,6 +274,60 @@ internal static class MapQualityCalibrationRunner
             }
 
             _ = ParseDecision(item.ExpectedDecision);
+        }
+    }
+
+    private static void ValidateRetainedM4Evidence(
+        JsonElement m4Evidence)
+    {
+        var dynamic = m4Evidence.GetProperty(
+            "dynamicMapState");
+
+        var endpointCount =
+            dynamic.GetProperty("endpointCount").GetInt32();
+        var regressionCount =
+            dynamic.GetProperty(
+                "sourceVersionRegressionCount").GetInt32();
+        var endpointsWithRegression =
+            dynamic.GetProperty(
+                "endpointsWithSourceVersionRegression").GetInt32();
+        var gapCount =
+            dynamic.GetProperty(
+                "sourceVersionGapCount").GetInt32();
+        var endpointsWithGap =
+            dynamic.GetProperty(
+                "endpointsWithSourceVersionGap").GetInt32();
+        var lastUpdatedRegressions =
+            dynamic.GetProperty(
+                "sourceLastUpdatedRegressionCount").GetInt32();
+        var unknownCodes =
+            dynamic.GetProperty("unknownCodeCount").GetInt32();
+
+        if (endpointCount <= 0 ||
+            regressionCount <= 0 ||
+            endpointsWithRegression <= 0 ||
+            gapCount <= 0 ||
+            endpointsWithGap <= 0 ||
+            lastUpdatedRegressions != 0 ||
+            unknownCodes <= 0)
+        {
+            throw new InvalidOperationException(
+                "Retained M4 calibration evidence no longer supports the documented policy constraints.");
+        }
+
+        var source = m4Evidence.GetProperty("source");
+        if (!string.Equals(
+                source.GetProperty("artifactDigest").GetString(),
+                "sha256:91411ee4ca339f2f56a945d9f8d4e235c598154d191c22b1a69ecc8a3b606e9e",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                source.GetProperty(
+                    "measurementSummarySha256").GetString(),
+                "2cf939f8231cfe1a94c83dca7f7423d27f87dc9b6b4a215164abf683df2d1239",
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Retained M4 calibration evidence digest does not match the reviewed source artifact.");
         }
     }
 
