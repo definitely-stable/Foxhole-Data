@@ -5,7 +5,7 @@ namespace FoxData.Worker;
 
 internal static class WarApiCoverageCapabilityPlans
 {
-    public static IReadOnlyList<CoverageCapabilityPlan> M5Canonical { get; } =
+    public static IReadOnlyList<CoverageCapabilityPlan> CoverageAndParse { get; } =
     [
         new(
             WarApiCapabilities.RuntimeWarState.Key,
@@ -22,5 +22,25 @@ internal static class WarApiCoverageCapabilityPlans
             WarApiVersions.Parser,
             WarApiVersions.WarReportNormalizer,
             DependencyRank: 2),
+        new(
+            WarApiCapabilities.StaticMapState.Key,
+            WarApiVersions.Parser,
+            WarApiVersions.StaticMapNormalizer,
+            DependencyRank: 0),
+        new(
+            WarApiCapabilities.DynamicMapState.Key,
+            WarApiVersions.Parser,
+            WarApiVersions.DynamicMapNormalizer,
+            DependencyRank: 0),
     ];
+
+    public static IReadOnlyList<CoverageCapabilityPlan> M5Canonical { get; } =
+        CoverageAndParse
+            .Where(
+                item =>
+                    item.CapabilityKey is
+                        "runtime-war-state" or
+                        "active-map-list" or
+                        "region-war-report")
+            .ToArray();
 }
