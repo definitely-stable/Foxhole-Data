@@ -221,6 +221,49 @@ public sealed class WarApiMapQualityPolicyTests
             0.75d,
             restart.Parameters[
                 "maximumDistinctIconTypeRatio"].GetDouble());
+        Assert.Equal(
+            0.5d,
+            restart.Parameters[
+                "minimumNoneShareIncrease"].GetDouble());
+        Assert.Equal(
+            0.1d,
+            restart.Parameters[
+                "maximumCurrentOwnedShare"].GetDouble());
+        Assert.Equal(
+            0.5d,
+            restart.Parameters[
+                "minimumOwnedShareDrop"].GetDouble());
+        Assert.Equal(
+            1,
+            restart.Parameters[
+                "minimumCorroboratingSignals"].GetInt32());
+        Assert.True(
+            restart.Parameters[
+                "versionRegressionCountsAsCorroboratingSignal"].GetBoolean());
+
+        var regression = GetRule(
+            profile,
+            "source-version.regression");
+        Assert.Equal(
+            0d,
+            regression.Parameters[
+                "triggerBelowDelta"].GetDouble());
+
+        var gap = GetRule(
+            profile,
+            "source-version.gap");
+        Assert.Equal(
+            1,
+            gap.Parameters[
+                "minimumMissingVersions"].GetInt32());
+
+        var updated = GetRule(
+            profile,
+            "source-last-updated.regression");
+        Assert.Equal(
+            0d,
+            updated.Parameters[
+                "triggerBelowDeltaMilliseconds"].GetDouble());
 
         var nearEmpty = GetRule(
             profile,
@@ -233,6 +276,26 @@ public sealed class WarApiMapQualityPolicyTests
             0.2d,
             nearEmpty.Parameters[
                 "maximumTotalOccurrenceRatio"].GetDouble());
+
+        var disappearance = GetRule(
+            profile,
+            "representation.mass-disappearance");
+        Assert.Equal(
+            12,
+            disappearance.Parameters[
+                "minimumBaselineItems"].GetInt32());
+        Assert.Equal(
+            0.5d,
+            disappearance.Parameters[
+                "maximumItemCountRatio"].GetDouble());
+
+        var duplicate = GetRule(
+            profile,
+            "representation.duplicate-occurrence");
+        Assert.Equal(
+            1,
+            duplicate.Parameters[
+                "minimumExcessCount"].GetInt32());
     }
 
     [Fact]
