@@ -548,6 +548,54 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task PolicyV2QuarantineDoesNotReplaceAcceptedBaseline()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: null,
+            warRegionSourceRegionId: null);
+
+        var first = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                policyVersion: "warapi-map-quality@2"),
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(first.Observation);
+
+        var quarantinedValidation =
+            await fixture.CreateValidation304Async(
+                fixture.RepresentationRetrievedAt.AddMinutes(10),
+                "m6-f2-quarantined");
+        var quarantined = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Quarantined,
+                validationFetchId: quarantinedValidation,
+                baselineMapObservationId: first.Observation!.Id,
+                policyVersion: "warapi-map-quality@2"),
+            TestContext.Current.CancellationToken);
+        Assert.Null(quarantined.Observation);
+
+        var recoveryValidation =
+            await fixture.CreateValidation304Async(
+                fixture.RepresentationRetrievedAt.AddMinutes(20),
+                "m6-f2-recovery");
+        var recovered = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: recoveryValidation,
+                baselineMapObservationId: first.Observation.Id,
+                policyVersion: "warapi-map-quality@2"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            first.Observation.Id,
+            recovered.Run.BaselineMapObservationId);
+        Assert.Equal(
+            2L,
+            await fixture.CountAsync(
+                "runtime.map_observations"));
+    }
+
+    [Fact]
     public async Task DatabaseRejectsObservationForNonAcceptedQualityRun()
     {
         await using var fixture = await CreateFixtureAsync(
@@ -927,13 +975,14 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             MapQualityDecision decision,
             FetchId? validationFetchId = null,
             MapObservationId? baselineMapObservationId = null,
-            IReadOnlyList<MapQualityFindingCandidate>? findings = null) =>
+            IReadOnlyList<MapQualityFindingCandidate>? findings = null,
+            string policyVersion = "warapi-map-quality@1") =>
             new(
                 Snapshot.Id,
                 WarRegionId,
                 validationFetchId ?? RepresentationFetchId,
                 "warapi-map-taxonomy@1",
-                "warapi-map-quality@1",
+                policyVersion,
                 baselineMapObservationId,
                 decision,
                 RepresentationRetrievedAt.AddSeconds(1),
