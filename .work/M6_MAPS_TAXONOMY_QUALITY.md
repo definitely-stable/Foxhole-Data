@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G1 complete through PR #51; M6-G2 static/dynamic coverage extension is next, with policy@2 activation still deferred.
+Status: in progress. M6-A through M6-G1 complete through PR #51; M6-G2/G3 static/dynamic coverage plus local parse repair is in progress, with map normalization and policy@2 activation still deferred.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
