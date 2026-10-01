@@ -410,12 +410,23 @@ internal static class MapQualityCalibrationRunner
 
         var endpointCount =
             dynamic.GetProperty("endpointCount").GetInt32();
+        var fetchCount =
+            dynamic.GetProperty("fetchCount").GetInt32();
+        var bodyBearingCount =
+            dynamic.GetProperty(
+                "bodyBearingRepresentationCount").GetInt32();
+        var representationChangeCount =
+            dynamic.GetProperty(
+                "representationChangeCount").GetInt32();
         var regressionCount =
             dynamic.GetProperty(
                 "sourceVersionRegressionCount").GetInt32();
         var endpointsWithRegression =
             dynamic.GetProperty(
                 "endpointsWithSourceVersionRegression").GetInt32();
+        var maximumRegressions =
+            dynamic.GetProperty(
+                "maximumSourceVersionRegressionsPerEndpoint").GetInt32();
         var gapCount =
             dynamic.GetProperty(
                 "sourceVersionGapCount").GetInt32();
@@ -425,23 +436,48 @@ internal static class MapQualityCalibrationRunner
         var lastUpdatedRegressions =
             dynamic.GetProperty(
                 "sourceLastUpdatedRegressionCount").GetInt32();
+        var structuralChanges =
+            dynamic.GetProperty(
+                "structuralFingerprintChangeCount").GetInt32();
         var unknownCodes =
             dynamic.GetProperty("unknownCodeCount").GetInt32();
+        var endpointsWithUnknownCodes =
+            dynamic.GetProperty(
+                "endpointsWithUnknownCodes").GetInt32();
 
-        if (endpointCount <= 0 ||
-            regressionCount <= 0 ||
-            endpointsWithRegression <= 0 ||
-            gapCount <= 0 ||
-            endpointsWithGap <= 0 ||
+        if (endpointCount != 53 ||
+            fetchCount != 156227 ||
+            bodyBearingCount != 7637 ||
+            representationChangeCount != 7077 ||
+            regressionCount != 53 ||
+            endpointsWithRegression != 53 ||
+            maximumRegressions != 1 ||
+            gapCount != 4685 ||
+            endpointsWithGap != 52 ||
             lastUpdatedRegressions != 0 ||
-            unknownCodes <= 0)
+            structuralChanges != 0 ||
+            unknownCodes != 2505 ||
+            endpointsWithUnknownCodes != 14)
         {
             throw new InvalidOperationException(
-                "Retained M4 calibration evidence no longer supports the documented policy constraints.");
+                "Retained M4 calibration projection does not match the reviewed measurement summary.");
         }
 
         var source = m4Evidence.GetProperty("source");
         if (!string.Equals(
+                source.GetProperty("campaignRunId").GetString(),
+                "m4-ci-35604611891",
+                StringComparison.Ordinal) ||
+            source.GetProperty(
+                "finalReanalysisWorkflowRunId").GetInt64() !=
+                35975684583L ||
+            source.GetProperty("artifactId").GetInt64() !=
+                10798460093L ||
+            !string.Equals(
+                source.GetProperty("artifactName").GetString(),
+                "m4-f-final-report-35975684583",
+                StringComparison.Ordinal) ||
+            !string.Equals(
                 source.GetProperty("artifactDigest").GetString(),
                 "sha256:91411ee4ca339f2f56a945d9f8d4e235c598154d191c22b1a69ecc8a3b606e9e",
                 StringComparison.Ordinal) ||
@@ -449,10 +485,20 @@ internal static class MapQualityCalibrationRunner
                 source.GetProperty(
                     "measurementSummarySha256").GetString(),
                 "2cf939f8231cfe1a94c83dca7f7423d27f87dc9b6b4a215164abf683df2d1239",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                source.GetProperty(
+                    "collectionRepositorySha").GetString(),
+                "11ce905035b094832ddc18d524b4b0a5b9483724",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                source.GetProperty(
+                    "analysisRepositorySha").GetString(),
+                "686f98f13df1958b490ee7a130e6196304f2cd39",
                 StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "Retained M4 calibration evidence digest does not match the reviewed source artifact.");
+                "Retained M4 calibration evidence identity does not match the reviewed source artifact.");
         }
     }
 
