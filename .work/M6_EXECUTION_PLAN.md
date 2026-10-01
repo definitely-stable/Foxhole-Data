@@ -395,6 +395,22 @@ Extract:
 
 No ObjectiveId is required.
 
+F1 freezes the feature math, not anomaly thresholds:
+
+- NONE and owned-team shares use all map-item occurrences as the denominator;
+  missing teamId stays in the denominator and has its own count;
+- a ratio with a zero baseline denominator is null rather than infinity;
+- icon composition is measured from non-null raw iconType counts;
+- concentration is sum(p(iconType)^2), emitted without a cutoff;
+- raw iconType remains the evidence primitive; grouping icons into a semantic
+  family is allowed only when a future versioned policy explicitly defines the mapping;
+- source version and lastUpdated deltas use decimal subtraction to avoid overflow;
+- duplicate signals group the complete preserved raw occurrence tuple and count
+  excess occurrences without deduplicating source evidence;
+- missing/null map arrays remain distinguishable from present-but-empty arrays;
+- every offline record includes SHA-256 and structural fingerprint for both
+  candidate and baseline when a baseline exists.
+
 ## F3. Offline calibration
 
 Replay candidate policy against fixtures and retained M4 evidence.
