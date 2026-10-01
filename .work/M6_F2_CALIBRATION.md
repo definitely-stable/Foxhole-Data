@@ -103,7 +103,7 @@ count collapse without restart ownership signature.
 The runner fails when the expected decision differs, a required rule does not hit,
 or a forbidden rule hits. Each report retains candidate/baseline hashes, structural
 fingerprints, features, findings, rule/config identities and deterministic metrics.
-CI runs calibration twice and requires byte-identical output.
+CI runs calibration twice, requires byte-identical output, and verifies the frozen calibration-report SHA-256 before publishing the artifact.
 
 Final review hardening additionally requires:
 
