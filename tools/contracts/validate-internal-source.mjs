@@ -19,6 +19,10 @@ const pairs = [
     "warapi-map-quality-policy.schema.json",
     "warapi-map-quality-policy@1.json",
   ],
+  [
+    "warapi-map-quality-policy.schema.json",
+    "warapi-map-quality-policy@2.json",
+  ],
 ];
 
 const expectedQualityV1RuleKeys = [
@@ -32,6 +36,17 @@ const expectedQualityV1RuleKeys = [
   "taxonomy.unknown-flag-bits",
 ];
 
+const expectedQualityV2RuleKeys = [
+  ...expectedQualityV1RuleKeys,
+  "source-version.regression",
+  "source-version.gap",
+  "source-last-updated.regression",
+  "representation.near-empty",
+  "representation.mass-disappearance",
+  "representation.duplicate-occurrence",
+  "ownership.restart-collapse",
+];
+
 const ajv = new Ajv2020({
   allErrors: true,
   strict: true,
@@ -40,15 +55,21 @@ addFormats(ajv);
 
 let failed = false;
 const documents = new Map();
+const validators = new Map();
 
 for (const [schemaName, documentName] of pairs) {
-  const schema = JSON.parse(
-    fs.readFileSync(path.join(contracts, schemaName), "utf8")
-  );
+  let validate = validators.get(schemaName);
+  if (!validate) {
+    const schema = JSON.parse(
+      fs.readFileSync(path.join(contracts, schemaName), "utf8")
+    );
+    validate = ajv.compile(schema);
+    validators.set(schemaName, validate);
+  }
+
   const document = JSON.parse(
     fs.readFileSync(path.join(contracts, documentName), "utf8")
   );
-  const validate = ajv.compile(schema);
   documents.set(documentName, document);
 
   if (!validate(document)) {
@@ -67,74 +88,91 @@ for (const [schemaName, documentName] of pairs) {
 const taxonomy = documents.get(
   "warapi-map-taxonomy@1.json"
 );
-const quality = documents.get(
-  "warapi-map-quality-policy@1.json"
-);
+const qualityDocuments = [
+  documents.get("warapi-map-quality-policy@1.json"),
+  documents.get("warapi-map-quality-policy@2.json"),
+].filter(Boolean);
 
-if (taxonomy && quality) {
-  if (quality.taxonomyVersion !== taxonomy.version) {
-    failed = true;
-    console.error(
-      "warapi-map-quality-policy@1.json taxonomyVersion " +
-      "must match the embedded taxonomy profile version"
-    );
-  }
-
-  const keys = quality.rules.map((rule) => rule.key);
-  const ruleVersions = quality.rules.map(
-    (rule) => rule.ruleVersion
-  );
-  const configurationVersions = quality.rules.map(
-    (rule) => rule.configurationVersion
-  );
-
-  const requireUnique = (values, label) => {
+if (taxonomy) {
+  const requireUnique = (values, label, version) => {
     if (new Set(values).size !== values.length) {
       failed = true;
       console.error(
-        `warapi-map-quality-policy@1.json contains duplicate ${label}`
+        `${version} contains duplicate ${label}`
       );
     }
   };
 
-  requireUnique(keys, "rule keys");
-  requireUnique(ruleVersions, "rule versions");
-  requireUnique(
-    configurationVersions,
-    "configuration versions"
-  );
-
-  const expected = new Set(expectedQualityV1RuleKeys);
-  const actual = new Set(keys);
-
-  if (
-    expected.size !== actual.size ||
-    [...expected].some((key) => !actual.has(key))
-  ) {
-    failed = true;
-    console.error(
-      "warapi-map-quality-policy@1.json must contain exactly " +
-      "the M6-E1 structural rule set"
-    );
-  }
-
-  for (const rule of quality.rules) {
-    if (rule.ruleVersion !== `${rule.key}@1`) {
+  for (const quality of qualityDocuments) {
+    if (quality.taxonomyVersion !== taxonomy.version) {
       failed = true;
       console.error(
-        `${rule.key} must use ruleVersion ${rule.key}@1`
+        `${quality.version} taxonomyVersion must match the embedded taxonomy profile version`
       );
     }
 
+    const expectedKeys =
+      quality.version === "warapi-map-quality@1"
+        ? expectedQualityV1RuleKeys
+        : quality.version === "warapi-map-quality@2"
+          ? expectedQualityV2RuleKeys
+          : null;
+
+    if (!expectedKeys) {
+      failed = true;
+      console.error(
+        `Unsupported quality policy contract ${quality.version}`
+      );
+      continue;
+    }
+
+    const keys = quality.rules.map((rule) => rule.key);
+    const ruleVersions = quality.rules.map(
+      (rule) => rule.ruleVersion
+    );
+    const configurationVersions = quality.rules.map(
+      (rule) => rule.configurationVersion
+    );
+
+    requireUnique(keys, "rule keys", quality.version);
+    requireUnique(ruleVersions, "rule versions", quality.version);
+    requireUnique(
+      configurationVersions,
+      "configuration versions",
+      quality.version
+    );
+
+    const expected = new Set(expectedKeys);
+    const actual = new Set(keys);
+
     if (
-      rule.configurationVersion !==
-      `${rule.key}-config@1`
+      expected.size !== actual.size ||
+      [...expected].some((key) => !actual.has(key))
     ) {
       failed = true;
       console.error(
-        `${rule.key} must use configurationVersion ` +
-        `${rule.key}-config@1`
+        `${quality.version} rule set does not match its frozen contract`
       );
+    }
+
+    for (const rule of quality.rules) {
+      if (rule.ruleVersion !== `${rule.key}@1`) {
+        failed = true;
+        console.error(
+          `${quality.version}/${rule.key} must use ruleVersion ${rule.key}@1`
+        );
+      }
+
+      if (
+        rule.configurationVersion !==
+        `${rule.key}-config@1`
+      ) {
+        failed = true;
+        console.error(
+          `${quality.version}/${rule.key} must use configurationVersion ` +
+          `${rule.key}-config@1`
+        );
+      }
     }
   }
 }

@@ -10,6 +10,15 @@ internal static class MapQualityLabRunner
     {
         ArgumentNullException.ThrowIfNull(args);
 
+        if (args.Length > 0 &&
+            string.Equals(
+                args[0],
+                "calibrate",
+                StringComparison.Ordinal))
+        {
+            return MapQualityCalibrationRunner.Run(args[1..]);
+        }
+
         if (args.Length == 1 &&
             args[0] is "--help" or "-h")
         {

@@ -1,6 +1,6 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E is merged through PR #48; M6-F1 is implemented and exact-head verified in PR #49. M6-F2 calibration is next after merge.
+Status: active execution companion. M6-E is merged through PR #48; M6-F1 is merged as #49; M6-F2 calibrated policy@2 is complete in PR #50 with runtime activation deliberately deferred to M6-G.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
@@ -55,7 +55,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-The current slice is M6-F1: golden fixtures and deterministic offline feature extraction.
+M6-F2 is complete in PR #50. The next implementation slice is M6-G: coverage, recovery, ordered versioned reprocessing and controlled policy@2 activation.
 
 ## Non-negotiable invariants
 
@@ -381,7 +381,7 @@ followed by publication of immutable policy@2 only when false-positive analysis 
 
 # M6-F — calibrated anomaly policy v2
 
-Current slice: M6-F1 golden fixtures + deterministic offline feature extraction — implementation complete and verified in PR #49. Calibration/thresholds remain M6-F2 and are not part of F1.
+M6-F2 offline calibration + immutable policy@2 is complete in PR #50. Runtime policy selection remains @1 until M6-G ordered versioned reprocessing.
 
 ## F1. Golden fixture catalog
 
@@ -442,6 +442,8 @@ F1 freezes the feature math, not anomaly thresholds:
 
 ## F3. Offline calibration
 
+Implementation/calibration record: [M6_F2_CALIBRATION.md](M6_F2_CALIBRATION.md).
+
 Replay candidate policy against fixtures and retained M4 evidence.
 
 Record:
@@ -451,11 +453,11 @@ Record:
 - candidate decision;
 - false-positive notes.
 
-The calibration harness must run offline and must not require the public War API.
+The calibration harness must run offline and must not require the public War API. It fails closed on an expected-decision mismatch, a missing required rule hit, or a forbidden rule hit. CI runs it twice and requires byte-identical reports.
 
 ## F4. Publish policy@2 without mutating policy@1
 
-After calibration, publish a new warapi-map-quality-policy@2.json with its own full policy identity. Preserve policy@1 unchanged for deterministic historical reprocessing. The calibrated policy may include the structural rules carried forward from @1, but its entire rule set and thresholds are frozen together.
+After calibration, publish a new warapi-map-quality-policy@2.json with its own full policy identity. Preserve policy@1 unchanged for deterministic historical reprocessing. F2 publishes @2 but MUST NOT switch runtime selection until M6-G implements ordered versioned reprocessing; publishing a policy is not permission to silently reinterpret historical snapshots.
 
 Mass-NONE must be composite. A high NONE share alone is insufficient.
 
@@ -807,8 +809,7 @@ Each PR must include affected normative docs, executable tests, no M7/M8 scope c
 
 M6-E1: merged PR #45.
 M6-E2: merged PR #47.
-M6-E3: active implementation PR #48; completion **not claimed** until
-full CI, concurrency and local-recovery evidence is green.
+M6-E3: merged in PR #48 after full CI, concurrency and local-recovery
+evidence passed.
 
-Next after E3 acceptance: M6-F1 golden fixtures and offline extraction,
-then M6-F2 calibration. Do not move anomaly thresholds into E3.
+M6-F1 is merged and M6-F2 is complete in PR #50. Proceed to M6-G coverage/recovery/versioned reprocessing after merge. Do not activate @2 through the narrow E3 recovery path.

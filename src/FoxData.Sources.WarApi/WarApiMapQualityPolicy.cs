@@ -45,6 +45,8 @@ public static class WarApiMapQualityPolicyRegistry
 {
     private const string V1ResourceName =
         "FoxData.Sources.WarApi.Contracts.warapi-map-quality-policy@1.json";
+    private const string V2ResourceName =
+        "FoxData.Sources.WarApi.Contracts.warapi-map-quality-policy@2.json";
 
     private static readonly string[] ExpectedV1RuleKeys =
     [
@@ -58,11 +60,30 @@ public static class WarApiMapQualityPolicyRegistry
         "taxonomy.unknown-flag-bits",
     ];
 
+    private static readonly string[] ExpectedV2RuleKeys =
+    [
+        .. ExpectedV1RuleKeys,
+        "source-version.regression",
+        "source-version.gap",
+        "source-last-updated.regression",
+        "representation.near-empty",
+        "representation.mass-disappearance",
+        "representation.duplicate-occurrence",
+        "ownership.restart-collapse",
+    ];
+
     private static readonly Lazy<WarApiMapQualityPolicyProfile> V1 =
         new(
             () => LoadEmbedded(
                 V1ResourceName,
-                WarApiVersions.MapQualityPolicy),
+                WarApiVersions.MapQualityPolicyV1),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<WarApiMapQualityPolicyProfile> V2 =
+        new(
+            () => LoadEmbedded(
+                V2ResourceName,
+                WarApiVersions.MapQualityPolicyV2),
             LazyThreadSafetyMode.ExecutionAndPublication);
 
     public static WarApiMapQualityPolicyProfile Get(string version)
@@ -79,13 +100,13 @@ public static class WarApiMapQualityPolicyRegistry
                 nameof(version));
         }
 
-        return string.Equals(
-                version,
-                WarApiVersions.MapQualityPolicy,
-                StringComparison.Ordinal)
-            ? V1.Value
-            : throw new NotSupportedException(
-                $"Unsupported War API map quality policy version '{version}'.");
+        return version switch
+        {
+            WarApiVersions.MapQualityPolicyV1 => V1.Value,
+            WarApiVersions.MapQualityPolicyV2 => V2.Value,
+            _ => throw new NotSupportedException(
+                $"Unsupported War API map quality policy version '{version}'."),
+        };
     }
 
     private static WarApiMapQualityPolicyProfile LoadEmbedded(
@@ -166,7 +187,9 @@ public static class WarApiMapQualityPolicyRegistry
         }
 
         var aggregation = BuildAggregation(document.Aggregation);
-        var rules = BuildRules(document.Rules);
+        var rules = BuildRules(
+            document.Rules,
+            expectedVersion);
 
         return new WarApiMapQualityPolicyProfile(
             document.Version!,
@@ -201,7 +224,7 @@ public static class WarApiMapQualityPolicyRegistry
             quarantined != WarApiMapQualityPolicyDecision.Quarantined)
         {
             throw new InvalidOperationException(
-                "Quality policy aggregation does not match the v1 decision contract.");
+                "Quality policy aggregation does not match the frozen decision contract.");
         }
 
         return new WarApiMapQualityAggregationProfile(
@@ -212,14 +235,25 @@ public static class WarApiMapQualityPolicyRegistry
     }
 
     private static List<WarApiMapQualityRuleProfile> BuildRules(
-        WarApiMapQualityRuleDto[]? source)
+        WarApiMapQualityRuleDto[]? source,
+        string policyVersion)
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        if (source.Length != ExpectedV1RuleKeys.Length)
+        var expectedKeys = policyVersion switch
+        {
+            WarApiVersions.MapQualityPolicyV1 =>
+                ExpectedV1RuleKeys,
+            WarApiVersions.MapQualityPolicyV2 =>
+                ExpectedV2RuleKeys,
+            _ => throw new NotSupportedException(
+                $"Unsupported quality policy rule contract '{policyVersion}'."),
+        };
+
+        if (source.Length != expectedKeys.Length)
         {
             throw new InvalidOperationException(
-                $"Quality policy v1 must define exactly {ExpectedV1RuleKeys.Length} structural rules.");
+                $"Quality policy {policyVersion} must define exactly {expectedKeys.Length} rules.");
         }
 
         var keys = new HashSet<string>(StringComparer.Ordinal);
@@ -283,10 +317,11 @@ public static class WarApiMapQualityPolicyRegistry
             var effect = ParseEffect(
                 item.Effect,
                 nameof(item.Effect));
-            ValidateV1Rule(
+            ValidateRule(
                 item.Key!,
                 effect,
-                item.Parameters);
+                item.Parameters,
+                policyVersion);
 
             results.Add(
                 new WarApiMapQualityRuleProfile(
@@ -297,19 +332,20 @@ public static class WarApiMapQualityPolicyRegistry
                     CopyParameters(item.Parameters)));
         }
 
-        if (!keys.SetEquals(ExpectedV1RuleKeys))
+        if (!keys.SetEquals(expectedKeys))
         {
             throw new InvalidOperationException(
-                "Quality policy v1 rule set does not match the expected structural rule contract.");
+                $"Quality policy {policyVersion} rule set does not match its frozen contract.");
         }
 
         return results;
     }
 
-    private static void ValidateV1Rule(
+    private static void ValidateRule(
         string key,
         WarApiMapQualityEffect effect,
-        JsonElement parameters)
+        JsonElement parameters,
+        string policyVersion)
     {
         switch (key)
         {
@@ -412,9 +448,194 @@ public static class WarApiMapQualityPolicyRegistry
                 ValidateObjectProperties(key, parameters);
                 break;
 
+            case "source-version.regression":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Informational);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "triggerBelowDelta");
+                RequireNumber(
+                    key,
+                    parameters,
+                    "triggerBelowDelta",
+                    expected: 0d);
+                break;
+
+            case "source-version.gap":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Informational);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "minimumMissingVersions");
+                RequireInteger(
+                    key,
+                    parameters,
+                    "minimumMissingVersions",
+                    expected: 1);
+                break;
+
+            case "source-last-updated.regression":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Suspect);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "triggerBelowDeltaMilliseconds");
+                RequireNumber(
+                    key,
+                    parameters,
+                    "triggerBelowDeltaMilliseconds",
+                    expected: 0d);
+                break;
+
+            case "representation.near-empty":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Suspect);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "minimumBaselineOccurrences",
+                    "maximumTotalOccurrenceRatio");
+                RequireInteger(
+                    key,
+                    parameters,
+                    "minimumBaselineOccurrences",
+                    expected: 8);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumTotalOccurrenceRatio",
+                    expected: 0.2d);
+                break;
+
+            case "representation.mass-disappearance":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Suspect);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "minimumBaselineItems",
+                    "maximumItemCountRatio");
+                RequireInteger(
+                    key,
+                    parameters,
+                    "minimumBaselineItems",
+                    expected: 12);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumItemCountRatio",
+                    expected: 0.5d);
+                break;
+
+            case "representation.duplicate-occurrence":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Informational);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "minimumExcessCount");
+                RequireInteger(
+                    key,
+                    parameters,
+                    "minimumExcessCount",
+                    expected: 1);
+                break;
+
+            case "ownership.restart-collapse":
+                RequirePolicyV2(policyVersion, key);
+                RequireEffect(
+                    key,
+                    effect,
+                    WarApiMapQualityEffect.Quarantined);
+                ValidateObjectProperties(
+                    key,
+                    parameters,
+                    "minimumBaselineItems",
+                    "minimumBaselineOwnedShare",
+                    "minimumCurrentNoneShare",
+                    "minimumNoneShareIncrease",
+                    "maximumCurrentOwnedShare",
+                    "minimumOwnedShareDrop",
+                    "maximumItemCountRatio",
+                    "maximumDistinctIconTypeRatio",
+                    "minimumCorroboratingSignals",
+                    "versionRegressionCountsAsCorroboratingSignal");
+                RequireInteger(
+                    key,
+                    parameters,
+                    "minimumBaselineItems",
+                    expected: 12);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumBaselineOwnedShare",
+                    expected: 0.5d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumCurrentNoneShare",
+                    expected: 0.9d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumNoneShareIncrease",
+                    expected: 0.5d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumCurrentOwnedShare",
+                    expected: 0.1d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "minimumOwnedShareDrop",
+                    expected: 0.5d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumItemCountRatio",
+                    expected: 0.8d);
+                RequireNumber(
+                    key,
+                    parameters,
+                    "maximumDistinctIconTypeRatio",
+                    expected: 0.75d);
+                RequireInteger(
+                    key,
+                    parameters,
+                    "minimumCorroboratingSignals",
+                    expected: 1);
+                RequireBoolean(
+                    key,
+                    parameters,
+                    "versionRegressionCountsAsCorroboratingSignal",
+                    expected: true);
+                break;
+
             default:
                 throw new InvalidOperationException(
-                    $"Unknown quality policy v1 rule '{key}'.");
+                    $"Unknown quality policy rule '{key}'.");
         }
     }
 
@@ -457,7 +678,7 @@ public static class WarApiMapQualityPolicyRegistry
         if (!actual.SetEquals(expected))
         {
             throw new InvalidOperationException(
-                $"Quality rule '{ruleKey}' parameters do not match the v1 contract.");
+                $"Quality rule '{ruleKey}' parameters do not match its versioned contract.");
         }
     }
 
@@ -506,6 +727,20 @@ public static class WarApiMapQualityPolicyRegistry
         {
             throw new InvalidOperationException(
                 $"Quality rule '{ruleKey}' parameter '{propertyName}' must equal {expected.ToString(CultureInfo.InvariantCulture)}.");
+        }
+    }
+
+    private static void RequirePolicyV2(
+        string policyVersion,
+        string ruleKey)
+    {
+        if (!string.Equals(
+                policyVersion,
+                WarApiVersions.MapQualityPolicyV2,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Quality rule '{ruleKey}' is only valid in policy@2.");
         }
     }
 

@@ -229,7 +229,7 @@ The research supports the following M6 decisions:
 7. separate taxonomy from normalization;
 8. separate quality from taxonomy;
 9. use accepted prior observations as deterministic anomaly baselines;
-10. calibrate mass-NONE thresholds against fixtures/evidence before freezing policy v1;
+10. calibrate mass-NONE thresholds against fixtures/evidence before publishing immutable anomaly policy@2; structural-only policy@1 remains unchanged;
 11. keep issue-92/#120 as permanent regressions even though upstream marked them fixed;
 12. defer objective matching and event/change inference to M7/M8.
 

@@ -20,4 +20,9 @@
              Link="Fixtures/M6/%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../.work/calibration/m6-map-quality/fixtures/*.json"
+             Link="Calibration/M6/%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

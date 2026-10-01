@@ -1,0 +1,56 @@
+{
+  "version": "m4-map-quality-calibration-evidence@1",
+  "reviewedAt": "2026-10-01",
+  "source": {
+    "campaignRunId": "m4-ci-35604611891",
+    "finalReanalysisWorkflowRunId": 35975684583,
+    "artifactId": 10798460093,
+    "artifactName": "m4-f-final-report-35975684583",
+    "artifactDigest": "sha256:91411ee4ca339f2f56a945d9f8d4e235c598154d191c22b1a69ecc8a3b606e9e",
+    "measurementSummarySha256": "2cf939f8231cfe1a94c83dca7f7423d27f87dc9b6b4a215164abf683df2d1239",
+    "collectionRepositorySha": "11ce905035b094832ddc18d524b4b0a5b9483724",
+    "analysisRepositorySha": "686f98f13df1958b490ee7a130e6196304f2cd39"
+  },
+  "dynamicMapState": {
+    "endpointCount": 53,
+    "fetchCount": 156227,
+    "bodyBearingRepresentationCount": 7637,
+    "representationChangeCount": 7077,
+    "sourceVersionRegressionCount": 53,
+    "endpointsWithSourceVersionRegression": 53,
+    "maximumSourceVersionRegressionsPerEndpoint": 1,
+    "sourceVersionGapCount": 4685,
+    "endpointsWithSourceVersionGap": 52,
+    "sourceLastUpdatedRegressionCount": 0,
+    "structuralFingerprintChangeCount": 0,
+    "unknownCodeCount": 2505,
+    "endpointsWithUnknownCodes": 14
+  },
+  "constraints": [
+    {
+      "ruleFamily": "source-version.regression",
+      "conclusion": "non-blocking-alone",
+      "evidence": "Every measured dynamic endpoint had one source-version regression in the retained 48-hour campaign summary."
+    },
+    {
+      "ruleFamily": "source-version.gap",
+      "conclusion": "non-blocking-alone",
+      "evidence": "Version gaps were common: 4685 missing-version counts across 52 of 53 dynamic endpoints."
+    },
+    {
+      "ruleFamily": "source-last-updated.regression",
+      "conclusion": "not-observed-in-cohort",
+      "evidence": "No source lastUpdated regression was measured across 7637 dynamic body-bearing representations."
+    },
+    {
+      "ruleFamily": "taxonomy.unknown",
+      "conclusion": "non-blocking-alone",
+      "evidence": "Unknown-code diagnostics occurred on 14 dynamic endpoints and must not imply quarantine by themselves."
+    }
+  ],
+  "limitations": [
+    "The retained M4 measurement summary contains endpoint-level transport/parser aggregates, not per-representation map item/team/icon composition.",
+    "M4 therefore constrains blocking effects for version/taxonomy signals but cannot provide population quantiles for NONE share, item-count collapse, or icon-composition collapse.",
+    "Composition thresholds in policy@2 are conservative regression-fixture guardrails rather than universal source-distribution estimates."
+  ]
+}

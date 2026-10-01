@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-E complete; M6-F1 golden fixtures and deterministic offline feature extraction implemented and verified in PR #49; M6-F2 calibration next.
+Status: in progress. M6-A through M6-F2 complete through PR #50; calibrated policy@2 runtime activation remains deferred to M6-G.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1398,9 +1398,12 @@ SHA-256 plus parser structural fingerprints so later calibration can be audited.
 F1 does not assign anomaly decisions. M6-F2 owns calibration, false-positive review
 against retained M4 evidence and publication of a new immutable policy@2.
 
+Calibration evidence, thresholds, limitations and source artifact digests are recorded in
+[M6_F2_CALIBRATION.md](M6_F2_CALIBRATION.md). Policy@2 is executable and contract-validated, but runtime selection remains policy@1 until M6-G performs ordered versioned reprocessing.
+
 ### M6-F — Historical anomaly rules and calibrated policy v2
 
-Goal: freeze the first operational anomaly map-quality policy without mutating structural policy@1.
+Goal: freeze the first operational anomaly map-quality policy without mutating structural policy@1. Runtime activation is a separate M6-G reprocessing step.
 
 Implement:
 

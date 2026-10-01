@@ -1,0 +1,226 @@
+{
+  "version": "m6-map-quality-calibration-fixtures@1",
+  "reviewedAt": "2026-10-01",
+  "fixtures": [
+    {
+      "id": "healthy-dynamic-baseline-clean",
+      "file": "fixtures/healthy-dynamic-baseline-clean.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "healthy-baseline",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Taxonomy-clean F2 baseline; immutable F1 bytes remain unchanged."
+    },
+    {
+      "id": "warapi-92-restart-mass-none",
+      "file": "../../fixtures/m6-map-quality/warapi-92-restart-mass-none.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "historical-anomaly",
+      "provenanceKind": "upstream-exact",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/92",
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Exact F1 upstream payload evaluated against clean F2 baseline."
+    },
+    {
+      "id": "warapi-120-restart-transient",
+      "file": "../../fixtures/m6-map-quality/warapi-120-restart-transient.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "historical-anomaly",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/120",
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Immutable F1 minimized #120 fixture."
+    },
+    {
+      "id": "healthy-recovery-clean",
+      "file": "fixtures/healthy-recovery-clean.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "healthy-recovery",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Taxonomy-clean healthy recovery."
+    },
+    {
+      "id": "war-start-neutral",
+      "file": "../../fixtures/m6-map-quality/war-start-neutral.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "healthy-no-baseline",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 all-NONE no-baseline guard."
+    },
+    {
+      "id": "warapi-137-icon97-viewdirection",
+      "file": "../../fixtures/m6-map-quality/warapi-137-icon97-viewdirection.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "RedRiverHex",
+      "role": "open-taxonomy",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/137",
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 open-taxonomy regression."
+    },
+    {
+      "id": "warapi-115-duplicate-rocket-target",
+      "file": "../../fixtures/m6-map-quality/warapi-115-duplicate-rocket-target.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "duplicate-occurrence",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/115",
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 duplicate occurrence regression."
+    },
+    {
+      "id": "warapi-77-static-before",
+      "file": "../../fixtures/m6-map-quality/warapi-77-static-before.json",
+      "capabilityKey": "static-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "static-baseline",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/77",
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 static baseline."
+    },
+    {
+      "id": "warapi-77-static-changed",
+      "file": "../../fixtures/m6-map-quality/warapi-77-static-changed.json",
+      "capabilityKey": "static-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "static-change",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/77",
+      "baselineFixtureId": "warapi-77-static-before",
+      "notes": "Immutable F1 static change."
+    },
+    {
+      "id": "unknown-team",
+      "file": "../../fixtures/m6-map-quality/unknown-team.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "open-taxonomy",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 unknown-team control."
+    },
+    {
+      "id": "unknown-flag-bits",
+      "file": "../../fixtures/m6-map-quality/unknown-flag-bits.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "open-taxonomy",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 unknown-flag control."
+    },
+    {
+      "id": "invalid-coordinate",
+      "file": "../../fixtures/m6-map-quality/invalid-coordinate.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "structural-invalid",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Immutable F1 coordinate control."
+    },
+    {
+      "id": "source-region-conflict-clean",
+      "file": "fixtures/source-region-conflict-clean.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "structural-conflict",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Isolated region conflict over clean baseline."
+    },
+    {
+      "id": "source-version-regression-clean",
+      "file": "fixtures/source-version-regression-clean.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "progression-regression",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Isolated version regression."
+    },
+    {
+      "id": "last-updated-regression-clean",
+      "file": "fixtures/last-updated-regression-clean.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "progression-regression",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Isolated lastUpdated regression."
+    },
+    {
+      "id": "source-version-gap-clean",
+      "file": "fixtures/source-version-gap-clean.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "progression-gap",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Isolated version-gap control."
+    },
+    {
+      "id": "near-empty-representation",
+      "file": "fixtures/near-empty-representation.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "count-collapse",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Severe count-collapse control."
+    },
+    {
+      "id": "mass-disappearance",
+      "file": "fixtures/mass-disappearance.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "count-collapse",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Large item-loss control."
+    },
+    {
+      "id": "stable-neutral-continuation",
+      "file": "fixtures/stable-neutral-continuation.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "false-positive-guard",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "war-start-neutral",
+      "notes": "High-NONE continuation false-positive guard."
+    },
+    {
+      "id": "unknown-taxonomy-healthy-shape",
+      "file": "fixtures/unknown-taxonomy-healthy-shape.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "false-positive-guard",
+      "provenanceKind": "synthetic-calibration",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline-clean",
+      "notes": "Healthy shape with exactly one unknown team, icon, and flag occurrence."
+    }
+  ]
+}

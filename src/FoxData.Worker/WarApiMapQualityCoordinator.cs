@@ -262,6 +262,21 @@ public sealed class WarApiMapQualityCoordinator(
             _ => throw new CanonicalStateIntegrityException(
                 "Unknown durable map quality decision."),
         };
+        foreach (var finding in result.Findings)
+        {
+            WarApiTelemetry.MapQualityRuleHits.Add(
+                1,
+                new KeyValuePair<string, object?>(
+                    "rule_key",
+                    finding.RuleKey),
+                new KeyValuePair<string, object?>(
+                    "rule_version",
+                    finding.RuleVersion),
+                new KeyValuePair<string, object?>(
+                    "effect",
+                    finding.Effect.ToString().ToLowerInvariant()));
+        }
+
         WarApiTelemetry.MapQualityRuns.Add(
             1,
             new KeyValuePair<string, object?>(

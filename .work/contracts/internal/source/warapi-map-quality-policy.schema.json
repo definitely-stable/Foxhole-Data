@@ -15,7 +15,10 @@
   "properties": {
     "version": {
       "type": "string",
-      "pattern": "^warapi-map-quality@[1-9][0-9]*$"
+      "enum": [
+        "warapi-map-quality@1",
+        "warapi-map-quality@2"
+      ]
     },
     "source": {
       "const": "official-war-api"
@@ -34,17 +37,54 @@
     "rules": {
       "type": "array",
       "minItems": 8,
-      "maxItems": 8,
+      "maxItems": 15,
       "items": {
         "oneOf": [
-          { "$ref": "#/$defs/regionIdValidRule" },
-          { "$ref": "#/$defs/regionIdConflictRule" },
-          { "$ref": "#/$defs/coordinateValidRule" },
-          { "$ref": "#/$defs/sourceTimeRepresentableRule" },
-          { "$ref": "#/$defs/structureChangedRule" },
-          { "$ref": "#/$defs/unknownIconRule" },
-          { "$ref": "#/$defs/unknownTeamRule" },
-          { "$ref": "#/$defs/unknownFlagBitsRule" }
+          {
+            "$ref": "#/$defs/regionIdValidRule"
+          },
+          {
+            "$ref": "#/$defs/regionIdConflictRule"
+          },
+          {
+            "$ref": "#/$defs/coordinateValidRule"
+          },
+          {
+            "$ref": "#/$defs/sourceTimeRepresentableRule"
+          },
+          {
+            "$ref": "#/$defs/structureChangedRule"
+          },
+          {
+            "$ref": "#/$defs/unknownIconRule"
+          },
+          {
+            "$ref": "#/$defs/unknownTeamRule"
+          },
+          {
+            "$ref": "#/$defs/unknownFlagBitsRule"
+          },
+          {
+            "$ref": "#/$defs/sourceVersionRegressionRule"
+          },
+          {
+            "$ref": "#/$defs/sourceVersionGapRule"
+          },
+          {
+            "$ref": "#/$defs/sourceLastUpdatedRegressionRule"
+          },
+          {
+            "$ref": "#/$defs/nearEmptyRule"
+          },
+          {
+            "$ref": "#/$defs/massDisappearanceRule"
+          },
+          {
+            "$ref": "#/$defs/duplicateOccurrenceRule"
+          },
+          {
+            "$ref": "#/$defs/restartCollapseRule"
+          }
         ]
       }
     }
@@ -60,10 +100,18 @@
         "quarantinedDecision"
       ],
       "properties": {
-        "noFindingsDecision": { "const": "accepted" },
-        "informationalDecision": { "const": "accepted" },
-        "suspectDecision": { "const": "suspect" },
-        "quarantinedDecision": { "const": "quarantined" }
+        "noFindingsDecision": {
+          "const": "accepted"
+        },
+        "informationalDecision": {
+          "const": "accepted"
+        },
+        "suspectDecision": {
+          "const": "suspect"
+        },
+        "quarantinedDecision": {
+          "const": "quarantined"
+        }
       }
     },
     "baseRule": {
@@ -90,7 +138,11 @@
           "pattern": "^[a-z0-9][a-z0-9.-]*-config@[1-9][0-9]*$"
         },
         "effect": {
-          "enum": ["informational", "suspect", "quarantined"]
+          "enum": [
+            "informational",
+            "suspect",
+            "quarantined"
+          ]
         },
         "parameters": {
           "type": "object"
@@ -99,19 +151,33 @@
     },
     "regionIdValidRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "region-id.valid" },
-            "effect": { "const": "quarantined" },
+            "key": {
+              "const": "region-id.valid"
+            },
+            "effect": {
+              "const": "quarantined"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["allowNull", "minimum"],
+              "required": [
+                "allowNull",
+                "minimum"
+              ],
               "properties": {
-                "allowNull": { "const": true },
-                "minimum": { "type": "integer", "minimum": 0 }
+                "allowNull": {
+                  "const": true
+                },
+                "minimum": {
+                  "type": "integer",
+                  "minimum": 0
+                }
               }
             }
           }
@@ -120,18 +186,28 @@
     },
     "regionIdConflictRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "region-id.conflict" },
-            "effect": { "const": "quarantined" },
+            "key": {
+              "const": "region-id.conflict"
+            },
+            "effect": {
+              "const": "quarantined"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["blockOnConflict"],
+              "required": [
+                "blockOnConflict"
+              ],
               "properties": {
-                "blockOnConflict": { "const": true }
+                "blockOnConflict": {
+                  "const": true
+                }
               }
             }
           }
@@ -140,20 +216,38 @@
     },
     "coordinateValidRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "coordinate.valid" },
-            "effect": { "const": "quarantined" },
+            "key": {
+              "const": "coordinate.valid"
+            },
+            "effect": {
+              "const": "quarantined"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["minimum", "maximum", "requireFinite"],
+              "required": [
+                "minimum",
+                "maximum",
+                "requireFinite"
+              ],
               "properties": {
-                "minimum": { "type": "number", "const": 0.0 },
-                "maximum": { "type": "number", "const": 1.0 },
-                "requireFinite": { "const": true }
+                "minimum": {
+                  "type": "number",
+                  "const": 0
+                },
+                "maximum": {
+                  "type": "number",
+                  "const": 1
+                },
+                "requireFinite": {
+                  "const": true
+                }
               }
             }
           }
@@ -162,19 +256,32 @@
     },
     "sourceTimeRepresentableRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "source-time.representable" },
-            "effect": { "const": "suspect" },
+            "key": {
+              "const": "source-time.representable"
+            },
+            "effect": {
+              "const": "suspect"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["allowMissing", "requireSafeUtcWhenPresent"],
+              "required": [
+                "allowMissing",
+                "requireSafeUtcWhenPresent"
+              ],
               "properties": {
-                "allowMissing": { "const": true },
-                "requireSafeUtcWhenPresent": { "const": true }
+                "allowMissing": {
+                  "const": true
+                },
+                "requireSafeUtcWhenPresent": {
+                  "const": true
+                }
               }
             }
           }
@@ -183,12 +290,18 @@
     },
     "structureChangedRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "schema.structure-changed" },
-            "effect": { "const": "informational" },
+            "key": {
+              "const": "schema.structure-changed"
+            },
+            "effect": {
+              "const": "informational"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
@@ -200,12 +313,18 @@
     },
     "unknownIconRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "taxonomy.unknown-icon" },
-            "effect": { "const": "informational" },
+            "key": {
+              "const": "taxonomy.unknown-icon"
+            },
+            "effect": {
+              "const": "informational"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
@@ -217,12 +336,18 @@
     },
     "unknownTeamRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "taxonomy.unknown-team" },
-            "effect": { "const": "informational" },
+            "key": {
+              "const": "taxonomy.unknown-team"
+            },
+            "effect": {
+              "const": "informational"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
@@ -234,16 +359,293 @@
     },
     "unknownFlagBitsRule": {
       "allOf": [
-        { "$ref": "#/$defs/baseRule" },
+        {
+          "$ref": "#/$defs/baseRule"
+        },
         {
           "type": "object",
           "properties": {
-            "key": { "const": "taxonomy.unknown-flag-bits" },
-            "effect": { "const": "informational" },
+            "key": {
+              "const": "taxonomy.unknown-flag-bits"
+            },
+            "effect": {
+              "const": "informational"
+            },
             "parameters": {
               "type": "object",
               "additionalProperties": false,
               "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "sourceVersionRegressionRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "source-version.regression"
+            },
+            "effect": {
+              "const": "informational"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "triggerBelowDelta"
+              ],
+              "properties": {
+                "triggerBelowDelta": {
+                  "type": "integer",
+                  "const": 0
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceVersionGapRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "source-version.gap"
+            },
+            "effect": {
+              "const": "informational"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "minimumMissingVersions"
+              ],
+              "properties": {
+                "minimumMissingVersions": {
+                  "type": "integer",
+                  "const": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceLastUpdatedRegressionRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "source-last-updated.regression"
+            },
+            "effect": {
+              "const": "suspect"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "triggerBelowDeltaMilliseconds"
+              ],
+              "properties": {
+                "triggerBelowDeltaMilliseconds": {
+                  "type": "integer",
+                  "const": 0
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nearEmptyRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "representation.near-empty"
+            },
+            "effect": {
+              "const": "suspect"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "minimumBaselineOccurrences",
+                "maximumTotalOccurrenceRatio"
+              ],
+              "properties": {
+                "minimumBaselineOccurrences": {
+                  "type": "integer",
+                  "const": 8
+                },
+                "maximumTotalOccurrenceRatio": {
+                  "type": "number",
+                  "const": 0.2
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "massDisappearanceRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "representation.mass-disappearance"
+            },
+            "effect": {
+              "const": "suspect"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "minimumBaselineItems",
+                "maximumItemCountRatio"
+              ],
+              "properties": {
+                "minimumBaselineItems": {
+                  "type": "integer",
+                  "const": 12
+                },
+                "maximumItemCountRatio": {
+                  "type": "number",
+                  "const": 0.5
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "duplicateOccurrenceRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "representation.duplicate-occurrence"
+            },
+            "effect": {
+              "const": "informational"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "minimumExcessCount"
+              ],
+              "properties": {
+                "minimumExcessCount": {
+                  "type": "integer",
+                  "const": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "restartCollapseRule": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRule"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "const": "ownership.restart-collapse"
+            },
+            "effect": {
+              "const": "quarantined"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "minimumBaselineItems",
+                "minimumBaselineOwnedShare",
+                "minimumCurrentNoneShare",
+                "minimumNoneShareIncrease",
+                "maximumCurrentOwnedShare",
+                "minimumOwnedShareDrop",
+                "maximumItemCountRatio",
+                "maximumDistinctIconTypeRatio",
+                "minimumCorroboratingSignals",
+                "versionRegressionCountsAsCorroboratingSignal"
+              ],
+              "properties": {
+                "minimumBaselineItems": {
+                  "type": "integer",
+                  "const": 12
+                },
+                "minimumBaselineOwnedShare": {
+                  "type": "number",
+                  "const": 0.5
+                },
+                "minimumCurrentNoneShare": {
+                  "type": "number",
+                  "const": 0.9
+                },
+                "minimumNoneShareIncrease": {
+                  "type": "number",
+                  "const": 0.5
+                },
+                "maximumCurrentOwnedShare": {
+                  "type": "number",
+                  "const": 0.1
+                },
+                "minimumOwnedShareDrop": {
+                  "type": "number",
+                  "const": 0.5
+                },
+                "maximumItemCountRatio": {
+                  "type": "number",
+                  "const": 0.8
+                },
+                "maximumDistinctIconTypeRatio": {
+                  "type": "number",
+                  "const": 0.75
+                },
+                "minimumCorroboratingSignals": {
+                  "type": "integer",
+                  "const": 1
+                },
+                "versionRegressionCountsAsCorroboratingSignal": {
+                  "const": true
+                }
+              }
             }
           }
         }
