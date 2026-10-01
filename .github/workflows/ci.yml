@@ -76,6 +76,7 @@ jobs:
           dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- calibrate --catalog .work/calibration/m6-map-quality/calibration-fixtures@1.json --expectations .work/calibration/m6-map-quality/calibration-expectations@1.json --m4-evidence .work/calibration/m6-map-quality/m4-calibration-evidence@1.json --output "$second"
           cmp --silent "$first" "$second"
           grep --quiet '"mismatchCount": 0' "$first"
+          echo "b1aa86ce7c49d0916dc863fb4e14c5ba02599ce8e1cc6943181559cd55df1614  $first" | sha256sum --check --strict -
 
       - name: Persist M6 F2 calibration report
         uses: actions/upload-artifact@v7
