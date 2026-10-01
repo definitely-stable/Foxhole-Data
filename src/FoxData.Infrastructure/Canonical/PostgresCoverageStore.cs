@@ -14,12 +14,12 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
 {
     public async Task<IReadOnlyList<CoverageAttemptEvidence>> GetUncoveredAttemptsAsync(
         string sourceKey,
-        string parserVersion,
+        IReadOnlyList<CoverageCapabilityPlan> capabilities,
         int batchSize,
         CancellationToken cancellationToken)
     {
         ValidateRequiredText(sourceKey, 128, nameof(sourceKey));
-        ValidateRequiredText(parserVersion, 128, nameof(parserVersion));
+        ValidateCapabilityPlans(capabilities);
         ValidateBatchSize(batchSize);
 
         await using var connection =
@@ -27,6 +27,19 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
+            WITH capability_plan AS (
+                SELECT *
+                FROM unnest(
+                    @capability_keys::text[],
+                    @parser_versions::text[],
+                    @normalizer_versions::text[],
+                    @dependency_ranks::integer[])
+                    AS plan(
+                        capability_key,
+                        parser_version,
+                        normalizer_version,
+                        dependency_rank)
+            )
             SELECT
                 attempt.id,
                 job.id,
@@ -57,6 +70,8 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
                 ON job.id = attempt.job_id
             INNER JOIN sources.endpoints AS endpoint
                 ON endpoint.id = job.endpoint_id
+            INNER JOIN capability_plan AS plan
+                ON plan.capability_key = endpoint.capability_key
             INNER JOIN sources.shards AS shard
                 ON shard.id = endpoint.shard_id
             INNER JOIN sources.sources AS source
@@ -77,12 +92,10 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             LEFT JOIN evidence.source_parse_runs AS parse_run
                 ON parse_run.representation_fetch_id = representation_fetch.id
                AND parse_run.capability_key = endpoint.capability_key
-               AND parse_run.parser_version = @parser_version
+               AND parse_run.parser_version = plan.parser_version
             LEFT JOIN evidence.coverage_observations AS coverage
                 ON coverage.attempt_id = attempt.id
             WHERE source.key = @source_key
-              AND endpoint.capability_key IN
-                  ('runtime-war-state', 'active-map-list', 'region-war-report')
               AND attempt.state IN
                   ('completed', 'failed', 'uncertain', 'superseded', 'captured_late')
               AND coverage.id IS NULL
@@ -96,7 +109,7 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             """;
 
         AddText(command, "source_key", sourceKey);
-        AddText(command, "parser_version", parserVersion);
+        AddCapabilityPlan(command, capabilities);
         command.Parameters.Add("batch_size", NpgsqlDbType.Integer).Value =
             batchSize;
 
@@ -522,27 +535,12 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
     public async Task<IReadOnlyList<CanonicalReprocessingCandidate>>
         GetPendingCanonicalReprocessingAsync(
             string sourceKey,
-            string parserVersion,
-            string warNormalizerVersion,
-            string regionNormalizerVersion,
-            string warReportNormalizerVersion,
+            IReadOnlyList<CoverageCapabilityPlan> capabilities,
             int batchSize,
             CancellationToken cancellationToken)
     {
         ValidateRequiredText(sourceKey, 128, nameof(sourceKey));
-        ValidateRequiredText(parserVersion, 128, nameof(parserVersion));
-        ValidateRequiredText(
-            warNormalizerVersion,
-            128,
-            nameof(warNormalizerVersion));
-        ValidateRequiredText(
-            regionNormalizerVersion,
-            128,
-            nameof(regionNormalizerVersion));
-        ValidateRequiredText(
-            warReportNormalizerVersion,
-            128,
-            nameof(warReportNormalizerVersion));
+        ValidateCapabilityPlans(capabilities);
         ValidateBatchSize(batchSize);
 
         await using var connection =
@@ -550,6 +548,19 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
+            WITH capability_plan AS (
+                SELECT *
+                FROM unnest(
+                    @capability_keys::text[],
+                    @parser_versions::text[],
+                    @normalizer_versions::text[],
+                    @dependency_ranks::integer[])
+                    AS plan(
+                        capability_key,
+                        parser_version,
+                        normalizer_version,
+                        dependency_rank)
+            )
             SELECT
                 parse_run.id,
                 endpoint.capability_key,
@@ -561,6 +572,9 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
                 ON attempt.id = representation_fetch.attempt_id
             INNER JOIN sources.endpoints AS endpoint
                 ON endpoint.id = representation_fetch.endpoint_id
+            INNER JOIN capability_plan AS plan
+                ON plan.capability_key = endpoint.capability_key
+               AND plan.parser_version = parse_run.parser_version
             INNER JOIN sources.shards AS shard
                 ON shard.id = endpoint.shard_id
             INNER JOIN sources.sources AS source
@@ -568,44 +582,19 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             LEFT JOIN evidence.normalization_runs AS normalization
                 ON normalization.source_parse_run_id = parse_run.id
                AND normalization.normalizer_version =
-                   CASE endpoint.capability_key
-                       WHEN 'runtime-war-state' THEN @war_normalizer_version
-                       WHEN 'active-map-list' THEN @region_normalizer_version
-                       WHEN 'region-war-report' THEN @war_report_normalizer_version
-                       ELSE ''
-                   END
+                   plan.normalizer_version
             WHERE source.key = @source_key
-              AND parse_run.parser_version = @parser_version
-              AND endpoint.capability_key IN
-                  ('runtime-war-state', 'active-map-list', 'region-war-report')
               AND attempt.outcome_code = 'captured_current'
               AND normalization.id IS NULL
             ORDER BY
-                CASE endpoint.capability_key
-                    WHEN 'runtime-war-state' THEN 0
-                    WHEN 'active-map-list' THEN 1
-                    WHEN 'region-war-report' THEN 2
-                    ELSE 3
-                END,
+                plan.dependency_rank,
                 representation_fetch.retrieved_at,
                 parse_run.id
             LIMIT @batch_size;
             """;
 
         AddText(command, "source_key", sourceKey);
-        AddText(command, "parser_version", parserVersion);
-        AddText(
-            command,
-            "war_normalizer_version",
-            warNormalizerVersion);
-        AddText(
-            command,
-            "region_normalizer_version",
-            regionNormalizerVersion);
-        AddText(
-            command,
-            "war_report_normalizer_version",
-            warReportNormalizerVersion);
+        AddCapabilityPlan(command, capabilities);
         command.Parameters.Add("batch_size", NpgsqlDbType.Integer).Value =
             batchSize;
 
@@ -1523,6 +1512,73 @@ public sealed class PostgresCoverageStore(NpgsqlDataSource dataSource)
             _ => throw new CanonicalStateIntegrityException(
                 $"Unknown durable coverage state '{value}'."),
         };
+
+    private static void ValidateCapabilityPlans(
+        IReadOnlyList<CoverageCapabilityPlan> capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        if (capabilities.Count is < 1 or > 128)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(capabilities),
+                "Coverage capability plan must contain between 1 and 128 entries.");
+        }
+
+        var capabilityKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var capability in capabilities)
+        {
+            ArgumentNullException.ThrowIfNull(capability);
+            ValidateRequiredText(
+                capability.CapabilityKey,
+                128,
+                nameof(capability.CapabilityKey));
+            ValidateRequiredText(
+                capability.ParserVersion,
+                128,
+                nameof(capability.ParserVersion));
+            ValidateRequiredText(
+                capability.NormalizerVersion,
+                128,
+                nameof(capability.NormalizerVersion));
+
+            if (capability.DependencyRank is < 0 or > 1024)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(capabilities),
+                    "Coverage dependency rank must be between 0 and 1024.");
+            }
+
+            if (!capabilityKeys.Add(capability.CapabilityKey))
+            {
+                throw new ArgumentException(
+                    $"Coverage capability plan contains duplicate capability '{capability.CapabilityKey}'.",
+                    nameof(capabilities));
+            }
+        }
+    }
+
+    private static void AddCapabilityPlan(
+        NpgsqlCommand command,
+        IReadOnlyList<CoverageCapabilityPlan> capabilities)
+    {
+        command.Parameters.Add(
+            "capability_keys",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value =
+            capabilities.Select(item => item.CapabilityKey).ToArray();
+        command.Parameters.Add(
+            "parser_versions",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value =
+            capabilities.Select(item => item.ParserVersion).ToArray();
+        command.Parameters.Add(
+            "normalizer_versions",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value =
+            capabilities.Select(item => item.NormalizerVersion).ToArray();
+        command.Parameters.Add(
+            "dependency_ranks",
+            NpgsqlDbType.Array | NpgsqlDbType.Integer).Value =
+            capabilities.Select(item => item.DependencyRank).ToArray();
+    }
 
     private static void ValidateBatchSize(int batchSize)
     {
