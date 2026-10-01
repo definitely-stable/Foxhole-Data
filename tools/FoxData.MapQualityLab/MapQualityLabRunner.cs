@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using FoxData.Sources.WarApi;
 
@@ -58,7 +59,7 @@ internal static class MapQualityLabRunner
                     parser,
                     root,
                     fixture);
-                WarApiMapQualityFeatureSnapshot? baseline = null;
+                LoadedFixture? baseline = null;
                 if (fixture.BaselineFixtureId is { } baselineId)
                 {
                     baseline = Load(
@@ -69,8 +70,8 @@ internal static class MapQualityLabRunner
 
                 var features =
                     WarApiMapQualityFeatureExtractor.Extract(
-                        current,
-                        baseline,
+                        current.Snapshot,
+                        baseline?.Snapshot,
                         taxonomy);
                 output.Add(
                     JsonSerializer.Serialize(
@@ -81,6 +82,10 @@ internal static class MapQualityLabRunner
                             fixture.Role,
                             fixture.ProvenanceKind,
                             fixture.BaselineFixtureId,
+                            current.PayloadSha256,
+                            current.StructuralFingerprint,
+                            baseline?.PayloadSha256,
+                            baseline?.StructuralFingerprint,
                             features),
                         SerializerOptions));
             }
@@ -111,7 +116,7 @@ internal static class MapQualityLabRunner
         }
     }
 
-    private static WarApiMapQualityFeatureSnapshot Load(
+    private static LoadedFixture Load(
         WarApiParser parser,
         string root,
         FixtureEntry fixture)
@@ -127,9 +132,10 @@ internal static class MapQualityLabRunner
         };
 
         var path = Path.Combine(root, fixture.File);
+        var bytes = File.ReadAllBytes(path);
         var parsed = parser.Parse(
             capability,
-            File.ReadAllBytes(path));
+            bytes);
         if (!parsed.Parsed ||
             parsed.Value is not WarApiMapDataDto map)
         {
@@ -137,7 +143,13 @@ internal static class MapQualityLabRunner
                 $"Fixture '{fixture.Id}' does not parse as map data: {parsed.Outcome}/{parsed.ErrorCode}.");
         }
 
-        return WarApiMapQualityFeatureSnapshot.FromDto(map);
+        return new LoadedFixture(
+            WarApiMapQualityFeatureSnapshot.FromDto(map),
+            Convert.ToHexString(SHA256.HashData(bytes))
+                .ToLowerInvariant(),
+            parsed.StructuralFingerprint
+                ?? throw new InvalidOperationException(
+                    $"Fixture '{fixture.Id}' has no structural fingerprint."));
     }
 
     private static Options Parse(string[] args)
@@ -257,6 +269,11 @@ internal static class MapQualityLabRunner
         string? BaselineFixtureId,
         string Notes);
 
+    private sealed record LoadedFixture(
+        WarApiMapQualityFeatureSnapshot Snapshot,
+        string PayloadSha256,
+        string StructuralFingerprint);
+
     private sealed record LabRecord(
         string CatalogVersion,
         string FixtureId,
@@ -264,5 +281,9 @@ internal static class MapQualityLabRunner
         string Role,
         string ProvenanceKind,
         string? BaselineFixtureId,
+        string PayloadSha256,
+        string StructuralFingerprint,
+        string? BaselinePayloadSha256,
+        string? BaselineStructuralFingerprint,
         WarApiMapQualityFeatureVector Features);
 }
