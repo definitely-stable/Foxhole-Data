@@ -61,6 +61,10 @@ public sealed record WarApiMapQualityFeatureSnapshot(
 
 public sealed record WarApiMapQualityFeatureVector(
     bool HasBaseline,
+    bool MapItemsPresent,
+    bool MapTextItemsPresent,
+    bool? BaselineMapItemsPresent,
+    bool? BaselineMapTextItemsPresent,
     int ItemCount,
     int TextItemCount,
     int? BaselineItemCount,
@@ -120,7 +124,7 @@ public static class WarApiMapQualityFeatureExtractor
         }
 
         var currentTeams = CountTeams(current.Items);
-        var baselineTeams = baseline is null
+        TeamCounts? baselineTeams = baseline is null
             ? null
             : CountTeams(baseline.Items);
         var currentIcons = CountIcons(current.Items);
@@ -183,6 +187,10 @@ public static class WarApiMapQualityFeatureExtractor
 
         return new WarApiMapQualityFeatureVector(
             baseline is not null,
+            current.MapItemsPresent,
+            current.MapTextItemsPresent,
+            baseline?.MapItemsPresent,
+            baseline?.MapTextItemsPresent,
             current.Items.Count,
             current.TextItems.Count,
             baseline?.Items.Count,
