@@ -275,10 +275,11 @@ public sealed class M5CanonicalRecoveryTests(
                 TestContext.Current.CancellationToken);
 
         Assert.Equal(
-            [
+            new[]
+            {
                 WarApiCapabilities.ActiveMapList.Key,
                 WarApiCapabilities.RuntimeWarState.Key,
-            ],
+            },
             pending.Select(item => item.CapabilityKey).ToArray());
 
         var invalidPlan = new CoverageCapabilityPlan[]
