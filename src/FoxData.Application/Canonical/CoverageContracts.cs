@@ -108,6 +108,12 @@ public sealed record CoverageContinuityResult(
     WarContextDescriptor WarContext,
     IReadOnlyList<RegionMembershipDescriptor> Memberships);
 
+public sealed record CoverageCapabilityPlan(
+    string CapabilityKey,
+    string ParserVersion,
+    string NormalizerVersion,
+    int DependencyRank);
+
 public sealed record CanonicalReprocessingCandidate(
     SourceParseRunId SourceParseRunId,
     string CapabilityKey,
@@ -117,7 +123,7 @@ public interface ICoverageStore
 {
     Task<IReadOnlyList<CoverageAttemptEvidence>> GetUncoveredAttemptsAsync(
         string sourceKey,
-        string parserVersion,
+        IReadOnlyList<CoverageCapabilityPlan> capabilities,
         int batchSize,
         CancellationToken cancellationToken);
 
@@ -151,10 +157,7 @@ public interface ICoverageStore
     Task<IReadOnlyList<CanonicalReprocessingCandidate>>
         GetPendingCanonicalReprocessingAsync(
             string sourceKey,
-            string parserVersion,
-            string warNormalizerVersion,
-            string regionNormalizerVersion,
-            string warReportNormalizerVersion,
+            IReadOnlyList<CoverageCapabilityPlan> capabilities,
             int batchSize,
             CancellationToken cancellationToken);
 }

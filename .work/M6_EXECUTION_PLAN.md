@@ -516,6 +516,8 @@ Prove:
 
 # M6-G — coverage, recovery and reprocessing
 
+M6-G1 source-neutral coverage capability-plan refactor is complete in PR #51. The next slice is M6-G2: extend coverage semantics to static-map-state and dynamic-map-state without yet enabling policy@2 activation.
+
 ## G1. Generalize capability plan
 
 Replace growth of hardcoded capability SQL with a source-neutral plan concept:
@@ -532,7 +534,16 @@ Infrastructure queries generic candidate sets from supplied plan data.
 
 Worker supplies War API-specific dispatch.
 
-M5 behavior must remain identical.
+G1 implementation checkpoint:
+
+- `CoverageCapabilityPlan` is an Application-layer source-neutral value carrying capability key, parser version, normalizer version and dependency rank;
+- PostgreSQL candidate selection receives the plan as typed arrays and joins it with `unnest`; no War API capability literals or capability-specific normalizer `CASE` remain in uncovered/canonical candidate SQL;
+- Worker composition supplies the legacy M5 plan with dependency ranks war=0, active-map-list=1, region-war-report=2;
+- duplicate capability keys, empty/untrimmed plan identities and invalid ranks fail closed;
+- RecoveryTests prove plan filtering and supplied dependency ordering independently of source timestamps;
+- static/dynamic map capabilities are intentionally absent until G2.
+
+G1 acceptance: exact-head CI, Contracts, Dependency Review, RecoveryTests and Docker smoke are green; M5 behavior remains identical.
 
 ## G2. Extend coverage to M6 capabilities
 
