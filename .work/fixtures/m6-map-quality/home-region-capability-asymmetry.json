@@ -1,0 +1,9 @@
+{
+  "activeMapNames": [
+    "HomeRegionC",
+    "HomeRegionW"
+  ],
+  "ordinaryStaticMapDataExpected": false,
+  "ordinaryDynamicMapDataExpected": false,
+  "basis": "Upstream War API README documents these names in the active map list but without ordinary map data in this API version."
+}

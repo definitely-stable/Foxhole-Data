@@ -1,0 +1,181 @@
+{
+  "version": "m6-map-quality-fixtures@1",
+  "reviewedAt": "2026-10-01",
+  "fixtures": [
+    {
+      "id": "healthy-dynamic-baseline",
+      "file": "healthy-dynamic-baseline.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "healthy-baseline",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/92",
+      "baselineFixtureId": null,
+      "notes": "Synthetic pre-restart baseline paired with the exact issue #92 payload; not claimed as historical bytes."
+    },
+    {
+      "id": "warapi-92-restart-mass-none",
+      "file": "warapi-92-restart-mass-none.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "historical-anomaly",
+      "provenanceKind": "upstream-exact",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/92",
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "Exact JSON payload embedded in issue #92, captured 2021-10-11 14:18 GMT."
+    },
+    {
+      "id": "warapi-120-restart-transient",
+      "file": "warapi-120-restart-transient.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "historical-anomaly",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/120",
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "Issue #120 documents transient restart false changes but publishes no JSON; this fixture is an intentionally minimized synthetic representation of that symptom."
+    },
+    {
+      "id": "healthy-recovery",
+      "file": "healthy-recovery.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "healthy-recovery",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/92",
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "Synthetic recovery state used to prove features do not permanently encode the restart incident."
+    },
+    {
+      "id": "war-start-neutral",
+      "file": "war-start-neutral.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "healthy-no-baseline",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Legitimate no-baseline neutral state guard against NONE-only heuristics."
+    },
+    {
+      "id": "warapi-137-icon97-viewdirection",
+      "file": "warapi-137-icon97-viewdirection.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "RedRiverHex",
+      "role": "open-taxonomy",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/137",
+      "baselineFixtureId": null,
+      "notes": "Issue #137 supplies the exact item; wrapper map metadata is synthetic."
+    },
+    {
+      "id": "warapi-115-duplicate-rocket-target",
+      "file": "warapi-115-duplicate-rocket-target.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "duplicate-occurrence",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/115",
+      "baselineFixtureId": null,
+      "notes": "Issue #115 documents duplicate Rocket Target occurrences but does not publish source JSON; iconType 70 comes from upstream README."
+    },
+    {
+      "id": "warapi-77-static-before",
+      "file": "warapi-77-static-before.json",
+      "capabilityKey": "static-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "static-baseline",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/77",
+      "baselineFixtureId": null,
+      "notes": "Issue #77 reports static version 3/lastUpdated 1605666182324; object body is minimized synthetic context."
+    },
+    {
+      "id": "warapi-77-static-changed",
+      "file": "warapi-77-static-changed.json",
+      "capabilityKey": "static-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "static-change",
+      "provenanceKind": "synthetic-minimized",
+      "sourceUrl": "https://github.com/clapfoot/warapi/issues/77",
+      "baselineFixtureId": "warapi-77-static-before",
+      "notes": "Synthetic follow-up proving static representation changes are retained and measurable."
+    },
+    {
+      "id": "unknown-team",
+      "file": "unknown-team.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "open-taxonomy",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Unknown team value remains source truth and becomes a diagnostic feature."
+    },
+    {
+      "id": "unknown-flag-bits",
+      "file": "unknown-flag-bits.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "open-taxonomy",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "High bit is intentionally outside taxonomy@1."
+    },
+    {
+      "id": "invalid-coordinate",
+      "file": "invalid-coordinate.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "DeadLandsHex",
+      "role": "structural-invalid",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": null,
+      "notes": "Normalized coordinate outside [0,1]."
+    },
+    {
+      "id": "source-region-conflict",
+      "file": "source-region-conflict.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "structural-conflict",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "Same map stream with a conflicting non-null regionId."
+    },
+    {
+      "id": "source-version-regression",
+      "file": "source-version-regression.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "progression-regression",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "Version regression feature without policy threshold."
+    },
+    {
+      "id": "last-updated-regression",
+      "file": "last-updated-regression.json",
+      "capabilityKey": "dynamic-map-state",
+      "sourceMapName": "FishermansRowHex",
+      "role": "progression-regression",
+      "provenanceKind": "synthetic",
+      "sourceUrl": null,
+      "baselineFixtureId": "healthy-dynamic-baseline",
+      "notes": "lastUpdated regression feature without policy threshold."
+    }
+  ],
+  "contextFixtures": [
+    {
+      "id": "home-region-capability-asymmetry",
+      "file": "home-region-capability-asymmetry.json",
+      "role": "capability-asymmetry",
+      "provenanceKind": "upstream-documented-derived",
+      "sourceUrl": "https://github.com/clapfoot/warapi/blob/master/README.md",
+      "notes": "Not a map-quality feature input. It preserves the documented exception that HomeRegionC/HomeRegionW appear in the map list without ordinary map data."
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "regionId" : 15,
+  "scorchedVictoryTowns" : 0,
+  "mapItems" : [ {
+    "teamId" : "NONE",
+    "iconType" : 39,
+    "x" : 0.50532764,
+    "y" : 0.5625495,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 39,
+    "x" : 0.6778407,
+    "y" : 0.38638747,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 11,
+    "x" : 0.39679545,
+    "y" : 0.29804406,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 34,
+    "x" : 0.6866246,
+    "y" : 0.3947453,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 33,
+    "x" : 0.7584116,
+    "y" : 0.5286025,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 33,
+    "x" : 0.36748582,
+    "y" : 0.25986293,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 18,
+    "x" : 0.53586024,
+    "y" : 0.58132774,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 18,
+    "x" : 0.4014841,
+    "y" : 0.21975125,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 18,
+    "x" : 0.7520729,
+    "y" : 0.44829163,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 18,
+    "x" : 0.6911762,
+    "y" : 0.33260387,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 18,
+    "x" : 0.7453215,
+    "y" : 0.39947712,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 52,
+    "x" : 0.55129033,
+    "y" : 0.5582539,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 53,
+    "x" : 0.5295013,
+    "y" : 0.54276603,
+    "flags" : 0
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 56,
+    "x" : 0.38916466,
+    "y" : 0.30496997,
+    "flags" : 8
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 56,
+    "x" : 0.7848051,
+    "y" : 0.5246711,
+    "flags" : 8
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 56,
+    "x" : 0.7001385,
+    "y" : 0.3840753,
+    "flags" : 8
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 56,
+    "x" : 0.4635182,
+    "y" : 0.5267577,
+    "flags" : 8
+  }, {
+    "teamId" : "NONE",
+    "iconType" : 56,
+    "x" : 0.39192638,
+    "y" : 0.7305457,
+    "flags" : 8
+  } ],
+  "mapTextItems" : [ ],
+  "lastUpdated" : 1633961805874,
+  "version" : 1
+}

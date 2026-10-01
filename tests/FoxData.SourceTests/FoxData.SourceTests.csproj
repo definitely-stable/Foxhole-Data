@@ -15,4 +15,9 @@
   <ItemGroup>
     <ProjectReference Include="../../src/FoxData.Sources.WarApi/FoxData.Sources.WarApi.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../.work/fixtures/m6-map-quality/*.json"
+             Link="Fixtures/M6/%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

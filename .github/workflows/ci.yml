@@ -55,6 +55,17 @@ jobs:
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --help >/dev/null
           dotnet run --project src/FoxData.Cli/FoxData.Cli.csproj -c Release --no-build -- --version >/dev/null
           dotnet run --project tools/FoxData.SourceMeasurement/FoxData.SourceMeasurement.csproj -c Release --no-build -- --help >/dev/null
+          dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- --help >/dev/null
+
+      - name: Verify M6 F1 offline feature lab
+        shell: bash
+        run: |
+          first="$RUNNER_TEMP/m6-map-quality-features-1.jsonl"
+          second="$RUNNER_TEMP/m6-map-quality-features-2.jsonl"
+          dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- --catalog .work/fixtures/m6-map-quality/catalog.json --output "$first"
+          dotnet run --project tools/FoxData.MapQualityLab/FoxData.MapQualityLab.csproj -c Release --no-build -- --catalog .work/fixtures/m6-map-quality/catalog.json --output "$second"
+          test "$(wc -l < "$first")" -ge 15
+          cmp --silent "$first" "$second"
 
       - name: Unit tests
         run: >-

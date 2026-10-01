@@ -158,7 +158,7 @@ Implementation slices:
 - M6-C dynamic map normalization — complete;
 - M6-D versioned taxonomy — complete;
 - M6-E quality kernel and accepted-observation transaction — E1/E2 complete, E3 chronology/Worker integration in progress;
-- M6-F new versioned calibrated anomaly policy@2, including warapi#92/#120, without mutating the persisted structural-only @1 — pending;
+- M6-F1 golden fixture catalog + deterministic offline feature extraction — implemented and exact-head verified in PR #49; M6-F2 calibrated anomaly policy@2, including warapi#92/#120, is next without mutating structural-only @1;
 - M6-G static/dynamic coverage, local recovery and versioned reprocessing — pending;
 - M6-H deterministic completion gate and M6 completion record — pending.
 

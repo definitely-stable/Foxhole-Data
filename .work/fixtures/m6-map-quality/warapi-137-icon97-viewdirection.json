@@ -1,0 +1,17 @@
+{
+  "regionId": 1,
+  "scorchedVictoryTowns": 0,
+  "mapItems": [
+    {
+      "teamId": "COLONIALS",
+      "iconType": 97,
+      "x": 0.71438116,
+      "y": 0.5286482,
+      "flags": 0,
+      "viewDirection": 0
+    }
+  ],
+  "mapTextItems": [],
+  "lastUpdated": 1783455176000,
+  "version": 2
+}

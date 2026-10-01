@@ -1,15 +1,15 @@
 # M6 execution plan — M6-E through M6-H
 
-Status: active execution companion. M6-E1 and M6-E2 merged; M6-E3 in progress in PR #48.
+Status: active execution companion. M6-E is merged through PR #48; M6-F1 is implemented and exact-head verified in PR #49. M6-F2 calibration is next after merge.
 Normative specification: M6_MAPS_TAXONOMY_QUALITY.md.
 Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
 
-## Current implementation checkpoint (2026-09-30)
+## Current implementation checkpoint (2026-10-01)
 
-- M6-E2 is on main as #47, with passing main CI/Contracts.
-- M6-E3 lives in PR #48 and is not complete until CI and recovery gates pass.
+- M6-E2 is on main as #47.
+- M6-E3 is on main as #48 with passing post-merge CI/Contracts.
 - Both the preliminary ordering reader and the locked quality transaction use the
   same source-evidence chronology query. The preliminary read is advisory only.
 - The source-neutral kernel and PostgreSQL store also fail closed when a
@@ -55,7 +55,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-The next slice is M6-E.
+The current slice is M6-F1: golden fixtures and deterministic offline feature extraction.
 
 ## Non-negotiable invariants
 
@@ -350,7 +350,38 @@ M6-E closes only when:
 
 Do not begin M6-F before this.
 
+## M6-F1 completion checkpoint (2026-10-01)
+
+Delivered and verified before merge:
+
+- versioned `m6-map-quality-fixtures@1` catalog;
+- exact upstream warapi#92 restart payload plus provenance-marked minimized/synthetic guards;
+- explicit warapi#120, #137, #115, #77 and HomeRegion evidence boundaries;
+- deterministic source-specific feature extractor with no anomaly thresholds;
+- candidate/baseline source values, exact team/raw-icon distributions, occurrence ratios,
+  NONE/owned shares, concentration, progression deltas, taxonomy diagnostics,
+  coordinate diagnostics, duplicate counts and null-vs-empty array presence;
+- SHA-256 and structural fingerprints in every offline candidate/baseline record;
+- offline `FoxData.MapQualityLab` requiring no public War API;
+- CI runs the lab twice and requires byte-identical JSONL output;
+- source tests prove historical #92 feature shape, no-baseline neutral handling,
+  isolated regressions, unknown taxonomy, duplicate occurrence, provenance labels
+  and missing-vs-empty array behavior.
+
+Not delivered by F1:
+
+- no thresholds;
+- no candidate policy decision;
+- no #92 quarantine assertion;
+- no `warapi-map-quality@2`;
+- no runtime Worker behavior change.
+
+Next slice: M6-F2 offline calibration over these fixtures plus retained M4 evidence,
+followed by publication of immutable policy@2 only when false-positive analysis is recorded.
+
 # M6-F — calibrated anomaly policy v2
+
+Current slice: M6-F1 golden fixtures + deterministic offline feature extraction — implementation complete and verified in PR #49. Calibration/thresholds remain M6-F2 and are not part of F1.
 
 ## F1. Golden fixture catalog
 
@@ -374,6 +405,8 @@ Incomplete upstream issue data must be labelled synthetic/minimized regression d
 
 ## F2. Deterministic feature extraction
 
+F1 implementation exposes these measurements as facts only; no thresholds or terminal decisions are encoded here. Raw iconType counts plus a concentration statistic are emitted rather than inventing undocumented icon families.
+
 Extract:
 
 - item/text counts;
@@ -381,7 +414,8 @@ Extract:
 - NONE share;
 - owned-team share;
 - count ratios versus baseline;
-- icon-family distribution;
+- raw iconType distribution as the F1 evidence primitive;
+- policy-defined icon-family distribution only if policy@2 explicitly defines a versioned mapping;
 - composition concentration/collapse;
 - source version delta;
 - lastUpdated delta;
@@ -389,6 +423,22 @@ Extract:
 - duplicate occurrence indicators.
 
 No ObjectiveId is required.
+
+F1 freezes the feature math, not anomaly thresholds:
+
+- NONE and owned-team shares use all map-item occurrences as the denominator;
+  missing teamId stays in the denominator and has its own count;
+- a ratio with a zero baseline denominator is null rather than infinity;
+- icon composition is measured from non-null raw iconType counts;
+- concentration is sum(p(iconType)^2), emitted without a cutoff;
+- raw iconType remains the evidence primitive; grouping icons into a semantic
+  family is allowed only when a future versioned policy explicitly defines the mapping;
+- source version and lastUpdated deltas use decimal subtraction to avoid overflow;
+- duplicate signals group the complete preserved raw occurrence tuple and count
+  excess occurrences without deduplicating source evidence;
+- missing/null map arrays remain distinguishable from present-but-empty arrays;
+- every offline record includes SHA-256 and structural fingerprint for both
+  candidate and baseline when a baseline exists.
 
 ## F3. Offline calibration
 

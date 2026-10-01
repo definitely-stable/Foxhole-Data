@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-D and M6-E1/E2 implemented; M6-E3 next.
+Status: in progress. M6-A through M6-E complete; M6-F1 golden fixtures and deterministic offline feature extraction implemented and verified in PR #49; M6-F2 calibration next.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -826,7 +826,7 @@ Compare item/text counts with the deterministic accepted baseline.
 
 A severe collapse is a quality signal.
 
-The threshold must be calibrated and persisted in `warapi-map-quality@1`.
+The threshold must be calibrated and persisted in the new immutable `warapi-map-quality@2`; structural-only `@1` remains unchanged.
 
 ### 15.6 mass disappearance
 
@@ -838,7 +838,7 @@ This is a representation-level anomaly only.
 
 This is the mandatory upstream warapi#92/#120 regression family.
 
-The v1 rule MUST use multiple signals rather than `teamId == NONE` alone, because NONE can be legitimate.
+The calibrated policy@2 rule MUST use multiple signals rather than `teamId == NONE` alone, because NONE can be legitimate.
 
 Candidate features include:
 
@@ -1388,9 +1388,19 @@ Acceptance:
 - accepted observation and quality run cannot diverge after crash;
 - baseline selection is deterministic under concurrent/out-of-order processing.
 
+### M6-F1 implementation checkpoint
+
+The F1 evidence/feature layer is complete in PR #49. It deliberately stops before
+policy calibration. The fixture catalog distinguishes exact upstream bytes from
+synthetic/minimized regressions, and the offline feature lab records exact payload
+SHA-256 plus parser structural fingerprints so later calibration can be audited.
+
+F1 does not assign anomaly decisions. M6-F2 owns calibration, false-positive review
+against retained M4 evidence and publication of a new immutable policy@2.
+
 ### M6-F — Historical anomaly rules and calibrated policy v2
 
-Goal: freeze the first operational map-quality policy.
+Goal: freeze the first operational anomaly map-quality policy without mutating structural policy@1.
 
 Implement:
 
