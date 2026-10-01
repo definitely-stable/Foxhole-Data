@@ -167,5 +167,15 @@
       "baselineFixtureId": "healthy-dynamic-baseline",
       "notes": "lastUpdated regression feature without policy threshold."
     }
+  ],
+  "contextFixtures": [
+    {
+      "id": "home-region-capability-asymmetry",
+      "file": "home-region-capability-asymmetry.json",
+      "role": "capability-asymmetry",
+      "provenanceKind": "upstream-documented-derived",
+      "sourceUrl": "https://github.com/clapfoot/warapi/blob/master/README.md",
+      "notes": "Not a map-quality feature input. It preserves the documented exception that HomeRegionC/HomeRegionW appear in the map list without ordinary map data."
+    }
   ]
 }
