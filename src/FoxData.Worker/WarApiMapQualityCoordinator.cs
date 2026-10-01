@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FoxData.Application.Canonical;
 using FoxData.Core.Evidence;
 using FoxData.Core.Sources;
@@ -79,48 +80,19 @@ public sealed class WarApiMapQualityCoordinator(
         var startedAt = timeProvider.GetUtcNow();
         var taxonomy = new WarApiMapTaxonomyInterpreter(
             WarApiMapTaxonomyRegistry.Get(profile.TaxonomyVersion));
-        var sourceEvaluation =
-            WarApiMapQualityPolicyEvaluator.Evaluate(
-                profile,
-                ToFeatureSnapshot(normalized),
-                baseline: null,
-                region.SourceRegionId,
-                plan.CurrentStructuralFingerprint,
-                plan.BaselineStructuralFingerprint,
-                taxonomy);
-        var findings = sourceEvaluation.Findings
-            .Select(
-                finding => new MapQualityFindingCandidate(
-                    finding.RuleKey,
-                    finding.RuleVersion,
-                    finding.ConfigurationVersion,
-                    finding.Effect switch
-                    {
-                        WarApiMapQualityEffect.Informational =>
-                            MapQualityFindingEffect.Informational,
-                        WarApiMapQualityEffect.Suspect =>
-                            MapQualityFindingEffect.Suspect,
-                        WarApiMapQualityEffect.Quarantined =>
-                            MapQualityFindingEffect.Quarantined,
-                        _ => throw new InvalidOperationException(
-                            "Unsupported source quality finding effect."),
-                    },
-                    null,
-                    null,
-                    finding.DetailCode,
-                    finding.InputMetricsJson))
-            .ToArray();
-        var decision = sourceEvaluation.Decision switch
-        {
-            WarApiMapQualityPolicyDecision.Accepted =>
-                MapQualityDecision.Accepted,
-            WarApiMapQualityPolicyDecision.Suspect =>
-                MapQualityDecision.Suspect,
-            WarApiMapQualityPolicyDecision.Quarantined =>
-                MapQualityDecision.Quarantined,
-            _ => throw new InvalidOperationException(
-                "Unsupported source quality decision."),
-        };
+        var findings = EvaluateStructuralFindings(
+            normalized,
+            region,
+            plan,
+            profile,
+            taxonomy);
+        var decision = findings.Any(
+            finding => finding.Effect == MapQualityFindingEffect.Quarantined)
+            ? MapQualityDecision.Quarantined
+            : findings.Any(
+                finding => finding.Effect == MapQualityFindingEffect.Suspect)
+                ? MapQualityDecision.Suspect
+                : MapQualityDecision.Accepted;
 
         // The store recomputes chronology/baseline inside the locked
         // transaction. A stale preliminary evaluation is never committed.
@@ -147,32 +119,136 @@ public sealed class WarApiMapQualityCoordinator(
         }
     }
 
-    private static WarApiMapQualityFeatureSnapshot ToFeatureSnapshot(
-        MapSnapshotResult normalized) =>
-        new(
-            normalized.Snapshot.SourceRegionId,
-            normalized.Snapshot.SourceVersion,
-            normalized.Snapshot.SourceLastUpdatedMs,
-            normalized.Snapshot.SourceMapItemsArrayPresent,
-            normalized.Snapshot.SourceMapTextItemsArrayPresent,
-            normalized.Items
-                .Select(
-                    item => new WarApiMapQualityFeatureItem(
-                        item.RawTeamId,
-                        item.RawIconType,
-                        item.X,
-                        item.Y,
-                        item.RawFlags,
-                        item.RawViewDirection))
-                .ToArray(),
-            normalized.TextItems
-                .Select(
-                    item => new WarApiMapQualityFeatureTextItem(
-                        item.Text,
-                        item.X,
-                        item.Y,
-                        item.RawMapMarkerType))
-                .ToArray());
+    private static IReadOnlyList<MapQualityFindingCandidate>
+        EvaluateStructuralFindings(
+        MapSnapshotResult normalized,
+        WarRegionDescriptor region,
+        MapQualityOrderingPlan plan,
+        WarApiMapQualityPolicyProfile profile,
+        WarApiMapTaxonomyInterpreter taxonomy)
+    {
+        var snapshot = normalized.Snapshot;
+        var findings = new List<MapQualityFindingCandidate>();
+        var rules = profile.Rules.ToDictionary(
+            rule => rule.Key,
+            StringComparer.Ordinal);
+
+        void Add(string key, string detail, int count)
+        {
+            var rule = rules[key];
+            var effect = rule.Effect switch
+            {
+                WarApiMapQualityEffect.Informational =>
+                    MapQualityFindingEffect.Informational,
+                WarApiMapQualityEffect.Suspect =>
+                    MapQualityFindingEffect.Suspect,
+                WarApiMapQualityEffect.Quarantined =>
+                    MapQualityFindingEffect.Quarantined,
+                _ => throw new InvalidOperationException(
+                    "Unsupported versioned map quality effect."),
+            };
+            findings.Add(
+                new MapQualityFindingCandidate(
+                    rule.Key,
+                    rule.RuleVersion,
+                    rule.ConfigurationVersion,
+                    effect,
+                    null,
+                    null,
+                    detail,
+                    JsonSerializer.Serialize(new { count })));
+        }
+
+        var regionRule = rules["region-id.valid"];
+        var minimum = regionRule.Parameters["minimum"].GetInt32();
+        var allowNull = regionRule.Parameters["allowNull"].GetBoolean();
+        if ((snapshot.SourceRegionId is null && !allowNull) ||
+            snapshot.SourceRegionId is { } sourceId &&
+            sourceId < minimum)
+        {
+            Add("region-id.valid", "invalid_region_id", 1);
+        }
+
+        if (snapshot.SourceRegionId is { } candidateId &&
+            region.SourceRegionId is { } acceptedId &&
+            candidateId != acceptedId)
+        {
+            Add("region-id.conflict", "conflicting_region_id", 1);
+        }
+
+        var coordinateRule = rules["coordinate.valid"];
+        var coordinateMinimum =
+            coordinateRule.Parameters["minimum"].GetDouble();
+        var coordinateMaximum =
+            coordinateRule.Parameters["maximum"].GetDouble();
+        var requireFinite =
+            coordinateRule.Parameters["requireFinite"].GetBoolean();
+        bool Invalid(double? coordinate) =>
+            coordinate is { } value &&
+            (value < coordinateMinimum ||
+             value > coordinateMaximum ||
+             requireFinite && !double.IsFinite(value));
+
+        var invalidCoordinates = normalized.Items.Count(
+            item => Invalid(item.X) || Invalid(item.Y)) +
+            normalized.TextItems.Count(
+                item => Invalid(item.X) || Invalid(item.Y));
+        if (invalidCoordinates != 0)
+        {
+            Add("coordinate.valid", "invalid_coordinates",
+                invalidCoordinates);
+        }
+
+        var timeRule = rules["source-time.representable"];
+        var allowMissingTime =
+            timeRule.Parameters["allowMissing"].GetBoolean();
+        if ((!allowMissingTime &&
+             snapshot.SourceLastUpdatedMs is null) ||
+            snapshot.SourceLastUpdatedMs is not null &&
+            snapshot.SourceUpdatedAt is null)
+        {
+            Add("source-time.representable",
+                "unrepresentable_source_timestamp", 1);
+        }
+
+        if (plan.Baseline is not null &&
+            plan.CurrentStructuralFingerprint is { } current &&
+            plan.BaselineStructuralFingerprint is { } previous &&
+            !string.Equals(current, previous, StringComparison.Ordinal))
+        {
+            Add("schema.structure-changed",
+                "structural_fingerprint_changed", 1);
+        }
+
+        var unknownIcons = normalized.Items.Count(
+            item => taxonomy.InterpretIcon(item.RawIconType).Status ==
+                WarApiMapTaxonomyLookupStatus.Unknown);
+        if (unknownIcons != 0)
+        {
+            Add("taxonomy.unknown-icon", "unknown_icon",
+                unknownIcons);
+        }
+
+        var unknownTeams = normalized.Items.Count(
+            item => taxonomy.InterpretTeam(item.RawTeamId).Status ==
+                WarApiMapTaxonomyLookupStatus.Unknown);
+        if (unknownTeams != 0)
+        {
+            Add("taxonomy.unknown-team", "unknown_team",
+                unknownTeams);
+        }
+
+        var unknownFlags = normalized.Items.Count(
+            item => taxonomy.InterpretFlags(item.RawFlags).Status ==
+                WarApiMapFlagInterpretationStatus.ContainsUnknownBits);
+        if (unknownFlags != 0)
+        {
+            Add("taxonomy.unknown-flag-bits",
+                "unknown_flag_bits", unknownFlags);
+        }
+
+        return findings;
+    }
 
     private static WarApiMapQualityEvaluation Complete(
         MapQualityResult result)
