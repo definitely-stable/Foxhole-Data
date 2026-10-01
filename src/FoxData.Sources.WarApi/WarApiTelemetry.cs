@@ -60,6 +60,11 @@ public static class WarApiTelemetry
             "foxdata.canonical.map_quality.runs",
             description: "Versioned terminal map quality outcomes.");
 
+    public static readonly Counter<long> MapQualityRuleHits =
+        Meter.CreateCounter<long>(
+            "foxdata.canonical.map_quality.rule_hits",
+            description: "Observed durable map-quality findings by stable rule identity.");
+
     public static readonly Counter<long> MapQualityDeferred =
         Meter.CreateCounter<long>(
             "foxdata.canonical.map_quality.deferred",
