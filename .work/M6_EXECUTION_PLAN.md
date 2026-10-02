@@ -516,7 +516,7 @@ Prove:
 
 # M6-G — coverage, recovery and reprocessing
 
-M6-G1 is complete in PR #51. M6-G2/G3 static/dynamic coverage extension plus local parse repair is complete in PR #52. M6-G4 normalization-gap recovery is the current slice; policy@2 activation remains deferred.
+M6-G1 is complete in PR #51. M6-G2/G3 static/dynamic coverage extension plus local parse repair is complete in PR #52. M6-G4 normalization-gap recovery is complete in PR #54. The next slice is M6-G5 quality-gap scanning; policy@2 activation remains deferred.
 
 ## G1. Generalize capability plan
 
@@ -607,6 +607,8 @@ G4 acceptance:
 - 200 + 304 validation lineage still normalizes only the reused body-bearing representation;
 - replay is idempotent and Fetch/Payload counts do not grow;
 - full repository gates remain green.
+
+G4 acceptance is complete in PR #54: exact-head CI, Contracts, Dependency Review, RecoveryTests and Docker smoke are green.
 
 ## G5. Quality gap scanner
 
