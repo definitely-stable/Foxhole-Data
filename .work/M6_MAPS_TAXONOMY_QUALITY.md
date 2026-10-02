@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G3 complete through PR #52; M6-G4 map normalization-gap recovery is in progress, with quality reprocessing and policy@2 activation still deferred.
+Status: in progress. M6-A through M6-G4 complete through PR #54; M6-G5 quality-gap scanning is next, with policy@2 activation still deferred.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
