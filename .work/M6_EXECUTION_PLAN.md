@@ -516,7 +516,7 @@ Prove:
 
 # M6-G — coverage, recovery and reprocessing
 
-M6-G1 is complete in PR #51. M6-G2/G3 static/dynamic coverage extension plus local parse repair is complete in PR #52. The next slice is M6-G4 normalization-gap recovery; policy@2 activation remains deferred.
+M6-G1 is complete in PR #51. M6-G2/G3 static/dynamic coverage extension plus local parse repair is complete in PR #52. M6-G4 normalization-gap recovery is complete in PR #54. The next slice is M6-G5 quality-gap scanning; policy@2 activation remains deferred.
 
 ## G1. Generalize capability plan
 
@@ -589,6 +589,26 @@ G2/G3 acceptance: durable static/dynamic captures with missing parser@1 converge
 Find authoritative static/dynamic SourceParseRuns without current M6 normalizer run.
 
 Replay source-local normalization before requiring M5 context.
+
+G4 implementation boundary:
+
+- reuse the source-neutral canonical reprocessing query introduced by G1; do not add map-specific SQL;
+- canonical normalization plan includes all five War API capabilities, while Worker dispatch remains capability-specific;
+- static/dynamic gaps dispatch to the existing transactional map normalizers;
+- normalized map recovery commits the existing normalization_run + map_snapshot + occurrence transaction only;
+- rejected source parses become terminal rejected normalization runs through the existing normalizer contract;
+- recovery uses only durable representation bytes and never performs a new upstream Fetch;
+- no new quality run, map observation, taxonomy version or policy@2 activation is introduced by G4 itself.
+
+G4 acceptance:
+
+- an existing static/dynamic SourceParseRun with no current normalizer run converges locally;
+- map snapshot and source occurrences are created exactly once;
+- 200 + 304 validation lineage still normalizes only the reused body-bearing representation;
+- replay is idempotent and Fetch/Payload counts do not grow;
+- full repository gates remain green.
+
+G4 acceptance is complete in PR #54: exact-head CI, Contracts, Dependency Review, RecoveryTests and Docker smoke are green.
 
 ## G5. Quality gap scanner
 

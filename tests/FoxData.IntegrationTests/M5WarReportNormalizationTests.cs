@@ -915,6 +915,22 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 normalization,
                 options,
                 TimeProvider.System);
+        var mapSnapshots = new MapSnapshotKernel(
+            new PostgresMapSnapshotStore(dataSource));
+        var staticMapNormalization =
+            new WarApiStaticMapNormalizationCoordinator(
+                canonicalEvidence,
+                mapSnapshots,
+                normalization,
+                options,
+                TimeProvider.System);
+        var dynamicMapNormalization =
+            new WarApiDynamicMapNormalizationCoordinator(
+                canonicalEvidence,
+                mapSnapshots,
+                normalization,
+                options,
+                TimeProvider.System);
         var coverageRecovery =
             new WarApiCoverageRecoveryCoordinator(
                 coverageStore,
@@ -923,6 +939,8 @@ public sealed class M5WarReportNormalizationTests(PostgresFixture postgres)
                 warNormalization,
                 regionNormalization,
                 reportNormalization,
+                staticMapNormalization,
+                dynamicMapNormalization,
                 options,
                 TimeProvider.System);
 

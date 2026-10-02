@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G3 complete through PR #52; M6-G4 map normalization-gap recovery is next, with quality reprocessing and policy@2 activation still deferred.
+Status: in progress. M6-A through M6-G4 complete through PR #54; M6-G5 quality-gap scanning is next, with policy@2 activation still deferred.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -992,7 +992,7 @@ M5 war context + M5 WarRegion
                 -> accepted map observation
 ~~~
 
-Source parsing/normalization and M5 context recovery may progress independently until the quality/binding join point.
+Source parsing/normalization and M5 context recovery may progress independently until the quality/binding join point. G4 implements this by routing static/dynamic SourceParseRun normalization gaps through the same source-neutral recovery candidate query used by M5 canonical recovery, while keeping map normalization entirely source-local.
 
 Quality/taxonomy reprocessing MUST NOT rewrite old runs. New versions create new immutable derived results.
 
