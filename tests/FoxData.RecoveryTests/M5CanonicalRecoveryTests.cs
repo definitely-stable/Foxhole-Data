@@ -412,6 +412,131 @@ public sealed class M5CanonicalRecoveryTests(
                 "evidence.normalization_runs"));
     }
 
+    [Fact]
+    public async Task Map304ReusesPriorRepresentationAndSingleLocalParseRepair()
+    {
+        await MigrateAsync();
+        await ResetAsync();
+
+        await using var dataSource =
+            NpgsqlDataSource.Create(postgres.ConnectionString);
+        var registry = new SourceRegistry(
+            new PostgresSourceRegistryStore(dataSource));
+
+        var source = await registry.RegisterSourceAsync(
+            WarApiCatalog.SourceKey,
+            "Official Foxhole War API",
+            TestContext.Current.CancellationToken);
+        var shard = await registry.RegisterShardAsync(
+            source.Resource.Id,
+            "live-1",
+            "Live-1",
+            "live",
+            TestContext.Current.CancellationToken);
+        var endpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var ingestion = new IngestionKernel(
+            new PostgresIngestionKernelStore(dataSource));
+        var evidence = new EvidenceKernel(
+            new PostgresEvidenceKernelStore(dataSource));
+        var retrievedAt = new DateTimeOffset(
+            2026, 10, 1, 14, 0, 0, TimeSpan.Zero);
+        var body = Encoding.UTF8.GetBytes(
+            """
+            {
+              "regionId": 1,
+              "scorchedVictoryTowns": 0,
+              "mapItems": [],
+              "mapTextItems": [],
+              "lastUpdated": 1790872800000,
+              "version": 2
+            }
+            """);
+
+        var representationFetchId = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            endpoint.Resource.Id,
+            retrievedAt,
+            body,
+            "m6-g3-map-body");
+        await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            endpoint.Resource.Id,
+            retrievedAt.AddMinutes(1),
+            representationFetchId,
+            "m6-g3-map-304");
+
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            1L,
+            await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            0L,
+            await CountAsync(
+                dataSource,
+                "evidence.source_parse_runs"));
+
+        var recovery = CreateRecoveryCoordinator(dataSource);
+        var first = await recovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, first.ParseRunsRepaired);
+        Assert.Equal(2, first.CoverageRecorded);
+        Assert.Equal(0, first.CanonicalCompleted);
+        Assert.Equal(
+            1L,
+            await CountAsync(
+                dataSource,
+                "evidence.source_parse_runs"));
+        Assert.Equal(
+            1L,
+            await CountCoverageStateAsync(
+                dataSource,
+                "observed"));
+        Assert.Equal(
+            1L,
+            await CountCoverageStateAsync(
+                dataSource,
+                "source_not_modified"));
+        Assert.Equal(
+            1L,
+            await CountDistinctCoverageLineageAsync(dataSource));
+        Assert.Equal(
+            1L,
+            await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            0L,
+            await CountAsync(
+                dataSource,
+                "evidence.normalization_runs"));
+
+        var second = await recovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, second.ProgressCount);
+        Assert.Equal(
+            1L,
+            await CountAsync(
+                dataSource,
+                "evidence.source_parse_runs"));
+        Assert.Equal(
+            2L,
+            await CountAsync(
+                dataSource,
+                "evidence.coverage_observations"));
+    }
+
     private static WarApiCoverageRecoveryCoordinator
         CreateRecoveryCoordinator(NpgsqlDataSource dataSource)
     {
@@ -472,17 +597,18 @@ public sealed class M5CanonicalRecoveryTests(
             TimeProvider.System);
     }
 
-    private static async Task CaptureRawAsync(
+    private static async Task<FetchId> CaptureRawAsync(
         IngestionKernel ingestion,
         EvidenceKernel evidence,
         FoxData.Core.Sources.EndpointId endpointId,
         DateTimeOffset retrievedAt,
-        byte[] body)
+        byte[] body,
+        string jobKey = "m5-h-recovery")
     {
         var scheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
         var queued = await ingestion.EnqueueAsync(
             endpointId,
-            "m5-h-recovery",
+            jobKey,
             scheduledAt,
             scheduledAt,
             cancellationToken:
@@ -544,6 +670,103 @@ public sealed class M5CanonicalRecoveryTests(
                 TestContext.Current.CancellationToken);
 
         Assert.Equal(CaptureStatus.CapturedCurrent, capture.Status);
+        return Assert.IsType<FetchDescriptor>(capture.Fetch).Id;
+    }
+
+    private static async Task<FetchId> CaptureNotModifiedAsync(
+        IngestionKernel ingestion,
+        EvidenceKernel evidence,
+        FoxData.Core.Sources.EndpointId endpointId,
+        DateTimeOffset retrievedAt,
+        FetchId priorFetchId,
+        string jobKey)
+    {
+        var scheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var queued = await ingestion.EnqueueAsync(
+            endpointId,
+            jobKey,
+            scheduledAt,
+            scheduledAt,
+            cancellationToken:
+                TestContext.Current.CancellationToken);
+        Assert.Equal(JobEnqueueStatus.Created, queued.Status);
+
+        var workerId = WorkerInstanceId.New();
+        var claim = await ingestion.ClaimNextAsync(
+            workerId,
+            TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+        Assert.True(claim.Claimed);
+
+        var attemptId = IngestionAttemptId.New();
+        var begun = await ingestion.BeginAttemptAsync(
+            attemptId,
+            claim.Job!.Id,
+            workerId,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(BeginAttemptStatus.Started, begun.Status);
+
+        var fenced = await ingestion.AcquireEndpointFenceAsync(
+            attemptId,
+            workerId,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(FenceAcquireStatus.AcquiredNow, fenced.Status);
+
+        var authorized = await ingestion.AuthorizeExchangeAsync(
+            attemptId,
+            workerId,
+            claim.Job.LeaseGeneration,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            ExchangeAuthorizationStatus.AuthorizedNow,
+            authorized.Status);
+
+        var capture = await evidence.CaptureSourceResponseAsync(
+            attemptId,
+            endpointId,
+            claim.Job.LeaseGeneration,
+            fenced.Attempt!.FenceToken!.Value,
+            new SourceResponseObservation(
+                retrievedAt.AddMilliseconds(-2),
+                retrievedAt.AddMilliseconds(-1),
+                retrievedAt,
+                "war-api",
+                304,
+                null,
+                null,
+                null,
+                "\"m6-g3-304\"",
+                "max-age=60",
+                retrievedAt.AddMinutes(1),
+                2),
+            body: null,
+            priorFetchId: priorFetchId,
+            cancellationToken:
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(CaptureStatus.CapturedCurrent, capture.Status);
+        return Assert.IsType<FetchDescriptor>(capture.Fetch).Id;
+    }
+
+    private static async Task<long> CountDistinctCoverageLineageAsync(
+        NpgsqlDataSource dataSource)
+    {
+        await using var command =
+            dataSource.CreateCommand(
+                """
+                SELECT COUNT(*)
+                FROM (
+                    SELECT DISTINCT
+                        representation_fetch_id,
+                        source_parse_run_id
+                    FROM evidence.coverage_observations
+                    WHERE state IN ('observed', 'source_not_modified')
+                ) AS lineage;
+                """);
+        return (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!;
     }
 
     private async Task MigrateAsync()
