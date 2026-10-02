@@ -50,19 +50,42 @@ public sealed class WarApiCoverageRecoveryCoordinator(
             WarApiCoverageCapabilityPlans.CoverageAndParse,
             BatchSize,
             cancellationToken);
+        var repairedParseRuns = new Dictionary<
+            (FetchId RepresentationFetchId, string CapabilityKey),
+            SourceParseRunDescriptor>();
 
         foreach (var candidate in uncovered)
         {
-            var parseRun = candidate.SourceParseRunId is null
-                ? await RepairParseIfPossibleAsync(
-                    candidate,
-                    cancellationToken)
-                : null;
-
-            if (candidate.SourceParseRunId is null &&
-                parseRun is not null)
+            SourceParseRunDescriptor? parseRun = null;
+            if (candidate.SourceParseRunId is null)
             {
-                parseRunsRepaired++;
+                if (candidate.RepresentationFetchId is { } representationFetchId)
+                {
+                    var repairKey = (
+                        representationFetchId,
+                        candidate.CapabilityKey);
+                    if (!repairedParseRuns.TryGetValue(
+                            repairKey,
+                            out parseRun))
+                    {
+                        parseRun = await RepairParseIfPossibleAsync(
+                            candidate,
+                            cancellationToken);
+                        if (parseRun is not null)
+                        {
+                            repairedParseRuns.Add(
+                                repairKey,
+                                parseRun);
+                            parseRunsRepaired++;
+                        }
+                    }
+                }
+                else
+                {
+                    parseRun = await RepairParseIfPossibleAsync(
+                        candidate,
+                        cancellationToken);
+                }
             }
 
             var effectiveParseRunId =
