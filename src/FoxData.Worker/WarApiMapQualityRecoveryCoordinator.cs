@@ -19,8 +19,6 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
     WarApiMapQualityCoordinator quality)
 {
     private const int BatchSize = 64;
-    private const string VersionBlockedReason =
-        "later_quality_already_terminal";
 
     public async Task<WarApiMapQualityRecoveryResult> RunOnceAsync(
         CancellationToken cancellationToken = default)
@@ -63,7 +61,7 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                 {
                     if (string.Equals(
                             result.DeferredReason,
-                            VersionBlockedReason,
+                            MapQualityDeferredReasons.LaterQualityAlreadyTerminal,
                             StringComparison.Ordinal))
                     {
                         versionBlocked++;
