@@ -38,9 +38,17 @@ internal static class WarApiCoverageCapabilityPlans
         CoverageAndParse
             .Where(
                 item =>
-                    item.CapabilityKey is
-                        "runtime-war-state" or
-                        "active-map-list" or
-                        "region-war-report")
+                    string.Equals(
+                        item.CapabilityKey,
+                        WarApiCapabilities.RuntimeWarState.Key,
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        item.CapabilityKey,
+                        WarApiCapabilities.ActiveMapList.Key,
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        item.CapabilityKey,
+                        WarApiCapabilities.RegionWarReport.Key,
+                        StringComparison.Ordinal))
             .ToArray();
 }
