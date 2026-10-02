@@ -143,20 +143,22 @@ public interface IMapQualityOrderingReader
         CancellationToken cancellationToken);
 }
 
-public sealed record MapQualityPendingSnapshot(
+public sealed record MapQualityGapCandidate(
     NormalizationRunId NormalizationRunId,
     ShardId ShardId,
-    FetchId RepresentationFetchId,
-    DateTimeOffset RetrievedAt);
+    string CapabilityKey,
+    FetchId ValidationFetchId,
+    DateTimeOffset ObservedAt);
 
-public interface IMapQualityPendingReader
+public interface IMapQualityGapReader
 {
-    Task<IReadOnlyList<MapQualityPendingSnapshot>> GetPendingAsync(
+    Task<IReadOnlyList<MapQualityGapCandidate>> GetPendingAsync(
         string sourceKey,
+        IReadOnlyList<CoverageCapabilityPlan> capabilities,
         string taxonomyVersion,
         string qualityPolicyVersion,
-        DateTimeOffset? afterRetrievedAt,
-        FetchId? afterFetchId,
+        DateTimeOffset? afterObservedAt,
+        FetchId? afterValidationFetchId,
         int batchSize,
         CancellationToken cancellationToken);
 }
