@@ -578,9 +578,11 @@ G2/G3 implementation boundary:
 - canonical-normalization plan intentionally remains M5-only until G4;
 - a crash after durable map capture but before parser@1 is repaired from local representation bytes before coverage classification is finalized;
 - successful map recovery records `coverage=observed` and a normal SourceParseRun without issuing a new Fetch;
-- no map normalization, quality evaluation or policy@2 activation is allowed in this slice.
+- no map normalization, quality evaluation or policy@2 activation is allowed in this slice;
+- multiple uncovered validation attempts that reuse one body-bearing representation reuse one repaired parser result within the recovery batch instead of repeating local decode/parse work;
+- map 304 recovery preserves one Payload/representation/SourceParseRun lineage and records separate `observed` and `source_not_modified` coverage boundaries without normalization.
 
-G2/G3 acceptance: durable static/dynamic captures with missing parser@1 converge to normal SourceParseRun + coverage=observed using only local evidence; Fetch count is unchanged, normalization remains zero, replay is idempotent, and full repository gates are green.
+G2/G3 acceptance: durable static/dynamic captures with missing parser@1 converge to normal SourceParseRun + coverage=observed using only local evidence; 200+304 reuse one representation/parse lineage with source_not_modified coverage at the validation boundary; Fetch/Payload counts do not grow during recovery, normalization remains zero, replay is idempotent, and full repository gates are green.
 
 ## G4. Normalization gap scanner
 
