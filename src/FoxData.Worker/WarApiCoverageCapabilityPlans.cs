@@ -34,21 +34,6 @@ internal static class WarApiCoverageCapabilityPlans
             DependencyRank: 0),
     ];
 
-    public static IReadOnlyList<CoverageCapabilityPlan> M5Canonical { get; } =
-        CoverageAndParse
-            .Where(
-                item =>
-                    string.Equals(
-                        item.CapabilityKey,
-                        WarApiCapabilities.RuntimeWarState.Key,
-                        StringComparison.Ordinal) ||
-                    string.Equals(
-                        item.CapabilityKey,
-                        WarApiCapabilities.ActiveMapList.Key,
-                        StringComparison.Ordinal) ||
-                    string.Equals(
-                        item.CapabilityKey,
-                        WarApiCapabilities.RegionWarReport.Key,
-                        StringComparison.Ordinal))
-            .ToArray();
+    public static IReadOnlyList<CoverageCapabilityPlan> CanonicalNormalization { get; } =
+        CoverageAndParse;
 }
