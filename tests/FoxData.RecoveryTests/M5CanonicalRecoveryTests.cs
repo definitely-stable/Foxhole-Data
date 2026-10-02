@@ -816,7 +816,7 @@ public sealed class M5CanonicalRecoveryTests(
             Encoding.UTF8.GetBytes(
                 """["DeadLandsHex"]"""),
             "m6-g5-maps");
-        var representationFetchId = await CaptureRawAsync(
+        _ = await CaptureRawAsync(
             ingestion,
             evidence,
             dynamicEndpoint.Resource.Id,
@@ -832,17 +832,34 @@ public sealed class M5CanonicalRecoveryTests(
                   "version": 3
                 }
                 """),
-            "m6-g5-dynamic");
+            "m6-g5-dynamic-1");
+        var latestRepresentationFetchId = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            retrievedAt.AddSeconds(3),
+            Encoding.UTF8.GetBytes(
+                """
+                {
+                  "regionId": 1,
+                  "scorchedVictoryTowns": 0,
+                  "mapItems": [],
+                  "mapTextItems": [],
+                  "lastUpdated": 1790956801000,
+                  "version": 4
+                }
+                """),
+            "m6-g5-dynamic-2");
 
         var coverageRecovery = CreateRecoveryCoordinator(dataSource);
         var canonical = await coverageRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(3, canonical.ParseRunsRepaired);
-        Assert.Equal(3, canonical.CoverageRecorded);
-        Assert.Equal(3, canonical.CanonicalCompleted);
+        Assert.Equal(4, canonical.ParseRunsRepaired);
+        Assert.Equal(4, canonical.CoverageRecorded);
+        Assert.Equal(4, canonical.CanonicalCompleted);
         Assert.Equal(
-            1L,
+            2L,
             await CountAsync(dataSource, "evidence.map_snapshots"));
         Assert.Equal(
             0L,
@@ -864,14 +881,14 @@ public sealed class M5CanonicalRecoveryTests(
         var first = await qualityRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, first.TerminalCompleted);
+        Assert.Equal(2, first.TerminalCompleted);
         Assert.Equal(0, first.Deferred);
         Assert.Equal(0, first.VersionBlocked);
         Assert.Equal(
-            1L,
+            2L,
             await CountAsync(dataSource, "quality.map_quality_runs"));
         Assert.Equal(
-            1L,
+            2L,
             await CountAsync(dataSource, "runtime.map_observations"));
         Assert.Equal(
             fetchCountBeforeQuality,
@@ -893,13 +910,46 @@ public sealed class M5CanonicalRecoveryTests(
         {
             command.CommandText =
                 """
-                SELECT quality_policy_version
-                FROM quality.map_quality_runs;
+                SELECT COUNT(*)
+                FROM quality.map_quality_runs
+                WHERE quality_policy_version = @policy_version;
                 """;
+            command.Parameters.AddWithValue(
+                "policy_version",
+                WarApiVersions.MapQualityPolicyV1);
             Assert.Equal(
-                WarApiVersions.MapQualityPolicyV1,
-                (string?)await command.ExecuteScalarAsync(
-                    TestContext.Current.CancellationToken));
+                2L,
+                (long)(await command.ExecuteScalarAsync(
+                    TestContext.Current.CancellationToken))!);
+        }
+
+        await using (var command = dataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT
+                    run.baseline_map_observation_id,
+                    observation.id
+                FROM quality.map_quality_runs AS run
+                LEFT JOIN runtime.map_observations AS observation
+                    ON observation.quality_run_id = run.id
+                JOIN evidence.fetches AS validation
+                    ON validation.id = run.validation_fetch_id
+                ORDER BY validation.retrieved_at, validation.id;
+                """;
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.True(reader.IsDBNull(0));
+            var firstObservationId = reader.GetGuid(1);
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal(firstObservationId, reader.GetGuid(0));
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
         }
 
         var second = await qualityRecovery.RunOnceAsync(
@@ -912,7 +962,7 @@ public sealed class M5CanonicalRecoveryTests(
             evidence,
             dynamicEndpoint.Resource.Id,
             retrievedAt.AddMinutes(1),
-            representationFetchId,
+            latestRepresentationFetchId,
             "m6-g5-304-boundary");
         _ = await coverageRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
@@ -922,10 +972,10 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, after304.ProgressCount);
         Assert.Equal(0, after304.OutstandingCount);
         Assert.Equal(
-            1L,
+            2L,
             await CountAsync(dataSource, "quality.map_quality_runs"));
         Assert.Equal(
-            1L,
+            2L,
             await CountAsync(dataSource, "evidence.map_snapshots"));
     }
 
