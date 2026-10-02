@@ -124,6 +124,12 @@ public sealed record MapQualityOrderingPlan(
             baselineStructuralFingerprint);
 }
 
+public static class MapQualityDeferredReasons
+{
+    public const string LaterQualityAlreadyTerminal =
+        "later_quality_already_terminal";
+}
+
 public sealed class MapQualityOrderingDeferredException(
     string reason)
     : Exception(
