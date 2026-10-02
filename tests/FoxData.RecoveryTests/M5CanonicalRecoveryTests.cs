@@ -3,6 +3,7 @@ using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
 using FoxData.Application.Sources;
+using FoxData.Core.Evidence;
 using FoxData.Core.Ingestion;
 using FoxData.Infrastructure.Canonical;
 using FoxData.Infrastructure.Evidence;
