@@ -572,7 +572,9 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
                         baselineMapObservationId: first.Observation.Id),
                     TestContext.Current.CancellationToken));
 
-        Assert.Equal("later_quality_already_terminal", exception.Reason);
+        Assert.Equal(
+            MapQualityDeferredReasons.LaterQualityAlreadyTerminal,
+            exception.Reason);
         Assert.Equal(2L, await fixture.CountAsync(
             "runtime.map_observations"));
     }
