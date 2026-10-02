@@ -36,4 +36,18 @@ internal static class WarApiCoverageCapabilityPlans
 
     public static IReadOnlyList<CoverageCapabilityPlan> CanonicalNormalization { get; } =
         CoverageAndParse;
+
+    public static IReadOnlyList<CoverageCapabilityPlan> QualityRecovery { get; } =
+    [
+        new(
+            WarApiCapabilities.StaticMapState.Key,
+            WarApiVersions.Parser,
+            WarApiVersions.StaticMapNormalizer,
+            DependencyRank: 0),
+        new(
+            WarApiCapabilities.DynamicMapState.Key,
+            WarApiVersions.Parser,
+            WarApiVersions.DynamicMapNormalizer,
+            DependencyRank: 0),
+    ];
 }
