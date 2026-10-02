@@ -616,6 +616,30 @@ Find normalized snapshots/validation bindings missing terminal quality under sel
 
 Process in the exact M6-E chronology order.
 
+G5 implementation boundary:
+
+- promote the narrow E3 pending-snapshot reader into a source-neutral, version-aware quality-gap reader driven by the same `CoverageCapabilityPlan` value used by recovery composition;
+- the Worker supplies only static/dynamic map capability + parser + normalizer identities selected for the current runtime;
+- G5 scans authoritative `captured_current`, body-bearing 200 validation bindings only; same-war and cross-war 304 quality bindings remain G6/G7;
+- use `validationFetchId + observedAt` as the recovery cursor identity even though G5 body-bearing 200 currently has validation Fetch == representation Fetch;
+- recover through the existing `WarApiMapQualityCoordinator -> MapQualityKernel -> PostgresMapQualityStore` path; recovery never writes quality tables directly;
+- the locked store remains the final chronology/baseline authority and rechecks the M6-E ordering plan under the WarRegion row lock;
+- ordinary prerequisite gaps remain retryable `deferred`;
+- `later_quality_already_terminal` is surfaced separately as version-blocked same-version history and is not silently treated as quiescent;
+- runtime selection remains `warapi-map-quality@1`; calibrated policy@2 activation remains G8;
+- no parser replay, normalization replay, new Fetch, new Payload, duplicate snapshot or duplicate occurrence is created by G5.
+
+G5 acceptance:
+
+- a durable normalized 200 snapshot with no current selected-version QualityRun converges locally to exactly one terminal quality result;
+- accepted recovery creates exactly one runtime map observation; suspect/quarantined recovery creates none;
+- repeated recovery is idempotent and all Fetch/Payload/parse/normalization/snapshot/occurrence counts remain unchanged;
+- scanner filtering is fail-closed on capability/parser/normalizer versions;
+- an existing 304 validation is not quality-bound by G5;
+- policy@2 QualityRuns are not created;
+- deferred/version-blocked work remains explicitly observable for later passes/M6-H;
+- full repository gates and M5-H regressions remain green.
+
 ## G6. Same-war 304
 
 304 creates no new:
