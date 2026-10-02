@@ -29,19 +29,22 @@ public sealed class WarApiMapQualityRecoveryWorker(
                 var result = await recovery.RunOnceAsync(
                     stoppingToken);
 
-                if (result.ProgressCount > 0 ||
-                    result.OutstandingCount > 0)
+                if (result.ProgressCount > 0)
                 {
                     logger.LogInformation(
                         "M6-G5 quality-gap recovery completed {TerminalCount} terminal gap(s); {DeferredCount} deferred and {VersionBlockedCount} version-blocked gap(s) remain.",
                         result.TerminalCompleted,
                         result.Deferred,
                         result.VersionBlocked);
+                    continue;
                 }
 
-                if (result.ProgressCount > 0)
+                if (result.OutstandingCount > 0)
                 {
-                    continue;
+                    logger.LogDebug(
+                        "M6-G5 quality-gap recovery has no progress; {DeferredCount} deferred and {VersionBlockedCount} version-blocked gap(s) remain.",
+                        result.Deferred,
+                        result.VersionBlocked);
                 }
 
                 await Task.Delay(
