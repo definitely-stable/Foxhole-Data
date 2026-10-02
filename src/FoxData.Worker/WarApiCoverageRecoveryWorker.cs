@@ -32,7 +32,7 @@ public sealed class WarApiCoverageRecoveryWorker(
                 if (result.ProgressCount > 0)
                 {
                     logger.LogInformation(
-                        "M5 coverage recovery recorded {CoverageCount} coverage rows, repaired {ParseCount} parse runs, applied {ContinuityApplied} continuity rows, rejected {ContinuityRejected} continuity rows, completed {CanonicalCount} canonical gaps; {DeferredCount} item(s) remain deferred.",
+                        "Coverage recovery recorded {CoverageCount} coverage rows, repaired {ParseCount} parse runs, applied {ContinuityApplied} continuity rows, rejected {ContinuityRejected} continuity rows, completed {CanonicalCount} canonical gaps; {DeferredCount} item(s) remain deferred.",
                         result.CoverageRecorded,
                         result.ParseRunsRepaired,
                         result.ContinuityApplied,
@@ -55,7 +55,7 @@ public sealed class WarApiCoverageRecoveryWorker(
             {
                 logger.LogError(
                     exception,
-                    "M5 coverage/reprocessing recovery iteration failed.");
+                    "Coverage/reprocessing recovery iteration failed.");
 
                 try
                 {

@@ -159,7 +159,7 @@ Implementation slices:
 - M6-D versioned taxonomy — complete;
 - M6-E quality kernel and accepted-observation transaction — complete through E3, merged in PR #48;
 - M6-F1 golden fixture catalog + deterministic offline feature extraction — merged in PR #49; M6-F2 immutable calibrated anomaly policy@2 + fail-closed offline replay — complete in PR #50, with runtime activation deferred to M6-G so structural-only @1 remains historically reproducible;
-- M6-G1 source-neutral coverage capability-plan refactor — complete in PR #51; M6-G2+ static/dynamic coverage, local recovery, 304 continuity and versioned reprocessing — pending;
+- M6-G1 source-neutral coverage capability-plan refactor — complete in PR #51; M6-G2/G3 static/dynamic coverage + local parse repair — complete in PR #52; M6-G4+ normalization, quality recovery, 304 continuity and versioned reprocessing — pending;
 - M6-H deterministic completion gate and M6 completion record — pending.
 
 Mandatory boundaries:

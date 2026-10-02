@@ -516,7 +516,7 @@ Prove:
 
 # M6-G — coverage, recovery and reprocessing
 
-M6-G1 source-neutral coverage capability-plan refactor is complete in PR #51. The next slice is M6-G2: extend coverage semantics to static-map-state and dynamic-map-state without yet enabling policy@2 activation.
+M6-G1 is complete in PR #51. M6-G2/G3 static/dynamic coverage extension plus local parse repair is complete in PR #52. The next slice is M6-G4 normalization-gap recovery; policy@2 activation remains deferred.
 
 ## G1. Generalize capability plan
 
@@ -571,6 +571,18 @@ For authoritative durable representation bytes with missing parser@1 run:
 - replay parser;
 - record normal SourceParseRun;
 - no new HTTP request.
+
+G2/G3 implementation boundary:
+
+- coverage+parse plan now includes `static-map-state` and `dynamic-map-state`;
+- canonical-normalization plan intentionally remains M5-only until G4;
+- a crash after durable map capture but before parser@1 is repaired from local representation bytes before coverage classification is finalized;
+- successful map recovery records `coverage=observed` and a normal SourceParseRun without issuing a new Fetch;
+- no map normalization, quality evaluation or policy@2 activation is allowed in this slice;
+- multiple uncovered validation attempts that reuse one body-bearing representation reuse one repaired parser result within the recovery batch instead of repeating local decode/parse work;
+- map 304 recovery preserves one Payload/representation/SourceParseRun lineage and records separate `observed` and `source_not_modified` coverage boundaries without normalization.
+
+G2/G3 acceptance: durable static/dynamic captures with missing parser@1 converge to normal SourceParseRun + coverage=observed using only local evidence; 200+304 reuse one representation/parse lineage with source_not_modified coverage at the validation boundary; Fetch/Payload counts do not grow during recovery, normalization remains zero, replay is idempotent, and full repository gates are green.
 
 ## G4. Normalization gap scanner
 

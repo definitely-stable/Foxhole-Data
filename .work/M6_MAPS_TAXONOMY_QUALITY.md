@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G1 complete through PR #51; M6-G2 static/dynamic coverage extension is next, with policy@2 activation still deferred.
+Status: in progress. M6-A through M6-G3 complete through PR #52; M6-G4 map normalization-gap recovery is next, with quality reprocessing and policy@2 activation still deferred.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -960,7 +960,7 @@ Infrastructure should query durable candidates from supplied plan data rather th
 
 Worker remains responsible for dispatching a War API capability to its source-specific normalizer.
 
-G1 keeps the existing M5 capability set unchanged while replacing SQL capability literals and normalizer CASE branches with supplied plan data. G1 is complete in PR #51. G2 is the first slice allowed to add static-map-state and dynamic-map-state to coverage/reprocessing selection.
+G1 keeps the existing M5 capability set unchanged while replacing SQL capability literals and normalizer CASE branches with supplied plan data. G1 is complete in PR #51. G2 is the first slice allowed to add static-map-state and dynamic-map-state to coverage/reprocessing selection. G2/G3 additionally guarantees that repeated 304 validation of one durable representation reuses a single locally repaired parser result and does not duplicate Payload, SourceParseRun or normalized state.
 
 This refactor must preserve M5-H behavior exactly.
 
