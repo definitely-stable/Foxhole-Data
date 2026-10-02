@@ -29,6 +29,8 @@ public sealed class WarApiCoverageRecoveryCoordinator(
     WarApiWarNormalizationCoordinator warNormalization,
     WarApiRegionNormalizationCoordinator regionNormalization,
     WarApiWarReportNormalizationCoordinator warReportNormalization,
+    WarApiStaticMapNormalizationCoordinator staticMapNormalization,
+    WarApiDynamicMapNormalizationCoordinator dynamicMapNormalization,
     WarApiWorkerOptions options,
     TimeProvider timeProvider)
 {
@@ -145,7 +147,7 @@ public sealed class WarApiCoverageRecoveryCoordinator(
         var canonicalCandidates =
             await coverageStore.GetPendingCanonicalReprocessingAsync(
                 WarApiCatalog.SourceKey,
-                WarApiCoverageCapabilityPlans.M5Canonical,
+                WarApiCoverageCapabilityPlans.CanonicalNormalization,
                 BatchSize,
                 cancellationToken);
 
@@ -585,8 +587,30 @@ public sealed class WarApiCoverageRecoveryCoordinator(
                 : CanonicalDisposition.Completed;
         }
 
+        if (string.Equals(
+                candidate.CapabilityKey,
+                WarApiCapabilities.StaticMapState.Key,
+                StringComparison.Ordinal))
+        {
+            await staticMapNormalization.NormalizeAsync(
+                candidate.SourceParseRunId,
+                cancellationToken);
+            return CanonicalDisposition.Completed;
+        }
+
+        if (string.Equals(
+                candidate.CapabilityKey,
+                WarApiCapabilities.DynamicMapState.Key,
+                StringComparison.Ordinal))
+        {
+            await dynamicMapNormalization.NormalizeAsync(
+                candidate.SourceParseRunId,
+                cancellationToken);
+            return CanonicalDisposition.Completed;
+        }
+
         throw new CanonicalStateIntegrityException(
-            $"Unsupported M5 canonical reprocessing capability '{candidate.CapabilityKey}'.");
+            $"Unsupported canonical reprocessing capability '{candidate.CapabilityKey}'.");
     }
 
     private async Task<byte[]> DecodeContinuityRepresentationAsync(
