@@ -654,6 +654,39 @@ G5 acceptance:
 
 When a quality evaluation is required at the validation boundary, reuse the existing snapshot.
 
+G6 implementation boundary:
+
+- extend the G5 quality-gap scanner to exact-lineage 304 validations where
+  `status=304`, the validation has no Payload and `prior_fetch_id` points to
+  the selected body-bearing 200 representation for the existing snapshot;
+- keep the scanner source-neutral: capability/parser/normalizer versions still
+  come from the Worker-supplied recovery plan;
+- carry both representation observation time and validation observation time so
+  the Worker can prove that the reused representation and the 304 validation
+  resolve through the normal M5 map-context path to the same WarRegion;
+- if those contexts resolve to different wars/WarRegions, do not evaluate
+  quality in G6; surface `cross_war_validation_binding` as explicit deferred
+  work for G7;
+- extend the M6-E chronology barrier from body-bearing 200 Fetches to all
+  authoritative 200/304 validation boundaries. A missing earlier 304 quality
+  binding blocks every later candidate under the selected taxonomy/policy;
+- for eligible same-war 304, call the existing quality coordinator/store with
+  the reused MapSnapshot and the 304 validation Fetch. The normal locked
+  transaction remains the only writer of QualityRun/findings/MapObservation;
+- runtime policy stays `warapi-map-quality@1`; G6 does not activate policy@2.
+
+G6 acceptance:
+
+- `200 -> 304 -> 304` converges in exact `retrieved_at + FetchId` order;
+- each 304 gets its own immutable QualityRun and, when accepted, its own
+  MapObservation while reusing the original MapSnapshot and occurrence rows;
+- the second 304 cannot pass while the first 304 quality binding is missing;
+- repeated recovery is idempotent and creates no Payload, SourceParseRun,
+  NormalizationRun, MapSnapshot or occurrence rows for 304;
+- a cross-war 304 over the same representation creates no G6 QualityRun and is
+  reported as deferred to G7;
+- policy@2 remains inactive and full repository gates stay green.
+
 ## G7. Cross-war 304
 
 For an unchanged validated representation after WarRegion transition:
