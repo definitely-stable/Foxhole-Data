@@ -661,7 +661,8 @@ G6 implementation boundary:
 - extend the G5 quality-gap scanner to exact-lineage 304 validations where
   `status=304`, the validation has no Payload, `prior_fetch_id` points to
   the selected body-bearing 200 representation for the existing snapshot, and
-  the validation boundary is not earlier than that representation boundary;
+  the validation boundary is strictly later under the same
+  `retrieved_at + FetchId` total order used by quality chronology;
 - keep the scanner source-neutral: capability/parser/normalizer versions still
   come from the Worker-supplied recovery plan;
 - carry both representation observation time and validation observation time so
@@ -686,7 +687,8 @@ G6 acceptance:
 - the second 304 cannot pass while the first 304 quality binding is missing;
 - repeated recovery is idempotent and creates no Payload, SourceParseRun,
   NormalizationRun, MapSnapshot or occurrence rows for 304;
-- reversed-time 304 lineage is rejected fail-closed by both scanner and
+- any 304 lineage that is not strictly later than its representation under
+  `retrieved_at + FetchId` is rejected fail-closed by both scanner and
   ordering provenance checks;
 - a cross-war 304 over the same representation creates no G6 QualityRun and is
   reported as deferred to G7;
