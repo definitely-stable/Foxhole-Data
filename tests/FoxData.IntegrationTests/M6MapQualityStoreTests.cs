@@ -495,6 +495,33 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             occurrenceCountBefore304,
             await fixture.CountAsync("evidence.map_item_occurrences"));
 
+        var reversedValidation =
+            await fixture.CreateValidation304Async(
+                fixture.RepresentationRetrievedAt.AddMinutes(-1),
+                "m6-g6-reversed-304");
+
+        var afterReversed = await gaps.GetPendingAsync(
+            "official-war-api",
+            plan,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Empty(afterReversed);
+
+        var ordering = new PostgresMapQualityOrderingReader(
+            fixture.DataSource);
+        await Assert.ThrowsAsync<CanonicalStateIntegrityException>(
+            () => ordering.GetPlanAsync(
+                fixture.Snapshot.Id,
+                fixture.WarRegionId,
+                reversedValidation,
+                "warapi-map-taxonomy@1",
+                "warapi-map-quality@1",
+                TestContext.Current.CancellationToken));
+
         await Assert.ThrowsAsync<ArgumentException>(
             () => gaps.GetPendingAsync(
                 "official-war-api",
