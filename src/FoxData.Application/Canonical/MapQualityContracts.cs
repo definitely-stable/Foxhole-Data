@@ -128,6 +128,9 @@ public static class MapQualityDeferredReasons
 {
     public const string LaterQualityAlreadyTerminal =
         "later_quality_already_terminal";
+
+    public const string CrossWarValidationBinding =
+        "cross_war_validation_binding";
 }
 
 public sealed class MapQualityOrderingDeferredException(
@@ -149,10 +152,18 @@ public interface IMapQualityOrderingReader
         CancellationToken cancellationToken);
 }
 
+public enum MapQualityGapValidationKind
+{
+    BodyBearing200,
+    NotModified304,
+}
+
 public sealed record MapQualityGapCandidate(
     NormalizationRunId NormalizationRunId,
     ShardId ShardId,
     string CapabilityKey,
+    MapQualityGapValidationKind ValidationKind,
+    DateTimeOffset RepresentationObservedAt,
     FetchId ValidationFetchId,
     DateTimeOffset ObservedAt);
 
