@@ -35,11 +35,9 @@ public sealed class WarApiMapQualityCoordinator(
     {
         ArgumentNullException.ThrowIfNull(normalized);
 
-        // Normalization is source-local; acceptance requires a separately
-        // proven, war-scoped membership at this exact observation boundary.
-        var context = await mapContext.ResolveAsync(
+        var context = await ResolveContextAsync(
+            normalized,
             shardId,
-            normalized.Snapshot.SourceMapName,
             observedAt,
             cancellationToken);
         if (context.Status != WarApiMapContextStatus.Resolved)
@@ -47,6 +45,99 @@ public sealed class WarApiMapQualityCoordinator(
             return Deferred(context.Reason ?? "map_context_unresolved");
         }
 
+        return await EvaluateResolvedAsync(
+            normalized,
+            context,
+            validationFetchId,
+            cancellationToken);
+    }
+
+    public async Task<WarApiMapQualityEvaluation> EvaluateSameWar304Async(
+        MapSnapshotResult normalized,
+        ShardId shardId,
+        FetchId validationFetchId,
+        DateTimeOffset representationObservedAt,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(normalized);
+
+        if (validationFetchId == normalized.Snapshot.RepresentationFetchId ||
+            representationObservedAt > observedAt)
+        {
+            throw new CanonicalStateIntegrityException(
+                "Same-war 304 quality evaluation requires a later validation Fetch over an earlier reused representation.");
+        }
+
+        var representationContext = await ResolveContextAsync(
+            normalized,
+            shardId,
+            representationObservedAt,
+            cancellationToken);
+        if (representationContext.Status !=
+            WarApiMapContextStatus.Resolved)
+        {
+            return Deferred(
+                representationContext.Reason
+                ?? "representation_map_context_unresolved");
+        }
+
+        var validationContext = await ResolveContextAsync(
+            normalized,
+            shardId,
+            observedAt,
+            cancellationToken);
+        if (validationContext.Status != WarApiMapContextStatus.Resolved)
+        {
+            return Deferred(
+                validationContext.Reason
+                ?? "validation_map_context_unresolved");
+        }
+
+        var representationRegion =
+            representationContext.WarRegion
+            ?? throw new CanonicalStateIntegrityException(
+                "Resolved representation map context has no WarRegion.");
+        var validationRegion =
+            validationContext.WarRegion
+            ?? throw new CanonicalStateIntegrityException(
+                "Resolved validation map context has no WarRegion.");
+
+        if (representationContext.WarId != validationContext.WarId ||
+            representationRegion.Id != validationRegion.Id)
+        {
+            return Deferred(
+                MapQualityDeferredReasons.CrossWarValidationBinding);
+        }
+
+        return await EvaluateResolvedAsync(
+            normalized,
+            validationContext,
+            validationFetchId,
+            cancellationToken);
+    }
+
+    private async Task<WarApiMapContextResolution> ResolveContextAsync(
+        MapSnapshotResult normalized,
+        ShardId shardId,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken)
+    {
+        // Normalization is source-local; acceptance requires a separately
+        // proven, war-scoped membership at the exact validation boundary.
+        return await mapContext.ResolveAsync(
+            shardId,
+            normalized.Snapshot.SourceMapName,
+            observedAt,
+            cancellationToken);
+    }
+
+    private async Task<WarApiMapQualityEvaluation> EvaluateResolvedAsync(
+        MapSnapshotResult normalized,
+        WarApiMapContextResolution context,
+        FetchId validationFetchId,
+        CancellationToken cancellationToken)
+    {
         var region = context.WarRegion
             ?? throw new CanonicalStateIntegrityException(
                 "Resolved map quality context has no WarRegion.");

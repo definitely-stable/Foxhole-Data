@@ -6,8 +6,9 @@ using NpgsqlTypes;
 
 namespace FoxData.Infrastructure.Canonical;
 
-// M6-G5 scanner for body-bearing 200 quality gaps. Validation-only 304
-// bindings remain explicitly owned by G6/G7.
+// M6-G quality-gap scanner over selected parser/normalizer identities.
+// G6 adds exact-lineage 304 validation bindings while the Worker remains
+// responsible for proving same-WarRegion eligibility before evaluation.
 public sealed class PostgresMapQualityGapReader(NpgsqlDataSource dataSource)
     : IMapQualityGapReader
 {
@@ -55,55 +56,107 @@ public sealed class PostgresMapQualityGapReader(NpgsqlDataSource dataSource)
                         capability_key,
                         parser_version,
                         normalizer_version)
+            ),
+            pending AS (
+                SELECT
+                    snapshot.id AS map_snapshot_id,
+                    snapshot.normalization_run_id,
+                    endpoint.shard_id,
+                    endpoint.capability_key,
+                    CASE
+                        WHEN validation.id = representation.id
+                            THEN 'body_200'
+                        ELSE 'not_modified_304'
+                    END AS validation_kind,
+                    representation.retrieved_at
+                        AS representation_observed_at,
+                    validation.id AS validation_fetch_id,
+                    validation.retrieved_at AS observed_at
+                FROM evidence.map_snapshots AS snapshot
+                JOIN evidence.normalization_runs AS normalization
+                    ON normalization.id = snapshot.normalization_run_id
+                   AND normalization.outcome = 'normalized'
+                JOIN evidence.source_parse_runs AS source_parse
+                    ON source_parse.id = snapshot.source_parse_run_id
+                   AND normalization.source_parse_run_id = source_parse.id
+                JOIN evidence.fetches AS representation
+                    ON representation.id =
+                       snapshot.representation_fetch_id
+                JOIN ingest.attempts AS representation_attempt
+                    ON representation_attempt.id =
+                       representation.attempt_id
+                JOIN sources.endpoints AS endpoint
+                    ON endpoint.id = representation.endpoint_id
+                   AND endpoint.capability_key =
+                       source_parse.capability_key
+                JOIN capability_plan AS plan
+                    ON plan.capability_key = endpoint.capability_key
+                   AND plan.parser_version =
+                       source_parse.parser_version
+                   AND plan.normalizer_version =
+                       normalization.normalizer_version
+                JOIN sources.shards AS shard
+                    ON shard.id = endpoint.shard_id
+                JOIN sources.sources AS source
+                    ON source.id = shard.source_id
+                JOIN evidence.fetches AS validation
+                    ON validation.endpoint_id = representation.endpoint_id
+                   AND (
+                        (
+                            validation.id = representation.id
+                            AND validation.status_code = 200
+                            AND validation.payload_id IS NOT NULL
+                        )
+                        OR
+                        (
+                            validation.status_code = 304
+                            AND validation.payload_id IS NULL
+                            AND validation.prior_fetch_id =
+                                representation.id
+                        )
+                   )
+                JOIN ingest.attempts AS validation_attempt
+                    ON validation_attempt.id = validation.attempt_id
+                WHERE source.key = @source_key
+                  AND representation.status_code = 200
+                  AND representation.payload_id IS NOT NULL
+                  AND representation_attempt.outcome_code =
+                      'captured_current'
+                  AND validation_attempt.outcome_code =
+                      'captured_current'
+                  AND (
+                        validation.id = representation.id
+                        OR
+                        (validation.retrieved_at, validation.id)
+                            > (representation.retrieved_at,
+                               representation.id)
+                      )
+                  AND NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM quality.map_quality_runs AS run
+                      WHERE run.map_snapshot_id = snapshot.id
+                        AND run.validation_fetch_id = validation.id
+                        AND run.taxonomy_version = @taxonomy_version
+                        AND run.quality_policy_version =
+                            @policy_version
+                  )
             )
             SELECT
-                snapshot.normalization_run_id,
-                endpoint.shard_id,
-                endpoint.capability_key,
-                representation.id,
-                representation.retrieved_at
-            FROM evidence.map_snapshots AS snapshot
-            JOIN evidence.normalization_runs AS normalization
-                ON normalization.id = snapshot.normalization_run_id
-               AND normalization.outcome = 'normalized'
-            JOIN evidence.source_parse_runs AS source_parse
-                ON source_parse.id = snapshot.source_parse_run_id
-               AND normalization.source_parse_run_id = source_parse.id
-            JOIN evidence.fetches AS representation
-                ON representation.id = snapshot.representation_fetch_id
-            JOIN ingest.attempts AS attempt
-                ON attempt.id = representation.attempt_id
-            JOIN sources.endpoints AS endpoint
-                ON endpoint.id = representation.endpoint_id
-               AND endpoint.capability_key = source_parse.capability_key
-            JOIN capability_plan AS plan
-                ON plan.capability_key = endpoint.capability_key
-               AND plan.parser_version = source_parse.parser_version
-               AND plan.normalizer_version =
-                   normalization.normalizer_version
-            JOIN sources.shards AS shard
-                ON shard.id = endpoint.shard_id
-            JOIN sources.sources AS source
-                ON source.id = shard.source_id
-            WHERE source.key = @source_key
-              AND representation.status_code = 200
-              AND representation.payload_id IS NOT NULL
-              AND attempt.outcome_code = 'captured_current'
-              AND NOT EXISTS
-              (
-                  SELECT 1
-                  FROM quality.map_quality_runs AS run
-                  WHERE run.map_snapshot_id = snapshot.id
-                    AND run.validation_fetch_id = representation.id
-                    AND run.taxonomy_version = @taxonomy_version
-                    AND run.quality_policy_version = @policy_version
-              )
-              AND (
-                  @after_at IS NULL
-                  OR (representation.retrieved_at, representation.id)
-                        > (@after_at, @after_id)
-              )
-            ORDER BY representation.retrieved_at, representation.id
+                normalization_run_id,
+                shard_id,
+                capability_key,
+                validation_kind,
+                representation_observed_at,
+                validation_fetch_id,
+                observed_at
+            FROM pending
+            WHERE (
+                @after_at IS NULL
+                OR (observed_at, validation_fetch_id)
+                    > (@after_at, @after_id)
+            )
+            ORDER BY observed_at, validation_fetch_id
             LIMIT @batch_size;
             """;
 
@@ -142,8 +195,19 @@ public sealed class PostgresMapQualityGapReader(NpgsqlDataSource dataSource)
                     new NormalizationRunId(reader.GetGuid(0)),
                     new ShardId(reader.GetGuid(1)),
                     reader.GetString(2),
-                    new FetchId(reader.GetGuid(3)),
-                    reader.GetFieldValue<DateTimeOffset>(4)));
+                    reader.GetString(3) switch
+                    {
+                        "body_200" =>
+                            MapQualityGapValidationKind.BodyBearing200,
+                        "not_modified_304" =>
+                            MapQualityGapValidationKind.NotModified304,
+                        var value =>
+                            throw new CanonicalStateIntegrityException(
+                                $"Unknown quality-gap validation kind '{value}'."),
+                    },
+                    reader.GetFieldValue<DateTimeOffset>(4),
+                    new FetchId(reader.GetGuid(5)),
+                    reader.GetFieldValue<DateTimeOffset>(6)));
         }
 
         return pending;

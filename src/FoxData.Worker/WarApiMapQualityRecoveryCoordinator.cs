@@ -7,10 +7,12 @@ namespace FoxData.Worker;
 public sealed record WarApiMapQualityRecoveryResult(
     int TerminalCompleted,
     int Deferred,
-    int VersionBlocked)
+    int VersionBlocked,
+    int CrossWarDeferred)
 {
     public int ProgressCount => TerminalCompleted;
-    public int OutstandingCount => Deferred + VersionBlocked;
+    public int OutstandingCount =>
+        Deferred + VersionBlocked + CrossWarDeferred;
 }
 
 public sealed class WarApiMapQualityRecoveryCoordinator(
@@ -28,6 +30,7 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
         var terminalCompleted = 0;
         var deferred = 0;
         var versionBlocked = 0;
+        var crossWarDeferred = 0;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -50,12 +53,26 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                     ?? throw new CanonicalStateIntegrityException(
                         "Quality-gap candidate lost its durable normalized snapshot.");
 
-                var result = await quality.EvaluateAsync(
-                    normalized,
-                    candidate.ShardId,
-                    candidate.ValidationFetchId,
-                    candidate.ObservedAt,
-                    cancellationToken);
+                var result = candidate.ValidationKind switch
+                {
+                    MapQualityGapValidationKind.BodyBearing200 =>
+                        await quality.EvaluateAsync(
+                            normalized,
+                            candidate.ShardId,
+                            candidate.ValidationFetchId,
+                            candidate.ObservedAt,
+                            cancellationToken),
+                    MapQualityGapValidationKind.NotModified304 =>
+                        await quality.EvaluateSameWar304Async(
+                            normalized,
+                            candidate.ShardId,
+                            candidate.ValidationFetchId,
+                            candidate.RepresentationObservedAt,
+                            candidate.ObservedAt,
+                            cancellationToken),
+                    _ => throw new CanonicalStateIntegrityException(
+                        "Unknown quality-gap validation kind."),
+                };
 
                 if (result.Status == WarApiMapQualityStatus.Deferred)
                 {
@@ -66,6 +83,14 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                     {
                         versionBlocked++;
                         RecordTelemetry("version_blocked");
+                    }
+                    else if (string.Equals(
+                                 result.DeferredReason,
+                                 MapQualityDeferredReasons.CrossWarValidationBinding,
+                                 StringComparison.Ordinal))
+                    {
+                        crossWarDeferred++;
+                        RecordTelemetry("cross_war_deferred");
                     }
                     else
                     {
@@ -92,7 +117,8 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
         return new WarApiMapQualityRecoveryResult(
             terminalCompleted,
             deferred,
-            versionBlocked);
+            versionBlocked,
+            crossWarDeferred);
     }
 
     private static void RecordTelemetry(string outcome)

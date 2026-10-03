@@ -261,55 +261,95 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task LaterValidationWaitsForEarlierDurableQuality()
+    public async Task LaterValidationWaitsForEarlier200And304Quality()
     {
         await using var fixture = await CreateFixtureAsync(
             snapshotSourceRegionId: 13,
             warRegionSourceRegionId: null);
-        var validation = await fixture.CreateValidation304Async(
-            fixture.RepresentationRetrievedAt.AddMinutes(10));
+        var validation1 = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(10),
+            "m6-g6-validation-304-1");
+        var validation2 = await fixture.CreateValidation304Async(
+            fixture.RepresentationRetrievedAt.AddMinutes(20),
+            "m6-g6-validation-304-2");
         var ordering = new PostgresMapQualityOrderingReader(
             fixture.DataSource);
 
-        var deferred = await ordering.GetPlanAsync(
+        var first304Deferred = await ordering.GetPlanAsync(
             fixture.Snapshot.Id,
             fixture.WarRegionId,
-            validation,
+            validation1,
             "warapi-map-taxonomy@1",
             "warapi-map-quality@1",
             TestContext.Current.CancellationToken);
-        Assert.Equal(MapQualityOrderingStatus.Deferred, deferred.Status);
-        Assert.Equal("earlier_quality_missing", deferred.DeferredReason);
-
-        await Assert.ThrowsAsync<MapQualityOrderingDeferredException>(
-            () => fixture.Kernel.RecordAsync(
-                fixture.CreateWrite(
-                    MapQualityDecision.Accepted,
-                    validationFetchId: validation),
-                TestContext.Current.CancellationToken));
-        Assert.Equal(0L, await fixture.CountAsync(
-            "quality.map_quality_runs"));
+        Assert.Equal(
+            MapQualityOrderingStatus.Deferred,
+            first304Deferred.Status);
+        Assert.Equal(
+            "earlier_quality_missing",
+            first304Deferred.DeferredReason);
 
         var first = await fixture.Kernel.RecordAsync(
             fixture.CreateWrite(MapQualityDecision.Accepted),
             TestContext.Current.CancellationToken);
-        var ready = await ordering.GetPlanAsync(
+
+        var second304Deferred = await ordering.GetPlanAsync(
             fixture.Snapshot.Id,
             fixture.WarRegionId,
-            validation,
+            validation2,
             "warapi-map-taxonomy@1",
             "warapi-map-quality@1",
             TestContext.Current.CancellationToken);
-        Assert.Equal(MapQualityOrderingStatus.Ready, ready.Status);
-        Assert.Equal(first.Observation!.Id, ready.Baseline!.Id);
+        Assert.Equal(
+            MapQualityOrderingStatus.Deferred,
+            second304Deferred.Status);
+        Assert.Equal(
+            "earlier_quality_missing",
+            second304Deferred.DeferredReason);
+
+        var ready1 = await ordering.GetPlanAsync(
+            fixture.Snapshot.Id,
+            fixture.WarRegionId,
+            validation1,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(MapQualityOrderingStatus.Ready, ready1.Status);
+        Assert.Equal(first.Observation!.Id, ready1.Baseline!.Id);
 
         var second = await fixture.Kernel.RecordAsync(
             fixture.CreateWrite(
                 MapQualityDecision.Accepted,
-                validationFetchId: validation,
-                baselineMapObservationId: ready.Baseline.Id),
+                validationFetchId: validation1,
+                baselineMapObservationId: ready1.Baseline.Id),
             TestContext.Current.CancellationToken);
-        Assert.Equal(first.Observation.Id, second.Run.BaselineMapObservationId);
+
+        var ready2 = await ordering.GetPlanAsync(
+            fixture.Snapshot.Id,
+            fixture.WarRegionId,
+            validation2,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(MapQualityOrderingStatus.Ready, ready2.Status);
+        Assert.Equal(second.Observation!.Id, ready2.Baseline!.Id);
+
+        var third = await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Accepted,
+                validationFetchId: validation2,
+                baselineMapObservationId: ready2.Baseline.Id),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            second.Observation.Id,
+            third.Run.BaselineMapObservationId);
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("evidence.map_snapshots"));
+        Assert.Equal(
+            1L,
+            await fixture.CountAsync("evidence.map_item_occurrences"));
     }
 
     [Fact]
@@ -347,12 +387,16 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task QualityGapReaderUsesSelectedVersionsAndStopsAfterTerminalResult()
+    public async Task QualityGapReaderFindsVersioned200And304Bindings()
     {
         await using var fixture = await CreateFixtureAsync(
             snapshotSourceRegionId: null,
             warRegionSourceRegionId: null);
         _ = await fixture.CreateAuxiliarySnapshotAsync();
+        var snapshotCountBefore304 =
+            await fixture.CountAsync("evidence.map_snapshots");
+        var occurrenceCountBefore304 =
+            await fixture.CountAsync("evidence.map_item_occurrences");
 
         var gaps = new PostgresMapQualityGapReader(
             fixture.DataSource);
@@ -375,22 +419,95 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             64,
             TestContext.Current.CancellationToken);
 
-        var candidate = Assert.Single(before);
+        var body = Assert.Single(before);
+        Assert.Equal(
+            MapQualityGapValidationKind.BodyBearing200,
+            body.ValidationKind);
         Assert.Equal(
             fixture.RepresentationFetchId,
-            candidate.ValidationFetchId);
+            body.ValidationFetchId);
         Assert.Equal(
             fixture.RepresentationRetrievedAt,
-            candidate.ObservedAt);
+            body.RepresentationObservedAt);
+        Assert.Equal(
+            fixture.RepresentationRetrievedAt,
+            body.ObservedAt);
         Assert.Equal(
             "dynamic-map-state",
-            candidate.CapabilityKey);
+            body.CapabilityKey);
         Assert.Equal(
             fixture.Snapshot.NormalizationRunId,
-            candidate.NormalizationRunId);
+            body.NormalizationRunId);
 
         await fixture.Kernel.RecordAsync(
             fixture.CreateWrite(MapQualityDecision.Suspect),
+            TestContext.Current.CancellationToken);
+
+        var sameTimestampValidation =
+            await fixture.CreateValidation304Async(
+                fixture.RepresentationRetrievedAt,
+                "m6-g6-same-timestamp-304");
+
+        var sameTimestampPending = await gaps.GetPendingAsync(
+            "official-war-api",
+            plan,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+
+        var sameTimestamp = Assert.Single(sameTimestampPending);
+        Assert.Equal(
+            MapQualityGapValidationKind.NotModified304,
+            sameTimestamp.ValidationKind);
+        Assert.Equal(
+            sameTimestampValidation,
+            sameTimestamp.ValidationFetchId);
+        Assert.Equal(
+            fixture.RepresentationRetrievedAt,
+            sameTimestamp.ObservedAt);
+
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Suspect,
+                validationFetchId: sameTimestampValidation),
+            TestContext.Current.CancellationToken);
+
+        var validationAt =
+            fixture.RepresentationRetrievedAt.AddMinutes(10);
+        var validation = await fixture.CreateValidation304Async(
+            validationAt,
+            "m6-g6-gap-reader-304");
+
+        var pending304 = await gaps.GetPendingAsync(
+            "official-war-api",
+            plan,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+
+        var notModified = Assert.Single(pending304);
+        Assert.Equal(
+            MapQualityGapValidationKind.NotModified304,
+            notModified.ValidationKind);
+        Assert.Equal(validation, notModified.ValidationFetchId);
+        Assert.Equal(
+            fixture.RepresentationRetrievedAt,
+            notModified.RepresentationObservedAt);
+        Assert.Equal(validationAt, notModified.ObservedAt);
+        Assert.Equal(
+            fixture.Snapshot.NormalizationRunId,
+            notModified.NormalizationRunId);
+
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Suspect,
+                validationFetchId: validation),
             TestContext.Current.CancellationToken);
 
         var after = await gaps.GetPendingAsync(
@@ -403,6 +520,39 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             64,
             TestContext.Current.CancellationToken);
         Assert.Empty(after);
+        Assert.Equal(
+            snapshotCountBefore304,
+            await fixture.CountAsync("evidence.map_snapshots"));
+        Assert.Equal(
+            occurrenceCountBefore304,
+            await fixture.CountAsync("evidence.map_item_occurrences"));
+
+        var reversedValidation =
+            await fixture.CreateValidation304Async(
+                fixture.RepresentationRetrievedAt.AddMinutes(-1),
+                "m6-g6-reversed-304");
+
+        var afterReversed = await gaps.GetPendingAsync(
+            "official-war-api",
+            plan,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+        Assert.Empty(afterReversed);
+
+        var ordering = new PostgresMapQualityOrderingReader(
+            fixture.DataSource);
+        await Assert.ThrowsAsync<CanonicalStateIntegrityException>(
+            () => ordering.GetPlanAsync(
+                fixture.Snapshot.Id,
+                fixture.WarRegionId,
+                reversedValidation,
+                "warapi-map-taxonomy@1",
+                "warapi-map-quality@1",
+                TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<ArgumentException>(
             () => gaps.GetPendingAsync(

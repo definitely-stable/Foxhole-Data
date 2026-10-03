@@ -24,15 +24,17 @@ This document translates the normative M6 contract into implementation order aga
   source-neutral quality-gap scanner and a testable recovery coordinator.
   It replays authoritative body-bearing 200 snapshots through the normal
   quality coordinator/store path without creating new upstream evidence.
-- Same-war 304 quality binding remains allocated to G6; cross-war 304 to G7;
-  versioned rebuild/policy@2 activation remains G8.
+- M6-G6 extends quality-gap recovery to exact-lineage same-war 304
+  validations while reusing the existing MapSnapshot and quality transaction.
+  Cross-war 304 remains allocated to G7; versioned rebuild/policy@2
+  activation remains G8.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
-- The source-evidence barrier currently scans authoritative body-bearing 200
-  candidates; M6-G must extend chronology to any additional 304 quality
-  bindings *before* enabling same-war 304 acceptance, so older 304 work cannot
-  retroactively change a later baseline.
+- The source-evidence barrier now scans authoritative body-bearing 200 and
+  exact-lineage 304 validation boundaries in the same
+  `retrieved_at + FetchId` chronology. A missing earlier 304 QualityRun
+  therefore blocks later baseline advancement.
 - E3 cannot close merely because no terminal writes occurred: deferred work
   must remain observable and local recovery must be exercised without HTTP.
 
@@ -58,7 +60,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-M6-F2 is complete in PR #50. M6-G1 through G4 are complete on main through PR #54, and G5 is implemented in PR #55. The next implementation slice after merge is M6-G6: same-war 304 quality binding under the extended chronology barrier.
+M6-F2 is complete in PR #50. M6-G1 through G5 are complete on main through PR #55, and G6 is implemented in PR #56. The next implementation slice after merge is M6-G7: cross-war 304 quality binding over the already-proven exact representation lineage.
 
 ## Non-negotiable invariants
 
@@ -653,6 +655,44 @@ G5 acceptance:
 - occurrence rows.
 
 When a quality evaluation is required at the validation boundary, reuse the existing snapshot.
+
+G6 implementation boundary:
+
+- extend the G5 quality-gap scanner to exact-lineage 304 validations where
+  `status=304`, the validation has no Payload, `prior_fetch_id` points to
+  the selected body-bearing 200 representation for the existing snapshot, and
+  the validation boundary is strictly later under the same
+  `retrieved_at + FetchId` total order used by quality chronology;
+- keep the scanner source-neutral: capability/parser/normalizer versions still
+  come from the Worker-supplied recovery plan;
+- carry both representation observation time and validation observation time so
+  the Worker can prove that the reused representation and the 304 validation
+  resolve through the normal M5 map-context path to the same WarRegion;
+- if those contexts resolve to different wars/WarRegions, do not evaluate
+  quality in G6; surface `cross_war_validation_binding` as explicit deferred
+  work for G7;
+- extend the M6-E chronology barrier from body-bearing 200 Fetches to all
+  authoritative 200/304 validation boundaries. A missing earlier 304 quality
+  binding blocks every later candidate under the selected taxonomy/policy;
+- for eligible same-war 304, call the existing quality coordinator/store with
+  the reused MapSnapshot and the 304 validation Fetch. The normal locked
+  transaction remains the only writer of QualityRun/findings/MapObservation;
+- runtime policy stays `warapi-map-quality@1`; G6 does not activate policy@2.
+
+G6 acceptance:
+
+- `200 -> 304 -> 304` converges in exact `retrieved_at + FetchId` order;
+- each 304 gets its own immutable QualityRun and, when accepted, its own
+  MapObservation while reusing the original MapSnapshot and occurrence rows;
+- the second 304 cannot pass while the first 304 quality binding is missing;
+- repeated recovery is idempotent and creates no Payload, SourceParseRun,
+  NormalizationRun, MapSnapshot or occurrence rows for 304;
+- any 304 lineage that is not strictly later than its representation under
+  `retrieved_at + FetchId` is rejected fail-closed by both scanner and
+  ordering provenance checks;
+- a cross-war 304 over the same representation creates no G6 QualityRun and is
+  reported as deferred to G7;
+- policy@2 remains inactive and full repository gates stay green.
 
 ## G7. Cross-war 304
 
