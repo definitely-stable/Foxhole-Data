@@ -42,6 +42,7 @@ builder.Services.AddScoped<WarApiWarReportNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiStaticMapNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiDynamicMapNormalizationCoordinator>();
 builder.Services.AddScoped<WarApiMapQualityCoordinator>();
+builder.Services.AddScoped<WarApiMapQualityRecoveryCoordinator>();
 builder.Services.AddScoped<WarApiCoverageRecoveryCoordinator>();
 builder.Services.AddScoped<WarApiReconciler>();
 

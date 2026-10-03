@@ -347,36 +347,55 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task PendingReaderFindsUncommittedQualityAndStopsAfterTerminalResult()
+    public async Task QualityGapReaderUsesSelectedVersionsAndStopsAfterTerminalResult()
     {
         await using var fixture = await CreateFixtureAsync(
             snapshotSourceRegionId: null,
             warRegionSourceRegionId: null);
-        var pending = new PostgresMapQualityPendingReader(
-            fixture.DataSource);
+        _ = await fixture.CreateAuxiliarySnapshotAsync();
 
-        var before = await pending.GetPendingAsync(
+        var gaps = new PostgresMapQualityGapReader(
+            fixture.DataSource);
+        var plan = new CoverageCapabilityPlan[]
+        {
+            new(
+                "dynamic-map-state",
+                "warapi-parser@1",
+                "warapi-dynamic-map-normalizer@1",
+                DependencyRank: 0),
+        };
+
+        var before = await gaps.GetPendingAsync(
             "official-war-api",
+            plan,
             "warapi-map-taxonomy@1",
             "warapi-map-quality@1",
             null,
             null,
             64,
             TestContext.Current.CancellationToken);
-        Assert.Single(before);
+
+        var candidate = Assert.Single(before);
         Assert.Equal(
             fixture.RepresentationFetchId,
-            before[0].RepresentationFetchId);
+            candidate.ValidationFetchId);
+        Assert.Equal(
+            fixture.RepresentationRetrievedAt,
+            candidate.ObservedAt);
+        Assert.Equal(
+            "dynamic-map-state",
+            candidate.CapabilityKey);
         Assert.Equal(
             fixture.Snapshot.NormalizationRunId,
-            before[0].NormalizationRunId);
+            candidate.NormalizationRunId);
 
         await fixture.Kernel.RecordAsync(
             fixture.CreateWrite(MapQualityDecision.Suspect),
             TestContext.Current.CancellationToken);
 
-        var after = await pending.GetPendingAsync(
+        var after = await gaps.GetPendingAsync(
             "official-war-api",
+            plan,
             "warapi-map-taxonomy@1",
             "warapi-map-quality@1",
             null,
@@ -384,6 +403,17 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             64,
             TestContext.Current.CancellationToken);
         Assert.Empty(after);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => gaps.GetPendingAsync(
+                "official-war-api",
+                [plan[0], plan[0]],
+                "warapi-map-taxonomy@1",
+                "warapi-map-quality@1",
+                null,
+                null,
+                64,
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -542,7 +572,9 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
                         baselineMapObservationId: first.Observation.Id),
                     TestContext.Current.CancellationToken));
 
-        Assert.Equal("later_quality_already_terminal", exception.Reason);
+        Assert.Equal(
+            MapQualityDeferredReasons.LaterQualityAlreadyTerminal,
+            exception.Reason);
         Assert.Equal(2L, await fixture.CountAsync(
             "runtime.map_observations"));
     }

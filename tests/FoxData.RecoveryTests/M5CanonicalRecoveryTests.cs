@@ -756,6 +756,229 @@ public sealed class M5CanonicalRecoveryTests(
                 "evidence.map_text_occurrences"));
     }
 
+    [Fact]
+    public async Task NormalizedMapQualityGapRecoversLocallyAndLeaves304ForG6()
+    {
+        await MigrateAsync();
+        await ResetAsync();
+
+        await using var dataSource =
+            NpgsqlDataSource.Create(postgres.ConnectionString);
+        var registry = new SourceRegistry(
+            new PostgresSourceRegistryStore(dataSource));
+
+        var source = await registry.RegisterSourceAsync(
+            WarApiCatalog.SourceKey,
+            "Official Foxhole War API",
+            TestContext.Current.CancellationToken);
+        var shard = await registry.RegisterShardAsync(
+            source.Resource.Id,
+            "live-1",
+            "Live-1",
+            "live",
+            TestContext.Current.CancellationToken);
+        var warEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.RuntimeWarState.Key,
+            "war",
+            TestContext.Current.CancellationToken);
+        var mapsEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.ActiveMapList.Key,
+            "maps",
+            TestContext.Current.CancellationToken);
+        var dynamicEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var ingestion = new IngestionKernel(
+            new PostgresIngestionKernelStore(dataSource));
+        var evidence = new EvidenceKernel(
+            new PostgresEvidenceKernelStore(dataSource));
+        var retrievedAt = new DateTimeOffset(
+            2026, 10, 2, 10, 0, 0, TimeSpan.Zero);
+
+        await CaptureRawAsync(
+            ingestion,
+            evidence,
+            warEndpoint.Resource.Id,
+            retrievedAt,
+            Encoding.UTF8.GetBytes(
+                """{"warId":"m6-g5-war","warNumber":134,"winner":"NONE"}"""),
+            "m6-g5-war");
+        await CaptureRawAsync(
+            ingestion,
+            evidence,
+            mapsEndpoint.Resource.Id,
+            retrievedAt.AddSeconds(1),
+            Encoding.UTF8.GetBytes(
+                """["DeadLandsHex"]"""),
+            "m6-g5-maps");
+        _ = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            retrievedAt.AddSeconds(2),
+            Encoding.UTF8.GetBytes(
+                """
+                {
+                  "regionId": 1,
+                  "scorchedVictoryTowns": 0,
+                  "mapItems": [],
+                  "mapTextItems": [],
+                  "lastUpdated": 1790956800000,
+                  "version": 3
+                }
+                """),
+            "m6-g5-dynamic-1");
+        var latestRepresentationFetchId = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            retrievedAt.AddSeconds(3),
+            Encoding.UTF8.GetBytes(
+                """
+                {
+                  "regionId": 1,
+                  "scorchedVictoryTowns": 0,
+                  "mapItems": [],
+                  "mapTextItems": [],
+                  "lastUpdated": 1790956801000,
+                  "version": 4
+                }
+                """),
+            "m6-g5-dynamic-2");
+
+        var coverageRecovery = CreateRecoveryCoordinator(dataSource);
+        var canonical = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, canonical.ParseRunsRepaired);
+        Assert.Equal(4, canonical.CoverageRecorded);
+        Assert.Equal(4, canonical.CanonicalCompleted);
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "evidence.map_snapshots"));
+        Assert.Equal(
+            0L,
+            await CountAsync(dataSource, "quality.map_quality_runs"));
+
+        var fetchCountBeforeQuality =
+            await CountAsync(dataSource, "evidence.fetches");
+        var payloadCountBeforeQuality =
+            await CountAsync(dataSource, "evidence.payloads");
+        var parseCountBeforeQuality =
+            await CountAsync(dataSource, "evidence.source_parse_runs");
+        var normalizationCountBeforeQuality =
+            await CountAsync(dataSource, "evidence.normalization_runs");
+        var snapshotCountBeforeQuality =
+            await CountAsync(dataSource, "evidence.map_snapshots");
+
+        var qualityRecovery =
+            CreateQualityRecoveryCoordinator(dataSource);
+        var first = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, first.TerminalCompleted);
+        Assert.Equal(0, first.Deferred);
+        Assert.Equal(0, first.VersionBlocked);
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "quality.map_quality_runs"));
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "runtime.map_observations"));
+        Assert.Equal(
+            fetchCountBeforeQuality,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            payloadCountBeforeQuality,
+            await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            parseCountBeforeQuality,
+            await CountAsync(dataSource, "evidence.source_parse_runs"));
+        Assert.Equal(
+            normalizationCountBeforeQuality,
+            await CountAsync(dataSource, "evidence.normalization_runs"));
+        Assert.Equal(
+            snapshotCountBeforeQuality,
+            await CountAsync(dataSource, "evidence.map_snapshots"));
+
+        await using (var command = dataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM quality.map_quality_runs
+                WHERE quality_policy_version = @policy_version;
+                """;
+            command.Parameters.AddWithValue(
+                "policy_version",
+                WarApiVersions.MapQualityPolicyV1);
+            Assert.Equal(
+                2L,
+                (long)(await command.ExecuteScalarAsync(
+                    TestContext.Current.CancellationToken))!);
+        }
+
+        await using (var command = dataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT
+                    run.baseline_map_observation_id,
+                    observation.id
+                FROM quality.map_quality_runs AS run
+                LEFT JOIN runtime.map_observations AS observation
+                    ON observation.quality_run_id = run.id
+                JOIN evidence.fetches AS validation
+                    ON validation.id = run.validation_fetch_id
+                ORDER BY validation.retrieved_at, validation.id;
+                """;
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.True(reader.IsDBNull(0));
+            var firstObservationId = reader.GetGuid(1);
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal(firstObservationId, reader.GetGuid(0));
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var second = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, second.ProgressCount);
+        Assert.Equal(0, second.OutstandingCount);
+
+        await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            retrievedAt.AddMinutes(1),
+            latestRepresentationFetchId,
+            "m6-g5-304-boundary");
+        _ = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        var after304 = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, after304.ProgressCount);
+        Assert.Equal(0, after304.OutstandingCount);
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "quality.map_quality_runs"));
+        Assert.Equal(
+            2L,
+            await CountAsync(dataSource, "evidence.map_snapshots"));
+    }
+
     private static WarApiCoverageRecoveryCoordinator
         CreateRecoveryCoordinator(NpgsqlDataSource dataSource)
     {
@@ -832,6 +1055,62 @@ public sealed class M5CanonicalRecoveryTests(
             dynamicMapNormalization,
             options,
             TimeProvider.System);
+    }
+
+    private static WarApiMapQualityRecoveryCoordinator
+        CreateQualityRecoveryCoordinator(NpgsqlDataSource dataSource)
+    {
+        var options = CreateOptions();
+        var normalization = new NormalizationKernel(
+            new PostgresNormalizationRunStore(dataSource));
+        var canonicalEvidence =
+            new PostgresCanonicalEvidenceReader(dataSource);
+        var sourceContext =
+            new PostgresWarContextReader(dataSource);
+        var coverageStore =
+            new PostgresCoverageStore(dataSource);
+        var warNormalization =
+            new WarApiWarNormalizationCoordinator(
+                canonicalEvidence,
+                new WarCanonicalKernel(
+                    new PostgresWarCanonicalStore(dataSource)),
+                normalization,
+                options,
+                TimeProvider.System);
+        var regionNormalization =
+            new WarApiRegionNormalizationCoordinator(
+                canonicalEvidence,
+                sourceContext,
+                warNormalization,
+                new RegionCanonicalKernel(
+                    new PostgresRegionCanonicalStore(dataSource)),
+                normalization,
+                options,
+                TimeProvider.System);
+        var mapContext =
+            new WarApiMapContextResolver(
+                sourceContext,
+                canonicalEvidence,
+                new PostgresWarRegionReader(dataSource),
+                coverageStore,
+                warNormalization,
+                regionNormalization,
+                options);
+        var qualityStore =
+            new PostgresMapQualityStore(dataSource);
+        var qualityCoordinator =
+            new WarApiMapQualityCoordinator(
+                mapContext,
+                new PostgresMapQualityOrderingReader(dataSource),
+                qualityStore,
+                new MapQualityKernel(qualityStore),
+                TimeProvider.System);
+
+        return new WarApiMapQualityRecoveryCoordinator(
+            new PostgresMapQualityGapReader(dataSource),
+            new MapSnapshotKernel(
+                new PostgresMapSnapshotStore(dataSource)),
+            qualityCoordinator);
     }
 
     private static async Task<FetchId> CaptureRawAsync(

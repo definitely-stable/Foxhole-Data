@@ -6,7 +6,7 @@ Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
 
-## Current implementation checkpoint (2026-10-01)
+## Current implementation checkpoint (2026-10-03)
 
 - M6-E2 is on main as #47.
 - M6-E3 is on main as #48 with passing post-merge CI/Contracts.
@@ -19,10 +19,13 @@ This document translates the normative M6 contract into implementation order aga
   exact source-endpoint/war shard agreement and proven first-seen membership.
 - The War API coordinator evaluates the versioned eight-rule structural shell
   after map normalization. Historic restart/mass-NONE rules remain M6-F work.
-- The narrowly scoped E3 Worker recovery replays already-normalized,
-  body-bearing 200 snapshots missing current-version QualityRuns. Missing
-  parse/normalization stages, 304 continuity and versioned reprocessing stay
-  explicitly allocated to M6-G.
+- M6-G1 through G4 are on main through PR #54.
+- M6-G5 replaces the narrow E3 pending reader with a version-aware,
+  source-neutral quality-gap scanner and a testable recovery coordinator.
+  It replays authoritative body-bearing 200 snapshots through the normal
+  quality coordinator/store path without creating new upstream evidence.
+- Same-war 304 quality binding remains allocated to G6; cross-war 304 to G7;
+  versioned rebuild/policy@2 activation remains G8.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -55,7 +58,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-M6-F2 is complete in PR #50. The next implementation slice is M6-G: coverage, recovery, ordered versioned reprocessing and controlled policy@2 activation.
+M6-F2 is complete in PR #50. M6-G1 through G4 are complete on main through PR #54, and G5 is implemented in PR #55. The next implementation slice after merge is M6-G6: same-war 304 quality binding under the extended chronology barrier.
 
 ## Non-negotiable invariants
 
@@ -615,6 +618,30 @@ G4 acceptance is complete in PR #54: exact-head CI, Contracts, Dependency Review
 Find normalized snapshots/validation bindings missing terminal quality under selected taxonomy/policy versions.
 
 Process in the exact M6-E chronology order.
+
+G5 implementation boundary:
+
+- promote the narrow E3 pending-snapshot reader into a source-neutral, version-aware quality-gap reader driven by the same `CoverageCapabilityPlan` value used by recovery composition;
+- the Worker supplies only static/dynamic map capability + parser + normalizer identities selected for the current runtime;
+- G5 scans authoritative `captured_current`, body-bearing 200 validation bindings only; same-war and cross-war 304 quality bindings remain G6/G7;
+- use `validationFetchId + observedAt` as the recovery cursor identity even though G5 body-bearing 200 currently has validation Fetch == representation Fetch;
+- recover through the existing `WarApiMapQualityCoordinator -> MapQualityKernel -> PostgresMapQualityStore` path; recovery never writes quality tables directly;
+- the locked store remains the final chronology/baseline authority and rechecks the M6-E ordering plan under the WarRegion row lock;
+- ordinary prerequisite gaps remain retryable `deferred`;
+- `later_quality_already_terminal` is surfaced separately as version-blocked same-version history and is not silently treated as quiescent;
+- runtime selection remains `warapi-map-quality@1`; calibrated policy@2 activation remains G8;
+- no parser replay, normalization replay, new Fetch, new Payload, duplicate snapshot or duplicate occurrence is created by G5.
+
+G5 acceptance:
+
+- a durable normalized 200 snapshot with no current selected-version QualityRun converges locally to exactly one terminal quality result;
+- accepted recovery creates exactly one runtime map observation; suspect/quarantined recovery creates none;
+- repeated recovery is idempotent and all Fetch/Payload/parse/normalization/snapshot/occurrence counts remain unchanged;
+- scanner filtering is fail-closed on capability/parser/normalizer versions;
+- an existing 304 validation is not quality-bound by G5;
+- policy@2 QualityRuns are not created;
+- deferred/version-blocked work remains explicitly observable for later passes/M6-H;
+- full repository gates and M5-H regressions remain green.
 
 ## G6. Same-war 304
 

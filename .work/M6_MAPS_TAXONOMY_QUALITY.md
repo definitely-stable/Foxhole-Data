@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G4 complete through PR #54; M6-G5 quality-gap scanning is next, with policy@2 activation still deferred.
+Status: in progress. M6-A through M6-G4 are complete through PR #54; M6-G5 ordered body-bearing 200 quality-gap recovery is implemented in PR #55. Same-war 304 binding remains M6-G6, and policy@2 activation remains deferred to M6-G8.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -993,6 +993,8 @@ M5 war context + M5 WarRegion
 ~~~
 
 Source parsing/normalization and M5 context recovery may progress independently until the quality/binding join point. G4 implements this by routing static/dynamic SourceParseRun normalization gaps through the same source-neutral recovery candidate query used by M5 canonical recovery, while keeping map normalization entirely source-local.
+
+G5 closes the body-bearing 200 normalization-to-quality crash gap with a version-aware scanner over the selected static/dynamic parser and normalizer identities. The scanner uses validation-boundary identity and routes every repair through the normal M6-E quality coordinator/store so chronology and baseline selection are rechecked under the existing PostgreSQL WarRegion lock. Deferred prerequisites remain retryable; same-version late history blocked by an already-terminal later quality result remains explicitly version-blocked for G8 rather than being treated as completion. G5 does not bind 304 validations and does not activate policy@2.
 
 Quality/taxonomy reprocessing MUST NOT rewrite old runs. New versions create new immutable derived results.
 

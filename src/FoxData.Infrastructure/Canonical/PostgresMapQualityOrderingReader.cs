@@ -240,7 +240,7 @@ internal static class MapQualityOrderingQueries
         {
             return MapQualityOrderingPlan.Deferred(
                 observedAt,
-                "later_quality_already_terminal");
+                MapQualityDeferredReasons.LaterQualityAlreadyTerminal);
         }
 
         await using var baseline = connection.CreateCommand();

@@ -69,4 +69,9 @@ public static class WarApiTelemetry
         Meter.CreateCounter<long>(
             "foxdata.canonical.map_quality.deferred",
             description: "Map quality evaluations deferred for durable prerequisites.");
+
+    public static readonly Counter<long> MapQualityRecovery =
+        Meter.CreateCounter<long>(
+            "foxdata.canonical.map_quality.recovery",
+            description: "M6-G quality-gap recovery outcomes.");
 }
