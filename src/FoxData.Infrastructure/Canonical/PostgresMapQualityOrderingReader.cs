@@ -127,8 +127,9 @@ internal static class MapQualityOrderingQueries
                 : reader.GetString(5);
         }
 
-        // Starting with authoritative Fetches prevents a crash before parse
-        // or normalization from making an older representation invisible.
+        // Start from every authoritative validation boundary. A prior
+        // 304 reuses its representation but still requires its own terminal
+        // quality binding before any later candidate may advance.
         await using var blockerCommand = connection.CreateCommand();
         blockerCommand.Transaction = transaction;
         blockerCommand.CommandText =
@@ -143,8 +144,27 @@ internal static class MapQualityOrderingQueries
             FROM evidence.fetches AS previous
             JOIN ingest.attempts AS attempt
                 ON attempt.id = previous.attempt_id
+            JOIN evidence.fetches AS previous_representation
+                ON previous_representation.id =
+                   CASE
+                       WHEN previous.status_code = 200
+                            AND previous.payload_id IS NOT NULL
+                           THEN previous.id
+                       WHEN previous.status_code = 304
+                            AND previous.payload_id IS NULL
+                           THEN previous.prior_fetch_id
+                       ELSE NULL
+                   END
+               AND previous_representation.endpoint_id =
+                   previous.endpoint_id
+               AND previous_representation.status_code = 200
+               AND previous_representation.payload_id IS NOT NULL
+            JOIN ingest.attempts AS representation_attempt
+                ON representation_attempt.id =
+                   previous_representation.attempt_id
             LEFT JOIN evidence.source_parse_runs AS parsed
-                ON parsed.representation_fetch_id = previous.id
+                ON parsed.representation_fetch_id =
+                   previous_representation.id
                AND parsed.capability_key = @capability_key
                AND parsed.parser_version = @parser_version
             LEFT JOIN evidence.normalization_runs AS normalized
@@ -159,9 +179,17 @@ internal static class MapQualityOrderingQueries
                AND quality.taxonomy_version = @taxonomy_version
                AND quality.quality_policy_version = @policy_version
             WHERE previous.endpoint_id = @endpoint_id
-              AND previous.status_code = 200
-              AND previous.payload_id IS NOT NULL
               AND attempt.outcome_code = 'captured_current'
+              AND representation_attempt.outcome_code =
+                  'captured_current'
+              AND (
+                    (previous.status_code = 200
+                     AND previous.payload_id IS NOT NULL)
+                    OR
+                    (previous.status_code = 304
+                     AND previous.payload_id IS NULL
+                     AND previous.prior_fetch_id IS NOT NULL)
+                  )
               AND previous.retrieved_at >= @first_seen_at
               AND (previous.retrieved_at, previous.id)
                     < (@observed_at, @validation_id)
