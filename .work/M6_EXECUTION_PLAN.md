@@ -58,7 +58,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-M6-F2 is complete in PR #50. M6-G1 through G4 are complete on main through PR #54, and G5 is implemented in PR #55. The next implementation slice after merge is M6-G6: same-war 304 quality binding under the extended chronology barrier.
+M6-F2 is complete in PR #50. M6-G1 through G5 are complete on main through PR #55, and G6 is implemented in PR #56. The next implementation slice after merge is M6-G7: cross-war 304 quality binding over the already-proven exact representation lineage.
 
 ## Non-negotiable invariants
 
