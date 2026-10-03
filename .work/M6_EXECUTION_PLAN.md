@@ -6,7 +6,7 @@ Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
 
-## Current implementation checkpoint (2026-10-01)
+## Current implementation checkpoint (2026-10-03)
 
 - M6-E2 is on main as #47.
 - M6-E3 is on main as #48 with passing post-merge CI/Contracts.
@@ -19,10 +19,13 @@ This document translates the normative M6 contract into implementation order aga
   exact source-endpoint/war shard agreement and proven first-seen membership.
 - The War API coordinator evaluates the versioned eight-rule structural shell
   after map normalization. Historic restart/mass-NONE rules remain M6-F work.
-- The narrowly scoped E3 Worker recovery replays already-normalized,
-  body-bearing 200 snapshots missing current-version QualityRuns. Missing
-  parse/normalization stages, 304 continuity and versioned reprocessing stay
-  explicitly allocated to M6-G.
+- M6-G1 through G4 are on main through PR #54.
+- M6-G5 replaces the narrow E3 pending reader with a version-aware,
+  source-neutral quality-gap scanner and a testable recovery coordinator.
+  It replays authoritative body-bearing 200 snapshots through the normal
+  quality coordinator/store path without creating new upstream evidence.
+- Same-war 304 quality binding remains allocated to G6; cross-war 304 to G7;
+  versioned rebuild/policy@2 activation remains G8.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -55,7 +58,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-M6-F2 is complete in PR #50. The next implementation slice is M6-G: coverage, recovery, ordered versioned reprocessing and controlled policy@2 activation.
+M6-F2 is complete in PR #50. M6-G1 through G4 are complete on main through PR #54, and G5 is implemented in PR #55. The next implementation slice after merge is M6-G6: same-war 304 quality binding under the extended chronology barrier.
 
 ## Non-negotiable invariants
 
