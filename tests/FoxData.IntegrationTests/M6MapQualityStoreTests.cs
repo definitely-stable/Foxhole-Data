@@ -443,6 +443,38 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             fixture.CreateWrite(MapQualityDecision.Suspect),
             TestContext.Current.CancellationToken);
 
+        var sameTimestampValidation =
+            await fixture.CreateValidation304Async(
+                fixture.RepresentationRetrievedAt,
+                "m6-g6-same-timestamp-304");
+
+        var sameTimestampPending = await gaps.GetPendingAsync(
+            "official-war-api",
+            plan,
+            "warapi-map-taxonomy@1",
+            "warapi-map-quality@1",
+            null,
+            null,
+            64,
+            TestContext.Current.CancellationToken);
+
+        var sameTimestamp = Assert.Single(sameTimestampPending);
+        Assert.Equal(
+            MapQualityGapValidationKind.NotModified304,
+            sameTimestamp.ValidationKind);
+        Assert.Equal(
+            sameTimestampValidation,
+            sameTimestamp.ValidationFetchId);
+        Assert.Equal(
+            fixture.RepresentationRetrievedAt,
+            sameTimestamp.ObservedAt);
+
+        await fixture.Kernel.RecordAsync(
+            fixture.CreateWrite(
+                MapQualityDecision.Suspect,
+                validationFetchId: sameTimestampValidation),
+            TestContext.Current.CancellationToken);
+
         var validationAt =
             fixture.RepresentationRetrievedAt.AddMinutes(10);
         var validation = await fixture.CreateValidation304Async(
