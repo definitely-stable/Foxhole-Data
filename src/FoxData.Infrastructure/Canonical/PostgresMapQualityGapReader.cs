@@ -124,8 +124,13 @@ public sealed class PostgresMapQualityGapReader(NpgsqlDataSource dataSource)
                       'captured_current'
                   AND validation_attempt.outcome_code =
                       'captured_current'
-                  AND validation.retrieved_at >=
-                      representation.retrieved_at
+                  AND (
+                        validation.id = representation.id
+                        OR
+                        (validation.retrieved_at, validation.id)
+                            > (representation.retrieved_at,
+                               representation.id)
+                      )
                   AND NOT EXISTS
                   (
                       SELECT 1
