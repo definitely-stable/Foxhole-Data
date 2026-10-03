@@ -345,10 +345,10 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             second.Observation.Id,
             third.Run.BaselineMapObservationId);
         Assert.Equal(
-            1L,
+            snapshotCountBefore304,
             await fixture.CountAsync("evidence.map_snapshots"));
         Assert.Equal(
-            1L,
+            occurrenceCountBefore304,
             await fixture.CountAsync("evidence.map_item_occurrences"));
     }
 
@@ -393,6 +393,10 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             snapshotSourceRegionId: null,
             warRegionSourceRegionId: null);
         _ = await fixture.CreateAuxiliarySnapshotAsync();
+        var snapshotCountBefore304 =
+            await fixture.CountAsync("evidence.map_snapshots");
+        var occurrenceCountBefore304 =
+            await fixture.CountAsync("evidence.map_item_occurrences");
 
         var gaps = new PostgresMapQualityGapReader(
             fixture.DataSource);
