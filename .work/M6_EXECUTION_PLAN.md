@@ -24,15 +24,17 @@ This document translates the normative M6 contract into implementation order aga
   source-neutral quality-gap scanner and a testable recovery coordinator.
   It replays authoritative body-bearing 200 snapshots through the normal
   quality coordinator/store path without creating new upstream evidence.
-- Same-war 304 quality binding remains allocated to G6; cross-war 304 to G7;
-  versioned rebuild/policy@2 activation remains G8.
+- M6-G6 extends quality-gap recovery to exact-lineage same-war 304
+  validations while reusing the existing MapSnapshot and quality transaction.
+  Cross-war 304 remains allocated to G7; versioned rebuild/policy@2
+  activation remains G8.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
-- The source-evidence barrier currently scans authoritative body-bearing 200
-  candidates; M6-G must extend chronology to any additional 304 quality
-  bindings *before* enabling same-war 304 acceptance, so older 304 work cannot
-  retroactively change a later baseline.
+- The source-evidence barrier now scans authoritative body-bearing 200 and
+  exact-lineage 304 validation boundaries in the same
+  `retrieved_at + FetchId` chronology. A missing earlier 304 QualityRun
+  therefore blocks later baseline advancement.
 - E3 cannot close merely because no terminal writes occurred: deferred work
   must remain observable and local recovery must be exercised without HTTP.
 
@@ -657,8 +659,9 @@ When a quality evaluation is required at the validation boundary, reuse the exis
 G6 implementation boundary:
 
 - extend the G5 quality-gap scanner to exact-lineage 304 validations where
-  `status=304`, the validation has no Payload and `prior_fetch_id` points to
-  the selected body-bearing 200 representation for the existing snapshot;
+  `status=304`, the validation has no Payload, `prior_fetch_id` points to
+  the selected body-bearing 200 representation for the existing snapshot, and
+  the validation boundary is not earlier than that representation boundary;
 - keep the scanner source-neutral: capability/parser/normalizer versions still
   come from the Worker-supplied recovery plan;
 - carry both representation observation time and validation observation time so
@@ -683,6 +686,8 @@ G6 acceptance:
 - the second 304 cannot pass while the first 304 quality binding is missing;
 - repeated recovery is idempotent and creates no Payload, SourceParseRun,
   NormalizationRun, MapSnapshot or occurrence rows for 304;
+- reversed-time 304 lineage is rejected fail-closed by both scanner and
+  ordering provenance checks;
 - a cross-war 304 over the same representation creates no G6 QualityRun and is
   reported as deferred to G7;
 - policy@2 remains inactive and full repository gates stay green.
