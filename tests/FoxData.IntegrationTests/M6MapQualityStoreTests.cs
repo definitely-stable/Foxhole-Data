@@ -345,10 +345,10 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             second.Observation.Id,
             third.Run.BaselineMapObservationId);
         Assert.Equal(
-            snapshotCountBefore304,
+            1L,
             await fixture.CountAsync("evidence.map_snapshots"));
         Assert.Equal(
-            occurrenceCountBefore304,
+            1L,
             await fixture.CountAsync("evidence.map_item_occurrences"));
     }
 
@@ -489,10 +489,10 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             TestContext.Current.CancellationToken);
         Assert.Empty(after);
         Assert.Equal(
-            1L,
+            snapshotCountBefore304,
             await fixture.CountAsync("evidence.map_snapshots"));
         Assert.Equal(
-            1L,
+            occurrenceCountBefore304,
             await fixture.CountAsync("evidence.map_item_occurrences"));
 
         await Assert.ThrowsAsync<ArgumentException>(
