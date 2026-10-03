@@ -83,7 +83,12 @@ internal static class MapQualityOrderingQueries
               AND source_endpoint.id = validation.endpoint_id
               AND representation_attempt.outcome_code = 'captured_current'
               AND validation_attempt.outcome_code = 'captured_current'
-              AND validation.retrieved_at >= representation.retrieved_at
+              AND (
+                    validation.id = representation.id
+                    OR
+                    (validation.retrieved_at, validation.id)
+                        > (representation.retrieved_at, representation.id)
+                  )
               AND source_parse.representation_fetch_id = representation.id
               AND normalization.source_parse_run_id = source_parse.id
               AND normalization.outcome = 'normalized'
@@ -183,8 +188,13 @@ internal static class MapQualityOrderingQueries
               AND attempt.outcome_code = 'captured_current'
               AND representation_attempt.outcome_code =
                   'captured_current'
-              AND previous.retrieved_at >=
-                  previous_representation.retrieved_at
+              AND (
+                    previous.id = previous_representation.id
+                    OR
+                    (previous.retrieved_at, previous.id)
+                        > (previous_representation.retrieved_at,
+                           previous_representation.id)
+                  )
               AND (
                     (previous.status_code = 200
                      AND previous.payload_id IS NOT NULL)
