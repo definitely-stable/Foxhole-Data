@@ -6,7 +6,7 @@ Research evidence: research/M6_MAP_QUALITY_2026-09.md.
 
 This document translates the normative M6 contract into implementation order against the repository state after M6-A through M6-D. If this execution plan and the subsystem specification disagree, the subsystem specification wins.
 
-## Current implementation checkpoint (2026-10-03)
+## Current implementation checkpoint (2026-10-04)
 
 - M6-E2 is on main as #47.
 - M6-E3 is on main as #48 with passing post-merge CI/Contracts.
@@ -26,8 +26,10 @@ This document translates the normative M6 contract into implementation order aga
   quality coordinator/store path without creating new upstream evidence.
 - M6-G6 extends quality-gap recovery to exact-lineage same-war 304
   validations while reusing the existing MapSnapshot and quality transaction.
-  Cross-war 304 remains allocated to G7; versioned rebuild/policy@2
-  activation remains G8.
+- M6-G7 generalizes the same path to proven cross-war 304 continuity: the
+  validation-side WarRegion owns the new quality identity, the old MapSnapshot
+  is reused, and the new WarRegion starts a fresh baseline chain.
+  Versioned rebuild/policy@2 activation remains G8.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
