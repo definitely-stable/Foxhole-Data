@@ -20,6 +20,26 @@ public sealed record WarApiMapQualityPolicyEvaluation(
 
 public static class WarApiMapQualityPolicyEvaluator
 {
+    private static readonly HashSet<string> BaselineSnapshotRuleKeys =
+        new(StringComparer.Ordinal)
+        {
+            "source-version.regression",
+            "source-version.gap",
+            "source-last-updated.regression",
+            "representation.near-empty",
+            "representation.mass-disappearance",
+            "ownership.restart-collapse",
+        };
+
+    public static bool RequiresBaselineSnapshot(
+        WarApiMapQualityPolicyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        return profile.Rules.Any(
+            rule => BaselineSnapshotRuleKeys.Contains(rule.Key));
+    }
+
     public static WarApiMapQualityPolicyEvaluation Evaluate(
         WarApiMapQualityPolicyProfile profile,
         WarApiMapQualityFeatureSnapshot current,
