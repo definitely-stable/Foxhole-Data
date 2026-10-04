@@ -71,6 +71,29 @@ public sealed class M6MapQualityStoreTests(PostgresFixture postgres)
             await fixture.ReadWarRegionSourceRegionIdAsync());
     }
 
+    [Fact]
+    public async Task SnapshotLookupByIdReturnsCompleteDurableGraph()
+    {
+        await using var fixture = await CreateFixtureAsync(
+            snapshotSourceRegionId: 7,
+            warRegionSourceRegionId: null);
+
+        var loaded = await new MapSnapshotKernel(
+                new PostgresMapSnapshotStore(fixture.DataSource))
+            .GetByIdAsync(
+                fixture.Snapshot.Id,
+                TestContext.Current.CancellationToken);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(fixture.Snapshot, loaded.Snapshot);
+        Assert.Single(loaded.Items);
+        Assert.Equal(fixture.Item, loaded.Items[0]);
+        Assert.Empty(loaded.TextItems);
+        Assert.Equal(
+            fixture.Snapshot.NormalizationRunId,
+            loaded.NormalizationRun.Id);
+    }
+
     [Theory]
     [InlineData(MapQualityDecision.Suspect)]
     [InlineData(MapQualityDecision.Quarantined)]
