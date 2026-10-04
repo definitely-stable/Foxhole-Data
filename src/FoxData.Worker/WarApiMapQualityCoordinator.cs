@@ -172,13 +172,16 @@ public sealed class WarApiMapQualityCoordinator(
             return Deferred(plan.DeferredReason!);
         }
 
-        var baselineSnapshot = plan.Baseline is null
-            ? null
-            : await snapshots.GetByIdAsync(
+        MapSnapshotResult? baselineSnapshot = null;
+        if (plan.Baseline is not null &&
+            WarApiMapQualityPolicyEvaluator.RequiresBaselineSnapshot(profile))
+        {
+            baselineSnapshot = await snapshots.GetByIdAsync(
                 plan.Baseline.MapSnapshotId,
                 cancellationToken)
-              ?? throw new CanonicalStateIntegrityException(
-                  "Map quality baseline observation lost its durable MapSnapshot.");
+                ?? throw new CanonicalStateIntegrityException(
+                    "Map quality baseline observation lost its durable MapSnapshot.");
+        }
 
         var startedAt = timeProvider.GetUtcNow();
         var taxonomy = new WarApiMapTaxonomyInterpreter(
