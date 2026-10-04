@@ -1784,6 +1784,7 @@ public sealed class M3OrchestrationTests(PostgresFixture postgres)
         var qualityStore = new PostgresMapQualityStore(dataSource);
         var qualityCoordinator = new WarApiMapQualityCoordinator(
             mapContextResolver,
+            mapSnapshotKernel,
             new PostgresMapQualityOrderingReader(dataSource),
             qualityStore,
             new MapQualityKernel(qualityStore),
