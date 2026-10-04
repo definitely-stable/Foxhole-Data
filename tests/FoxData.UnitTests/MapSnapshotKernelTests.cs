@@ -195,6 +195,11 @@ public sealed class MapSnapshotKernelTests
     {
         public MapSnapshotWrite? RecordedWrite { get; private set; }
 
+        public Task<MapSnapshotResult?> GetByIdAsync(
+            MapSnapshotId mapSnapshotId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<MapSnapshotResult?>(null);
+
         public Task<MapSnapshotResult?> GetByNormalizationRunAsync(
             NormalizationRunId normalizationRunId,
             CancellationToken cancellationToken) =>
