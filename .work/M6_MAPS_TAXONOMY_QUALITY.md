@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G6 are complete through PR #56; M6-G7 cross-war 304 quality binding is implemented in PR #57. Versioned rebuild and policy@2 activation remain deferred to M6-G8.
+Status: in progress. M6-A through M6-G7 are complete through PR #57. M6-G8 begins by unifying runtime and offline quality evaluation while keeping runtime pinned to policy@1; version-targeted policy@2 rebuild and activation remain later G8 slices.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1001,6 +1001,15 @@ G6 extends that scanner to exact 304 -> representation lineage without creating 
 G7 permits those two proven contexts to belong to different wars. The validation-side WarRegion is the authoritative target of the new quality identity, while the snapshot and source occurrences remain the immutable representation created from the original body-bearing Fetch. M5 war/map-list continuity must already prove membership at the validation boundary; otherwise recovery remains deferred. Chronology and baseline lookup remain scoped to the target WarRegion, so the first accepted observation in a new war starts with no baseline from the previous war even when both observations reuse the same MapSnapshot. Subsequent validations in the new WarRegion may baseline only on accepted observations from that WarRegion. A same-war resolution that somehow yields two different WarRegion identities for the same source map is an integrity failure, not cross-war continuity. G7 does not activate policy@2.
 
 Quality/taxonomy reprocessing MUST NOT rewrite old runs. New versions create new immutable derived results.
+
+Before policy@2 can be rebuilt or activated, runtime quality evaluation MUST use
+the same `WarApiMapQualityPolicyEvaluator` that was used for F2 calibration.
+The evaluator consumes the complete current snapshot plus the complete accepted
+baseline snapshot selected by the version-scoped chronology plan. Baseline
+snapshot loading is by immutable `MapSnapshotId` and reuses the existing
+snapshot/occurrence graph; it must not reparse source payloads or create new
+normalization state. This parity step remains on runtime policy@1 and is not an
+activation event.
 
 ## 20. Concurrency and transaction rules
 
