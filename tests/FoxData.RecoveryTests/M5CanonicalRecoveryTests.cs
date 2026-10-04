@@ -1139,19 +1139,27 @@ public sealed class M5CanonicalRecoveryTests(
             await CountMapNormalizationRunsAsync(dataSource));
 
         Guid warARegionId;
+        Guid warASnapshotId;
         await using (var command = dataSource.CreateCommand())
         {
             command.CommandText =
                 """
-                SELECT war_region_id
+                SELECT war_region_id, map_snapshot_id
                 FROM quality.map_quality_runs
                 WHERE validation_fetch_id = @validation_fetch_id;
                 """;
             command.Parameters.AddWithValue(
                 "validation_fetch_id",
                 sameWar304B.Value);
-            warARegionId = (Guid)(await command.ExecuteScalarAsync(
-                TestContext.Current.CancellationToken))!;
+
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            warARegionId = reader.GetGuid(0);
+            warASnapshotId = reader.GetGuid(1);
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
         }
 
         Guid firstWarBObservationId;
@@ -1185,6 +1193,7 @@ public sealed class M5CanonicalRecoveryTests(
 
             warBRegionId = reader.GetGuid(0);
             Assert.NotEqual(warARegionId, warBRegionId);
+            Assert.Equal(warASnapshotId, reader.GetGuid(1));
             Assert.True(reader.IsDBNull(2));
             firstWarBObservationId = reader.GetGuid(3);
             Assert.Equal(
