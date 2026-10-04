@@ -26,6 +26,55 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
         item_count, text_item_count, recorded_at
         """;
 
+    public async Task<MapSnapshotResult?> GetByIdAsync(
+        MapSnapshotId mapSnapshotId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var snapshot = await GetSnapshotByIdAsync(
+            connection,
+            transaction: null,
+            mapSnapshotId,
+            cancellationToken);
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        var normalizationRun = await GetNormalizationRunByIdAsync(
+            connection,
+            transaction: null,
+            snapshot.NormalizationRunId,
+            cancellationToken)
+            ?? throw new CanonicalStateIntegrityException(
+                "Durable map snapshot lost its normalization-run provenance.");
+
+        var items = await GetItemsAsync(
+            connection,
+            transaction: null,
+            snapshot.Id,
+            cancellationToken);
+        var textItems = await GetTextItemsAsync(
+            connection,
+            transaction: null,
+            snapshot.Id,
+            cancellationToken);
+
+        EnsureDurableGraphIntegrity(
+            normalizationRun,
+            snapshot,
+            items,
+            textItems);
+
+        return new MapSnapshotResult(
+            normalizationRun,
+            snapshot,
+            items,
+            textItems);
+    }
+
     public async Task<MapSnapshotResult?> GetByNormalizationRunAsync(
         NormalizationRunId normalizationRunId,
         CancellationToken cancellationToken)
@@ -605,6 +654,24 @@ public sealed class PostgresMapSnapshotStore(NpgsqlDataSource dataSource)
             reader.GetFieldValue<DateTimeOffset>(5),
             reader.GetFieldValue<DateTimeOffset>(6),
             reader.GetFieldValue<DateTimeOffset>(7));
+    }
+
+    private static async Task<MapSnapshotDescriptor?> GetSnapshotByIdAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        MapSnapshotId mapSnapshotId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            $"""
+            SELECT {SnapshotColumns}
+            FROM evidence.map_snapshots
+            WHERE id = @id;
+            """;
+        AddUuid(command, "id", mapSnapshotId.Value);
+        return await ReadSnapshotAsync(command, cancellationToken);
     }
 
     private static async Task<MapSnapshotDescriptor?>
