@@ -62,7 +62,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-M6-F2 is complete in PR #50. M6-G1 through G5 are complete on main through PR #55, and G6 is implemented in PR #56. The next implementation slice after merge is M6-G7: cross-war 304 quality binding over the already-proven exact representation lineage.
+M6-F2 is complete in PR #50. M6-G1 through G7 are complete on main through PR #57. The next implementation slice is M6-G8: versioned quality rebuild and controlled policy@2 activation.
 
 ## Non-negotiable invariants
 
@@ -768,6 +768,48 @@ MapSnapshot
 + taxonomyVersion
 + qualityPolicyVersion
 ~~~
+
+G8 is deliberately split so policy@2 is never activated before its runtime
+execution path and historical rebuild are proven:
+
+### G8-A. Runtime/offline evaluator parity
+
+- production and the offline F2 lab MUST use
+  `WarApiMapQualityPolicyEvaluator` as the single rule engine;
+- runtime remains pinned to `warapi-map-quality@1`;
+- the current accepted baseline's complete MapSnapshot graph must be loadable by
+  `MapSnapshotId` so calibrated rules can compare source occurrences and
+  source metadata without reparsing HTTP payloads;
+- the by-ID snapshot read is source-neutral, read-only, and must re-run the
+  same durable graph-integrity checks as normalization-run lookup;
+- policy@1 runtime decisions/findings must remain semantically compatible with
+  the previously persisted structural-only path;
+- no schema migration and no policy@2 activation belong to G8-A.
+
+### G8-B. Explicit version-targeted reprocessing
+
+- separate the live runtime policy selection from the policy version selected
+  for local rebuild;
+- quality-gap scanning, ordering, evaluation and writes must carry the explicit
+  target taxonomy/policy identity;
+- allow `live=@1` while `rebuild=@2`.
+
+### G8-C. Ordered policy@2 rebuild
+
+- replay all durable 200, same-war 304 and cross-war 304 validation boundaries
+  under policy@2 using the existing chronology barrier;
+- preserve every @1 run unchanged;
+- prove restart/quarantine, suspect and accepted baseline behavior;
+- process restart must resume from durable state and converge without HTTP.
+
+### G8-D. Controlled activation
+
+- audit all runtime consumers of map observations so they cannot mix multiple
+  policy versions as one logical stream;
+- require zero pending/deferred/version-blocked @2 work and zero provenance
+  violations;
+- only after that gate may `WarApiVersions.MapQualityPolicy` move from @1
+  to @2.
 
 ## G9. Recovery tests
 
