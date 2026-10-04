@@ -705,6 +705,52 @@ For an unchanged validated representation after WarRegion transition:
 5. create accepted observation only if policy accepts;
 6. do not duplicate occurrence rows.
 
+G7 implementation boundary:
+
+- reuse the G6 exact-lineage scanner and 200/304 chronology barrier unchanged;
+- generalize the Worker 304 evaluator so a representation context from War A
+  and a validation context from War B are valid when both contexts resolve
+  through the normal M5 map-context path for the same source map;
+- the validation context is authoritative for the target quality identity:
+  `existing MapSnapshot + new WarRegion + 304 validationFetch + selected
+  taxonomy/policy`;
+- do not create a dedicated cross-war insert path. Route the candidate through
+  the existing M6-E ordering/kernel/store transaction;
+- if representation and validation resolve to the same WarId but different
+  WarRegion identities for the same source map, fail closed as an integrity
+  violation rather than treating that state as a war transition;
+- M5 membership/continuity remains a prerequisite. A durable cross-war
+  map-state 304 encountered before active-map-list continuity is repaired must
+  remain deferred and converge on a later local pass without new HTTP;
+- quality chronology is WarRegion-scoped. The first quality result in the new
+  WarRegion MUST have no baseline from the previous war even when both results
+  reuse the same MapSnapshot. Subsequent validations in the new WarRegion use
+  only accepted baselines from that new WarRegion;
+- remove `cross_war_validation_binding` as a normal deferred classification
+  once G7 is active. Remaining deferral must identify a real missing durable
+  prerequisite such as war/map-list context or continuity;
+- runtime policy remains `warapi-map-quality@1`; G7 does not activate
+  policy@2.
+
+G7 acceptance:
+
+- War A map `200` -> War B active-map-list `304` -> War B map-state
+  `304` converges entirely from durable evidence after M5 continuity;
+- before M5 continuity is applied, the cross-war map-state candidate stays
+  visible/retryable and creates no QualityRun;
+- after continuity, exactly one selected-version QualityRun is created for the
+  new WarRegion using the existing MapSnapshot and the War B validation Fetch;
+- if accepted, the first War B MapObservation has
+  `baseline_map_observation_id = NULL`, even if War A has accepted history
+  for the same snapshot/capability;
+- a later same-representation 304 in War B baselines on the latest accepted
+  War B observation, never on War A;
+- cross-war 304 creates no new map Payload, SourceParseRun, NormalizationRun,
+  MapSnapshot, map-item occurrence or map-text occurrence;
+- repeated recovery is idempotent;
+- G5 body-bearing 200 and G6 same-war 304 behavior remain green;
+- policy@2 remains inactive and full repository gates stay green.
+
 ## G8. Taxonomy/policy upgrades
 
 New versions create new derived quality runs.
