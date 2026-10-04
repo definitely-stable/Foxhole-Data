@@ -1049,6 +1049,10 @@ public sealed class M5CanonicalRecoveryTests(
             await CountAsync(dataSource, "evidence.map_item_occurrences");
         var textCountBeforeTransition =
             await CountAsync(dataSource, "evidence.map_text_occurrences");
+        var mapParseCountBeforeTransition =
+            await CountMapSourceParseRunsAsync(dataSource);
+        var mapNormalizationCountBeforeTransition =
+            await CountMapNormalizationRunsAsync(dataSource);
 
         var warBAt = retrievedAt.AddMinutes(10);
         await CaptureRawAsync(
@@ -1096,6 +1100,12 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(3, transitionRecovery.CoverageRecorded);
         Assert.Equal(1, transitionRecovery.ParseRunsRepaired);
         Assert.Equal(1, transitionRecovery.ContinuityApplied);
+        Assert.True(
+            await new PostgresCoverageStore(dataSource)
+                .IsMapContinuityAppliedAsync(
+                    mapList304,
+                    WarApiVersions.CoverageReprocessor,
+                    TestContext.Current.CancellationToken));
 
         var crossWar = await qualityRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
@@ -1121,6 +1131,12 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(
             payloadCountAfterWarBody,
             await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            mapParseCountBeforeTransition,
+            await CountMapSourceParseRunsAsync(dataSource));
+        Assert.Equal(
+            mapNormalizationCountBeforeTransition,
+            await CountMapNormalizationRunsAsync(dataSource));
 
         Guid warARegionId;
         await using (var command = dataSource.CreateCommand())
@@ -1233,13 +1249,18 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(
             payloadCountAfterWarBody,
             await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            mapParseCountBeforeTransition,
+            await CountMapSourceParseRunsAsync(dataSource));
+        Assert.Equal(
+            mapNormalizationCountBeforeTransition,
+            await CountMapNormalizationRunsAsync(dataSource));
 
         var replay = await qualityRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
         Assert.Equal(0, replay.ProgressCount);
         Assert.Equal(0, replay.OutstandingCount);
 
-        _ = mapList304;
     }
 
     private static WarApiCoverageRecoveryCoordinator
@@ -1620,6 +1641,38 @@ public sealed class M5CanonicalRecoveryTests(
         await using var command =
             dataSource.CreateCommand(
                 $"SELECT COUNT(*) FROM {tableName};");
+        return (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!;
+    }
+
+    private static async Task<long> CountMapSourceParseRunsAsync(
+        NpgsqlDataSource dataSource)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT COUNT(*)
+            FROM evidence.source_parse_runs
+            WHERE capability_key IN (
+                'active-map-list',
+                'dynamic-map-state');
+            """);
+        return (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!;
+    }
+
+    private static async Task<long> CountMapNormalizationRunsAsync(
+        NpgsqlDataSource dataSource)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT COUNT(*)
+            FROM evidence.normalization_runs AS normalization
+            JOIN evidence.source_parse_runs AS parse
+                ON parse.id = normalization.source_parse_run_id
+            WHERE parse.capability_key IN (
+                'active-map-list',
+                'dynamic-map-state');
+            """);
         return (long)(await command.ExecuteScalarAsync(
             TestContext.Current.CancellationToken))!;
     }
