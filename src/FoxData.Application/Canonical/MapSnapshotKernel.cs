@@ -4,6 +4,19 @@ namespace FoxData.Application.Canonical;
 
 public sealed class MapSnapshotKernel(IMapSnapshotStore store)
 {
+    public Task<MapSnapshotResult?> GetByIdAsync(
+        MapSnapshotId mapSnapshotId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateId(
+            mapSnapshotId.Value,
+            nameof(mapSnapshotId));
+
+        return store.GetByIdAsync(
+            mapSnapshotId,
+            cancellationToken);
+    }
+
     public Task<MapSnapshotResult?> GetByNormalizationRunAsync(
         NormalizationRunId normalizationRunId,
         CancellationToken cancellationToken = default)
