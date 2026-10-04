@@ -1394,6 +1394,8 @@ public sealed class M5CanonicalRecoveryTests(
         var qualityCoordinator =
             new WarApiMapQualityCoordinator(
                 mapContext,
+                new MapSnapshotKernel(
+                    new PostgresMapSnapshotStore(dataSource)),
                 new PostgresMapQualityOrderingReader(dataSource),
                 qualityStore,
                 new MapQualityKernel(qualityStore),
