@@ -17,8 +17,10 @@ This document translates the normative M6 contract into implementation order aga
   or less severe terminal decision.
 - The store refuses an incorrect or omitted latest accepted baseline, checks
   exact source-endpoint/war shard agreement and proven first-seen membership.
-- The War API coordinator evaluates the versioned eight-rule structural shell
-  after map normalization. Historic restart/mass-NONE rules remain M6-F work.
+- The War API coordinator now routes runtime quality through the same
+  `WarApiMapQualityPolicyEvaluator` used by F2 calibration. Runtime remains
+  pinned to policy@1 in G8-A; policy@2 rebuild/activation remains later G8
+  work.
 - M6-G1 through G4 are on main through PR #54.
 - M6-G5 replaces the narrow E3 pending reader with a version-aware,
   source-neutral quality-gap scanner and a testable recovery coordinator.
@@ -29,7 +31,10 @@ This document translates the normative M6 contract into implementation order aga
 - M6-G7 generalizes the same path to proven cross-war 304 continuity: the
   validation-side WarRegion owns the new quality identity, the old MapSnapshot
   is reused, and the new WarRegion starts a fresh baseline chain.
-  Versioned rebuild/policy@2 activation remains G8.
+- M6-G8A is implemented in PR #60: complete baseline snapshots are loadable by
+  immutable MapSnapshotId and production/offline evaluation share one rule
+  engine while runtime remains pinned to policy@1.
+  Version-targeted rebuild/policy@2 activation remains later G8 work.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
