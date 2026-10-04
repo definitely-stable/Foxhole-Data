@@ -757,7 +757,7 @@ public sealed class M5CanonicalRecoveryTests(
     }
 
     [Fact]
-    public async Task SameWar304QualityRecoveryReusesSnapshotAndDefersCrossWar()
+    public async Task CrossWar304QualityRecoveryReusesSnapshotAndResetsBaseline()
     {
         await MigrateAsync();
         await ResetAsync();
@@ -808,14 +808,15 @@ public sealed class M5CanonicalRecoveryTests(
             Encoding.UTF8.GetBytes(
                 """{"warId":"m6-g5-war","warNumber":134,"winner":"NONE"}"""),
             "m6-g5-war");
-        await CaptureRawAsync(
-            ingestion,
-            evidence,
-            mapsEndpoint.Resource.Id,
-            retrievedAt.AddSeconds(1),
-            Encoding.UTF8.GetBytes(
-                """["DeadLandsHex"]"""),
-            "m6-g5-maps");
+        var mapListRepresentationFetchId =
+            await CaptureRawAsync(
+                ingestion,
+                evidence,
+                mapsEndpoint.Resource.Id,
+                retrievedAt.AddSeconds(1),
+                Encoding.UTF8.GetBytes(
+                    """["DeadLandsHex"]"""),
+                "m6-g5-maps");
         _ = await CaptureRawAsync(
             ingestion,
             evidence,
@@ -884,7 +885,6 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(2, first.TerminalCompleted);
         Assert.Equal(0, first.Deferred);
         Assert.Equal(0, first.VersionBlocked);
-        Assert.Equal(0, first.CrossWarDeferred);
         Assert.Equal(
             2L,
             await CountAsync(dataSource, "quality.map_quality_runs"));
@@ -980,7 +980,6 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(2, sameWar.TerminalCompleted);
         Assert.Equal(0, sameWar.Deferred);
         Assert.Equal(0, sameWar.VersionBlocked);
-        Assert.Equal(0, sameWar.CrossWarDeferred);
         Assert.Equal(
             4L,
             await CountAsync(dataSource, "quality.map_quality_runs"));
@@ -1044,68 +1043,233 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, sameWarReplay.ProgressCount);
         Assert.Equal(0, sameWarReplay.OutstandingCount);
 
+        var snapshotCountBeforeTransition =
+            await CountAsync(dataSource, "evidence.map_snapshots");
+        var itemCountBeforeTransition =
+            await CountAsync(dataSource, "evidence.map_item_occurrences");
+        var textCountBeforeTransition =
+            await CountAsync(dataSource, "evidence.map_text_occurrences");
+        var mapParseCountBeforeTransition =
+            await CountMapSourceParseRunsAsync(dataSource);
+        var mapNormalizationCountBeforeTransition =
+            await CountMapNormalizationRunsAsync(dataSource);
+
+        var warBAt = retrievedAt.AddMinutes(10);
         await CaptureRawAsync(
             ingestion,
             evidence,
             warEndpoint.Resource.Id,
-            retrievedAt.AddMinutes(10),
+            warBAt,
             Encoding.UTF8.GetBytes(
-                """{"warId":"m6-g6-war-2","warNumber":135,"winner":"NONE"}"""),
-            "m6-g6-war-2");
-        await CaptureRawAsync(
+                """{"warId":"m6-g7-war-2","warNumber":135,"winner":"NONE"}"""),
+            "m6-g7-war-2");
+        var payloadCountAfterWarBody =
+            await CountAsync(dataSource, "evidence.payloads");
+
+        var mapList304 = await CaptureNotModifiedAsync(
             ingestion,
             evidence,
             mapsEndpoint.Resource.Id,
-            retrievedAt.AddMinutes(10).AddSeconds(1),
-            Encoding.UTF8.GetBytes(
-                """["DeadLandsHex"]"""),
-            "m6-g6-maps-war-2");
-        _ = await coverageRecovery.RunOnceAsync(
-            TestContext.Current.CancellationToken);
-
+            warBAt.AddSeconds(1),
+            mapListRepresentationFetchId,
+            "m6-g7-maps-war-2-304");
+        var crossWar304At = warBAt.AddSeconds(2);
         var crossWar304 = await CaptureNotModifiedAsync(
             ingestion,
             evidence,
             dynamicEndpoint.Resource.Id,
-            retrievedAt.AddMinutes(10).AddSeconds(2),
+            crossWar304At,
             latestRepresentationFetchId,
-            "m6-g6-cross-war-304");
-        _ = await coverageRecovery.RunOnceAsync(
-            TestContext.Current.CancellationToken);
+            "m6-g7-cross-war-304");
 
-        var crossWar = await qualityRecovery.RunOnceAsync(
+        // The map-state 304 is durable, but M5 has not yet repaired the
+        // new war/map-list context. G7 must remain retryable rather than
+        // binding the old snapshot to an unproven WarRegion.
+        var beforeContinuity = await qualityRecovery.RunOnceAsync(
             TestContext.Current.CancellationToken);
-        Assert.Equal(0, crossWar.TerminalCompleted);
-        Assert.Equal(0, crossWar.Deferred);
-        Assert.Equal(0, crossWar.VersionBlocked);
-        Assert.Equal(1, crossWar.CrossWarDeferred);
-        Assert.Equal(1, crossWar.OutstandingCount);
+        Assert.Equal(0, beforeContinuity.TerminalCompleted);
+        Assert.Equal(1, beforeContinuity.Deferred);
+        Assert.Equal(0, beforeContinuity.VersionBlocked);
+        Assert.Equal(1, beforeContinuity.OutstandingCount);
         Assert.Equal(
             4L,
             await CountAsync(dataSource, "quality.map_quality_runs"));
+
+        var transitionRecovery = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(3, transitionRecovery.CoverageRecorded);
+        Assert.Equal(1, transitionRecovery.ParseRunsRepaired);
+        Assert.Equal(1, transitionRecovery.ContinuityApplied);
+        Assert.True(
+            await new PostgresCoverageStore(dataSource)
+                .IsMapContinuityAppliedAsync(
+                    mapList304,
+                    WarApiVersions.CoverageReprocessor,
+                    TestContext.Current.CancellationToken));
+
+        var crossWar = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1, crossWar.TerminalCompleted);
+        Assert.Equal(0, crossWar.Deferred);
+        Assert.Equal(0, crossWar.VersionBlocked);
+        Assert.Equal(0, crossWar.OutstandingCount);
         Assert.Equal(
-            4L,
+            5L,
+            await CountAsync(dataSource, "quality.map_quality_runs"));
+        Assert.Equal(
+            5L,
             await CountAsync(dataSource, "runtime.map_observations"));
         Assert.Equal(
-            2L,
+            snapshotCountBeforeTransition,
             await CountAsync(dataSource, "evidence.map_snapshots"));
+        Assert.Equal(
+            itemCountBeforeTransition,
+            await CountAsync(dataSource, "evidence.map_item_occurrences"));
+        Assert.Equal(
+            textCountBeforeTransition,
+            await CountAsync(dataSource, "evidence.map_text_occurrences"));
+        Assert.Equal(
+            payloadCountAfterWarBody,
+            await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            mapParseCountBeforeTransition,
+            await CountMapSourceParseRunsAsync(dataSource));
+        Assert.Equal(
+            mapNormalizationCountBeforeTransition,
+            await CountMapNormalizationRunsAsync(dataSource));
 
+        Guid warARegionId;
+        Guid warASnapshotId;
         await using (var command = dataSource.CreateCommand())
         {
             command.CommandText =
                 """
-                SELECT COUNT(*)
+                SELECT war_region_id, map_snapshot_id
                 FROM quality.map_quality_runs
                 WHERE validation_fetch_id = @validation_fetch_id;
                 """;
             command.Parameters.AddWithValue(
                 "validation_fetch_id",
-                crossWar304.Value);
-            Assert.Equal(
-                0L,
-                (long)(await command.ExecuteScalarAsync(
-                    TestContext.Current.CancellationToken))!);
+                sameWar304B.Value);
+
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            warARegionId = reader.GetGuid(0);
+            warASnapshotId = reader.GetGuid(1);
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
         }
+
+        Guid firstWarBObservationId;
+        Guid warBRegionId;
+        await using (var command = dataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT
+                    run.war_region_id,
+                    run.map_snapshot_id,
+                    run.baseline_map_observation_id,
+                    observation.id,
+                    observation.observed_at,
+                    snapshot.representation_fetch_id
+                FROM quality.map_quality_runs AS run
+                JOIN runtime.map_observations AS observation
+                    ON observation.quality_run_id = run.id
+                JOIN evidence.map_snapshots AS snapshot
+                    ON snapshot.id = run.map_snapshot_id
+                WHERE run.validation_fetch_id = @validation_fetch_id;
+                """;
+            command.Parameters.AddWithValue(
+                "validation_fetch_id",
+                crossWar304.Value);
+
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+
+            warBRegionId = reader.GetGuid(0);
+            Assert.NotEqual(warARegionId, warBRegionId);
+            Assert.Equal(warASnapshotId, reader.GetGuid(1));
+            Assert.True(reader.IsDBNull(2));
+            firstWarBObservationId = reader.GetGuid(3);
+            Assert.Equal(
+                crossWar304At,
+                reader.GetFieldValue<DateTimeOffset>(4));
+            Assert.Equal(
+                latestRepresentationFetchId.Value,
+                reader.GetGuid(5));
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var warBSecond304 = await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            warBAt.AddSeconds(3),
+            latestRepresentationFetchId,
+            "m6-g7-war-2-304-second");
+        _ = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        var warBSecond = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1, warBSecond.TerminalCompleted);
+        Assert.Equal(0, warBSecond.Deferred);
+        Assert.Equal(0, warBSecond.VersionBlocked);
+
+        await using (var command = dataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT
+                    run.war_region_id,
+                    run.baseline_map_observation_id
+                FROM quality.map_quality_runs AS run
+                WHERE run.validation_fetch_id = @validation_fetch_id;
+                """;
+            command.Parameters.AddWithValue(
+                "validation_fetch_id",
+                warBSecond304.Value);
+
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal(warBRegionId, reader.GetGuid(0));
+            Assert.Equal(firstWarBObservationId, reader.GetGuid(1));
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        Assert.Equal(
+            snapshotCountBeforeTransition,
+            await CountAsync(dataSource, "evidence.map_snapshots"));
+        Assert.Equal(
+            itemCountBeforeTransition,
+            await CountAsync(dataSource, "evidence.map_item_occurrences"));
+        Assert.Equal(
+            textCountBeforeTransition,
+            await CountAsync(dataSource, "evidence.map_text_occurrences"));
+        Assert.Equal(
+            payloadCountAfterWarBody,
+            await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            mapParseCountBeforeTransition,
+            await CountMapSourceParseRunsAsync(dataSource));
+        Assert.Equal(
+            mapNormalizationCountBeforeTransition,
+            await CountMapNormalizationRunsAsync(dataSource));
+
+        var replay = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, replay.ProgressCount);
+        Assert.Equal(0, replay.OutstandingCount);
+
     }
 
     private static WarApiCoverageRecoveryCoordinator
@@ -1486,6 +1650,38 @@ public sealed class M5CanonicalRecoveryTests(
         await using var command =
             dataSource.CreateCommand(
                 $"SELECT COUNT(*) FROM {tableName};");
+        return (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!;
+    }
+
+    private static async Task<long> CountMapSourceParseRunsAsync(
+        NpgsqlDataSource dataSource)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT COUNT(*)
+            FROM evidence.source_parse_runs
+            WHERE capability_key IN (
+                'active-map-list',
+                'dynamic-map-state');
+            """);
+        return (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!;
+    }
+
+    private static async Task<long> CountMapNormalizationRunsAsync(
+        NpgsqlDataSource dataSource)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT COUNT(*)
+            FROM evidence.normalization_runs AS normalization
+            JOIN evidence.source_parse_runs AS parse
+                ON parse.id = normalization.source_parse_run_id
+            WHERE parse.capability_key IN (
+                'active-map-list',
+                'dynamic-map-state');
+            """);
         return (long)(await command.ExecuteScalarAsync(
             TestContext.Current.CancellationToken))!;
     }

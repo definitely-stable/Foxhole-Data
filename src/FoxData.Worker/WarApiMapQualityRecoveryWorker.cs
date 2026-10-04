@@ -32,21 +32,19 @@ public sealed class WarApiMapQualityRecoveryWorker(
                 if (result.ProgressCount > 0)
                 {
                     logger.LogInformation(
-                        "M6-G quality-gap recovery completed {TerminalCount} terminal gap(s); {DeferredCount} deferred, {VersionBlockedCount} version-blocked, and {CrossWarDeferredCount} cross-war gap(s) remain.",
+                        "M6-G quality-gap recovery completed {TerminalCount} terminal gap(s); {DeferredCount} deferred and {VersionBlockedCount} version-blocked gap(s) remain.",
                         result.TerminalCompleted,
                         result.Deferred,
-                        result.VersionBlocked,
-                        result.CrossWarDeferred);
+                        result.VersionBlocked);
                     continue;
                 }
 
                 if (result.OutstandingCount > 0)
                 {
                     logger.LogDebug(
-                        "M6-G quality-gap recovery has no progress; {DeferredCount} deferred, {VersionBlockedCount} version-blocked, and {CrossWarDeferredCount} cross-war gap(s) remain.",
+                        "M6-G quality-gap recovery has no progress; {DeferredCount} deferred and {VersionBlockedCount} version-blocked gap(s) remain.",
                         result.Deferred,
-                        result.VersionBlocked,
-                        result.CrossWarDeferred);
+                        result.VersionBlocked);
                 }
 
                 await Task.Delay(

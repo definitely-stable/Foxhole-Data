@@ -129,8 +129,6 @@ public static class MapQualityDeferredReasons
     public const string LaterQualityAlreadyTerminal =
         "later_quality_already_terminal";
 
-    public const string CrossWarValidationBinding =
-        "cross_war_validation_binding";
 }
 
 public sealed class MapQualityOrderingDeferredException(

@@ -7,12 +7,10 @@ namespace FoxData.Worker;
 public sealed record WarApiMapQualityRecoveryResult(
     int TerminalCompleted,
     int Deferred,
-    int VersionBlocked,
-    int CrossWarDeferred)
+    int VersionBlocked)
 {
     public int ProgressCount => TerminalCompleted;
-    public int OutstandingCount =>
-        Deferred + VersionBlocked + CrossWarDeferred;
+    public int OutstandingCount => Deferred + VersionBlocked;
 }
 
 public sealed class WarApiMapQualityRecoveryCoordinator(
@@ -30,7 +28,6 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
         var terminalCompleted = 0;
         var deferred = 0;
         var versionBlocked = 0;
-        var crossWarDeferred = 0;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -63,7 +60,7 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                             candidate.ObservedAt,
                             cancellationToken),
                     MapQualityGapValidationKind.NotModified304 =>
-                        await quality.EvaluateSameWar304Async(
+                        await quality.Evaluate304Async(
                             normalized,
                             candidate.ShardId,
                             candidate.ValidationFetchId,
@@ -83,14 +80,6 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                     {
                         versionBlocked++;
                         RecordTelemetry("version_blocked");
-                    }
-                    else if (string.Equals(
-                                 result.DeferredReason,
-                                 MapQualityDeferredReasons.CrossWarValidationBinding,
-                                 StringComparison.Ordinal))
-                    {
-                        crossWarDeferred++;
-                        RecordTelemetry("cross_war_deferred");
                     }
                     else
                     {
@@ -117,8 +106,7 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
         return new WarApiMapQualityRecoveryResult(
             terminalCompleted,
             deferred,
-            versionBlocked,
-            crossWarDeferred);
+            versionBlocked);
     }
 
     private static void RecordTelemetry(string outcome)
