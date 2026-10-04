@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G5 are complete through PR #55; M6-G6 same-war 304 quality binding is implemented in PR #56. Cross-war 304 remains M6-G7, and policy@2 activation remains deferred to M6-G8.
+Status: in progress. M6-A through M6-G6 are complete through PR #56; M6-G7 cross-war 304 quality binding is implemented in PR #57. Versioned rebuild and policy@2 activation remain deferred to M6-G8.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
