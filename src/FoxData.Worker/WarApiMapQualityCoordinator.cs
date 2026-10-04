@@ -52,7 +52,7 @@ public sealed class WarApiMapQualityCoordinator(
             cancellationToken);
     }
 
-    public async Task<WarApiMapQualityEvaluation> EvaluateSameWar304Async(
+    public async Task<WarApiMapQualityEvaluation> Evaluate304Async(
         MapSnapshotResult normalized,
         ShardId shardId,
         FetchId validationFetchId,
@@ -66,7 +66,7 @@ public sealed class WarApiMapQualityCoordinator(
             representationObservedAt > observedAt)
         {
             throw new CanonicalStateIntegrityException(
-                "Same-war 304 quality evaluation requires a later validation Fetch over an earlier reused representation.");
+                "304 quality evaluation requires a later validation Fetch over an earlier reused representation.");
         }
 
         var representationContext = await ResolveContextAsync(
@@ -103,13 +103,17 @@ public sealed class WarApiMapQualityCoordinator(
             ?? throw new CanonicalStateIntegrityException(
                 "Resolved validation map context has no WarRegion.");
 
-        if (representationContext.WarId != validationContext.WarId ||
+        if (representationContext.WarId == validationContext.WarId &&
             representationRegion.Id != validationRegion.Id)
         {
-            return Deferred(
-                MapQualityDeferredReasons.CrossWarValidationBinding);
+            throw new CanonicalStateIntegrityException(
+                "304 quality evaluation resolved one war to two different WarRegion identities for the same source map.");
         }
 
+        // A cross-war 304 is valid continuity evidence when M5 proves the
+        // new WarRegion at the validation boundary. Quality chronology and
+        // baseline selection are scoped to that target WarRegion, so the
+        // first result in the new war starts a fresh baseline chain.
         return await EvaluateResolvedAsync(
             normalized,
             validationContext,
