@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G7 are complete through PR #57. M6-G8 begins by unifying runtime and offline quality evaluation while keeping runtime pinned to policy@1; version-targeted policy@2 rebuild and activation remain later G8 slices.
+Status: in progress. M6-A through M6-G7 are complete through PR #57. M6-G8A runtime/offline evaluator parity is implemented in PR #60 while runtime remains pinned to policy@1; version-targeted policy@2 rebuild and activation remain later G8 slices.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
