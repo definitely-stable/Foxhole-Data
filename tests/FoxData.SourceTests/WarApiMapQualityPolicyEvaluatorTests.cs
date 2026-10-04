@@ -137,6 +137,19 @@ public sealed class WarApiMapQualityPolicyEvaluatorTests
     }
 
     [Fact]
+    public void OnlyComparativePoliciesRequireCompleteBaselineSnapshot()
+    {
+        Assert.False(
+            WarApiMapQualityPolicyEvaluator.RequiresBaselineSnapshot(
+                WarApiMapQualityPolicyRegistry.Get(
+                    WarApiVersions.MapQualityPolicyV1)));
+        Assert.True(
+            WarApiMapQualityPolicyEvaluator.RequiresBaselineSnapshot(
+                WarApiMapQualityPolicyRegistry.Get(
+                    WarApiVersions.MapQualityPolicyV2)));
+    }
+
+    [Fact]
     public void StructuralMetricsRemainCompatibleWithPolicyV1()
     {
         var current = Load("invalid-coordinate.json");
