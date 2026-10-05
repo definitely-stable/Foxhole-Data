@@ -20,9 +20,17 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
 {
     private const int BatchSize = 64;
 
+    public Task<WarApiMapQualityRecoveryResult> RunOnceAsync(
+        CancellationToken cancellationToken = default) =>
+        RunOnceAsync(
+            WarApiMapQualityTarget.Live,
+            cancellationToken);
+
     public async Task<WarApiMapQualityRecoveryResult> RunOnceAsync(
+        WarApiMapQualityTarget target,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(target);
         DateTimeOffset? afterObservedAt = null;
         FetchId? afterValidationFetchId = null;
         var terminalCompleted = 0;
@@ -34,8 +42,8 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
             var batch = await gaps.GetPendingAsync(
                 WarApiCatalog.SourceKey,
                 WarApiCoverageCapabilityPlans.QualityRecovery,
-                WarApiVersions.MapTaxonomy,
-                WarApiVersions.MapQualityPolicy,
+                target.TaxonomyVersion,
+                target.PolicyVersion,
                 afterObservedAt,
                 afterValidationFetchId,
                 BatchSize,
@@ -58,6 +66,7 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                             candidate.ShardId,
                             candidate.ValidationFetchId,
                             candidate.ObservedAt,
+                            target,
                             cancellationToken),
                     MapQualityGapValidationKind.NotModified304 =>
                         await quality.Evaluate304Async(
@@ -66,6 +75,7 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                             candidate.ValidationFetchId,
                             candidate.RepresentationObservedAt,
                             candidate.ObservedAt,
+                            target,
                             cancellationToken),
                     _ => throw new CanonicalStateIntegrityException(
                         "Unknown quality-gap validation kind."),
@@ -79,18 +89,24 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
                             StringComparison.Ordinal))
                     {
                         versionBlocked++;
-                        RecordTelemetry("version_blocked");
+                        RecordTelemetry(
+                            "version_blocked",
+                            target.PolicyVersion);
                     }
                     else
                     {
                         deferred++;
-                        RecordTelemetry("deferred");
+                        RecordTelemetry(
+                            "deferred",
+                            target.PolicyVersion);
                     }
                 }
                 else
                 {
                     terminalCompleted++;
-                    RecordTelemetry("terminal");
+                    RecordTelemetry(
+                        "terminal",
+                        target.PolicyVersion);
                 }
 
                 afterObservedAt = candidate.ObservedAt;
@@ -109,12 +125,17 @@ public sealed class WarApiMapQualityRecoveryCoordinator(
             versionBlocked);
     }
 
-    private static void RecordTelemetry(string outcome)
+    private static void RecordTelemetry(
+        string outcome,
+        string policyVersion)
     {
         WarApiTelemetry.MapQualityRecovery.Add(
             1,
             new KeyValuePair<string, object?>(
                 "outcome",
-                outcome));
+                outcome),
+            new KeyValuePair<string, object?>(
+                "policy_version",
+                policyVersion));
     }
 }
