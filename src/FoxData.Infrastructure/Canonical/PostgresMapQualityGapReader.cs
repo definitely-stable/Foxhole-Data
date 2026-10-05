@@ -7,8 +7,9 @@ using NpgsqlTypes;
 namespace FoxData.Infrastructure.Canonical;
 
 // M6-G quality-gap scanner over selected parser/normalizer identities.
-// G6 adds exact-lineage 304 validation bindings while the Worker remains
-// responsible for proving same-WarRegion eligibility before evaluation.
+// G6/G7 add exact-lineage 304 validation bindings while the Worker remains
+// responsible for proving the authoritative WarRegion at each validation
+// boundary before evaluation.
 public sealed class PostgresMapQualityGapReader(NpgsqlDataSource dataSource)
     : IMapQualityGapReader
 {

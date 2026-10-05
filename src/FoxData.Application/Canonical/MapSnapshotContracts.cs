@@ -90,6 +90,10 @@ public sealed record MapSnapshotResult(
 
 public interface IMapSnapshotStore
 {
+    Task<MapSnapshotResult?> GetByIdAsync(
+        MapSnapshotId mapSnapshotId,
+        CancellationToken cancellationToken);
+
     Task<MapSnapshotResult?> GetByNormalizationRunAsync(
         NormalizationRunId normalizationRunId,
         CancellationToken cancellationToken);

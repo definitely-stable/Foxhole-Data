@@ -17,8 +17,10 @@ This document translates the normative M6 contract into implementation order aga
   or less severe terminal decision.
 - The store refuses an incorrect or omitted latest accepted baseline, checks
   exact source-endpoint/war shard agreement and proven first-seen membership.
-- The War API coordinator evaluates the versioned eight-rule structural shell
-  after map normalization. Historic restart/mass-NONE rules remain M6-F work.
+- The War API coordinator now routes runtime quality through the same
+  `WarApiMapQualityPolicyEvaluator` used by F2 calibration. Runtime remains
+  pinned to policy@1 in G8-A; policy@2 rebuild/activation remains later G8
+  work.
 - M6-G1 through G4 are on main through PR #54.
 - M6-G5 replaces the narrow E3 pending reader with a version-aware,
   source-neutral quality-gap scanner and a testable recovery coordinator.
@@ -29,7 +31,10 @@ This document translates the normative M6 contract into implementation order aga
 - M6-G7 generalizes the same path to proven cross-war 304 continuity: the
   validation-side WarRegion owns the new quality identity, the old MapSnapshot
   is reused, and the new WarRegion starts a fresh baseline chain.
-  Versioned rebuild/policy@2 activation remains G8.
+- M6-G8A is implemented in PR #60: complete baseline snapshots are loadable by
+  immutable MapSnapshotId and production/offline evaluation share one rule
+  engine while runtime remains pinned to policy@1.
+  Version-targeted rebuild/policy@2 activation remains later G8 work.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -62,7 +67,7 @@ Frozen foundations unless a concrete defect is found:
 - parser-diagnostic versus taxonomy-authority separation;
 - M5-H invariants.
 
-M6-F2 is complete in PR #50. M6-G1 through G5 are complete on main through PR #55, and G6 is implemented in PR #56. The next implementation slice after merge is M6-G7: cross-war 304 quality binding over the already-proven exact representation lineage.
+M6-F2 is complete in PR #50. M6-G1 through G7 are complete on main through PR #57. The next implementation slice is M6-G8: versioned quality rebuild and controlled policy@2 activation.
 
 ## Non-negotiable invariants
 
@@ -768,6 +773,48 @@ MapSnapshot
 + taxonomyVersion
 + qualityPolicyVersion
 ~~~
+
+G8 is deliberately split so policy@2 is never activated before its runtime
+execution path and historical rebuild are proven:
+
+### G8-A. Runtime/offline evaluator parity
+
+- production and the offline F2 lab MUST use
+  `WarApiMapQualityPolicyEvaluator` as the single rule engine;
+- runtime remains pinned to `warapi-map-quality@1`;
+- the current accepted baseline's complete MapSnapshot graph must be loadable by
+  `MapSnapshotId` so calibrated rules can compare source occurrences and
+  source metadata without reparsing HTTP payloads;
+- the by-ID snapshot read is source-neutral, read-only, and must re-run the
+  same durable graph-integrity checks as normalization-run lookup;
+- policy@1 runtime decisions/findings must remain semantically compatible with
+  the previously persisted structural-only path;
+- no schema migration and no policy@2 activation belong to G8-A.
+
+### G8-B. Explicit version-targeted reprocessing
+
+- separate the live runtime policy selection from the policy version selected
+  for local rebuild;
+- quality-gap scanning, ordering, evaluation and writes must carry the explicit
+  target taxonomy/policy identity;
+- allow `live=@1` while `rebuild=@2`.
+
+### G8-C. Ordered policy@2 rebuild
+
+- replay all durable 200, same-war 304 and cross-war 304 validation boundaries
+  under policy@2 using the existing chronology barrier;
+- preserve every @1 run unchanged;
+- prove restart/quarantine, suspect and accepted baseline behavior;
+- process restart must resume from durable state and converge without HTTP.
+
+### G8-D. Controlled activation
+
+- audit all runtime consumers of map observations so they cannot mix multiple
+  policy versions as one logical stream;
+- require zero pending/deferred/version-blocked @2 work and zero provenance
+  violations;
+- only after that gate may `WarApiVersions.MapQualityPolicy` move from @1
+  to @2.
 
 ## G9. Recovery tests
 
