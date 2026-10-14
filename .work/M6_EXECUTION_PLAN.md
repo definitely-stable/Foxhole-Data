@@ -38,11 +38,14 @@ This document translates the normative M6 contract into implementation order aga
   policy@1, while local recovery may independently target policy@2 without
   changing the runtime selector. Version-targeted scanning, ordering,
   evaluation and writes use that same frozen target.
-- M6-G8C builds the full ordered policy@2 recovery proof over durable
-  PostgreSQL evidence: representative accepted/suspect/quarantined outcomes,
-  same-war 304, cross-war 304, version-isolated baselines, partial rebuild
-  restart/resume, immutable @1 history, and zero new source-state writes.
-  Activation remains G8-D.
+- M6-G8C is merged in PR #65 and proves the full ordered policy@2 rebuild over
+  durable PostgreSQL evidence: representative accepted/suspect/quarantined
+  outcomes, same-war 304, cross-war 304, version-isolated baselines, partial
+  rebuild restart/resume, immutable @1 history, and zero new source-state
+  writes.
+- M6-G8D activates policy@2 after a runtime-consumer audit. There are currently
+  no product-facing map-observation readers in src, so no existing projection
+  can mix @1/@2 rows. Historical @1 recovery remains explicit and immutable.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -845,10 +848,19 @@ execution path and historical rebuild are proven:
 
 - audit all runtime consumers of map observations so they cannot mix multiple
   policy versions as one logical stream;
-- require zero pending/deferred/version-blocked @2 work and zero provenance
-  violations;
-- only after that gate may `WarApiVersions.MapQualityPolicy` move from @1
-  to @2.
+- current audit result: no Current War/Timeline/Replay reader in `src`
+  consumes `runtime.map_observations`; the existing M6 ordering reader is
+  already taxonomy/policy-version scoped;
+- preserve explicit @1 replay after activation; historical tests MUST request
+  `WarApiMapQualityTarget.ForPolicyVersion(MapQualityPolicyV1)` instead of
+  depending on the live selector;
+- require the G8-C representative @2 rebuild to converge with zero
+  deferred/version-blocked/outstanding work and unchanged source evidence;
+- then move `WarApiVersions.MapQualityPolicy` from @1 to @2;
+- activation changes selection only. It MUST NOT rewrite/delete @1 or require a
+  schema migration;
+- record the audit and rollback property in
+  `.work/M6_G8D_ACTIVATION.md`.
 
 ## G9. Recovery tests
 

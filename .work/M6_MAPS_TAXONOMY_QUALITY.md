@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G7 are complete through PR #57, M6-G8A is merged in PR #60, and M6-G8B explicit version-targeted reprocessing is merged in PR #61. M6-G8C ordered policy@2 rebuild evidence is in implementation while runtime remains pinned to policy@1; activation remains G8-D.
+Status: in progress. M6-A through M6-G7 are complete through PR #57, M6-G8A is merged in PR #60, M6-G8B is merged in PR #61, and M6-G8C is merged in PR #65. M6-G8D activates the calibrated policy@2 after confirming no current product reader can mix versioned map observations.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1030,6 +1030,14 @@ remain terminal but must not become accepted baselines. After convergence the
 @1 signature and Fetch/Payload/parse/normalization/snapshot/occurrence counts
 must be byte-for-byte/count-for-count unchanged, the @2 gap scan must be empty,
 and a repeated @2 pass must be quiescent.
+
+G8-D changes the ordinary runtime selector to policy@2 only after that rebuild
+proof. The activation audit found no product-facing reader in the current
+`src` tree that consumes `runtime.map_observations`; only the M6 quality
+machinery currently uses those rows, and its baseline/ordering reads are
+version-scoped. Policy@1 remains registered and explicitly replayable after
+activation. Future M7+ readers MUST select a taxonomy/policy version rather
+than flattening all immutable observation versions into one stream.
 
 ## 20. Concurrency and transaction rules
 
