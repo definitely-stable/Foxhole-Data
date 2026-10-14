@@ -43,9 +43,13 @@ This document translates the normative M6 contract into implementation order aga
   outcomes, same-war 304, cross-war 304, version-isolated baselines, partial
   rebuild restart/resume, immutable @1 history, and zero new source-state
   writes.
-- M6-G8D activates policy@2 after a runtime-consumer audit. There are currently
-  no product-facing map-observation readers in src, so no existing projection
-  can mix @1/@2 rows. Historical @1 recovery remains explicit and immutable.
+- M6-G8D is merged in PR #66. Policy@2 is the live selector after the
+  runtime-consumer audit; historical @1 recovery remains explicit and
+  immutable.
+- M6-G9 closes the remaining recovery-level failure windows: direct late
+  quality evaluation must defer behind an earlier missing candidate, and an
+  injected database failure during accepted MapObservation insertion must roll
+  back the entire quality transaction before a fresh recovery pass succeeds.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -873,6 +877,19 @@ Independent RecoveryTests must cover:
 - quality transaction interruption;
 - 304 coverage / quality binding missing;
 - cross-war 304 binding missing.
+
+G9 completion proof:
+
+- call the quality coordinator directly on a later body-bearing candidate while
+  its earlier candidate has no quality result; it MUST defer with
+  `earlier_quality_missing`, write no QualityRun, and a subsequent recovery
+  pass MUST process both in chronology order without another Fetch;
+- inject a PostgreSQL trigger that fails accepted MapObservation insertion
+  after the quality transaction has begun; the failed pass MUST leave zero
+  QualityRun/finding/observation rows and no WarRegion enrichment;
+- remove the fault and recreate the recovery coordinator; the next pass MUST
+  create exactly one accepted graph, enrich the WarRegion, preserve Fetch and
+  MapSnapshot counts, and become idempotently quiescent.
 
 ## G10. M6-G exit gate
 

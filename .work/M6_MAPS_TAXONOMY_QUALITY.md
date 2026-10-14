@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G7 are complete through PR #57, M6-G8A is merged in PR #60, M6-G8B is merged in PR #61, and M6-G8C is merged in PR #65. M6-G8D activates the calibrated policy@2 after confirming no current product reader can mix versioned map observations.
+Status: in progress. M6-A through M6-G8D are complete through PR #66 and the live quality policy is now warapi-map-quality@2. M6-G9 is closing the remaining recovery-level chronology and transaction-interruption failure windows before the G10 exit gate.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
