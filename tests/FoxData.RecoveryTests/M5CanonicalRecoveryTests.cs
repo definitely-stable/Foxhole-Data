@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using FoxData.Application.Canonical;
 using FoxData.Application.Evidence;
 using FoxData.Application.Ingestion;
@@ -1347,6 +1348,493 @@ public sealed class M5CanonicalRecoveryTests(
             WarApiVersions.MapQualityPolicyV1,
             WarApiVersions.MapQualityPolicy);
 
+    }
+
+    [Fact]
+    public async Task PolicyV2OrderedRebuildResumesAndPreservesVersionIsolation()
+    {
+        await MigrateAsync();
+        await ResetAsync();
+
+        await using var dataSource =
+            NpgsqlDataSource.Create(postgres.ConnectionString);
+        var registry = new SourceRegistry(
+            new PostgresSourceRegistryStore(dataSource));
+
+        var source = await registry.RegisterSourceAsync(
+            WarApiCatalog.SourceKey,
+            "Official Foxhole War API",
+            TestContext.Current.CancellationToken);
+        var shard = await registry.RegisterShardAsync(
+            source.Resource.Id,
+            "live-1",
+            "Live-1",
+            "live",
+            TestContext.Current.CancellationToken);
+        var warEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.RuntimeWarState.Key,
+            "war",
+            TestContext.Current.CancellationToken);
+        var mapsEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.ActiveMapList.Key,
+            "maps",
+            TestContext.Current.CancellationToken);
+        var dynamicEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.DynamicMapState.Key,
+            "map-dynamic/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+
+        var ingestion = new IngestionKernel(
+            new PostgresIngestionKernelStore(dataSource));
+        var evidence = new EvidenceKernel(
+            new PostgresEvidenceKernelStore(dataSource));
+
+        var at = new DateTimeOffset(
+            2026, 10, 14, 8, 0, 0, TimeSpan.Zero);
+
+        await CaptureRawAsync(
+            ingestion,
+            evidence,
+            warEndpoint.Resource.Id,
+            at,
+            Encoding.UTF8.GetBytes(
+                """{"warId":"m6-g8c-war-a","warNumber":136,"winner":"NONE"}"""),
+            "m6-g8c-war-a");
+
+        var mapsRepresentation = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            mapsEndpoint.Resource.Id,
+            at.AddSeconds(1),
+            Encoding.UTF8.GetBytes(
+                """["DeadLandsHex"]"""),
+            "m6-g8c-maps-a");
+
+        var neutral = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(2),
+            CreateDynamicPayload(
+                version: 1,
+                lastUpdated: 1_700_000_000_000,
+                NeutralItems()),
+            "m6-g8c-neutral");
+
+        var healthyBaseline = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(3),
+            CreateDynamicPayload(
+                version: 8,
+                lastUpdated: 1_700_000_010_000,
+                HealthyItems()),
+            "m6-g8c-healthy-baseline");
+
+        var versionRegression = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(4),
+            CreateDynamicPayload(
+                version: 4,
+                lastUpdated: 1_700_000_020_000,
+                HealthyItems()),
+            "m6-g8c-version-regression");
+
+        var timestampRegression = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(5),
+            CreateDynamicPayload(
+                version: 5,
+                lastUpdated: 1_699_999_000_000,
+                HealthyItems()),
+            "m6-g8c-time-regression");
+
+        var massDisappearance = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(6),
+            CreateDynamicPayload(
+                version: 6,
+                lastUpdated: 1_700_000_030_000,
+                HealthyItems().Take(8).ToArray()),
+            "m6-g8c-mass-disappearance");
+
+        var nearEmpty = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(7),
+            CreateDynamicPayload(
+                version: 7,
+                lastUpdated: 1_700_000_040_000,
+                HealthyItems().Take(2).ToArray()),
+            "m6-g8c-near-empty");
+
+        var restartCollapse = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(8),
+            CreateDynamicPayload(
+                version: 1,
+                lastUpdated: 1_700_000_050_000,
+                HealthyItems()
+                    .Take(18)
+                    .Select(item => item with { TeamId = "NONE" })
+                    .ToArray()),
+            "m6-g8c-restart-collapse");
+
+        var duplicate = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(9),
+            CreateDynamicPayload(
+                version: 9,
+                lastUpdated: 1_700_000_060_000,
+                HealthyItems()
+                    .Concat([HealthyItems()[0]])
+                    .ToArray()),
+            "m6-g8c-duplicate");
+
+        var unknownTaxonomy = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(10),
+            CreateDynamicPayload(
+                version: 10,
+                lastUpdated: 1_700_000_070_000,
+                UnknownTaxonomyItems()),
+            "m6-g8c-unknown-taxonomy");
+
+        var healthyRecovery = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddSeconds(11),
+            CreateDynamicPayload(
+                version: 11,
+                lastUpdated: 1_700_000_080_000,
+                HealthyItems()),
+            "m6-g8c-healthy-recovery");
+
+        var coverageRecovery = CreateRecoveryCoordinator(dataSource);
+        var initialCanonical = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(12, initialCanonical.ParseRunsRepaired);
+        Assert.Equal(12, initialCanonical.CoverageRecorded);
+        Assert.Equal(12, initialCanonical.CanonicalCompleted);
+
+        var sameWar304 = await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            at.AddMinutes(1),
+            healthyRecovery,
+            "m6-g8c-same-war-304");
+        _ = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+
+        var warBAt = at.AddMinutes(10);
+        await CaptureRawAsync(
+            ingestion,
+            evidence,
+            warEndpoint.Resource.Id,
+            warBAt,
+            Encoding.UTF8.GetBytes(
+                """{"warId":"m6-g8c-war-b","warNumber":137,"winner":"NONE"}"""),
+            "m6-g8c-war-b");
+        var maps304 = await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            mapsEndpoint.Resource.Id,
+            warBAt.AddSeconds(1),
+            mapsRepresentation,
+            "m6-g8c-maps-b-304");
+        var crossWar304 = await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            warBAt.AddSeconds(2),
+            healthyRecovery,
+            "m6-g8c-cross-war-304");
+
+        var transition = await coverageRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.True(transition.ContinuityApplied >= 1);
+        Assert.True(
+            await new PostgresCoverageStore(dataSource)
+                .IsMapContinuityAppliedAsync(
+                    maps304,
+                    WarApiVersions.CoverageReprocessor,
+                    TestContext.Current.CancellationToken));
+
+        var liveRecovery =
+            CreateQualityRecoveryCoordinator(dataSource);
+        var live = await liveRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(12, live.TerminalCompleted);
+        Assert.Equal(0, live.Deferred);
+        Assert.Equal(0, live.VersionBlocked);
+        Assert.Equal(0, live.OutstandingCount);
+
+        var v1Signature = await ReadPolicyQualitySignatureAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV1);
+
+        var fetchCount =
+            await CountAsync(dataSource, "evidence.fetches");
+        var payloadCount =
+            await CountAsync(dataSource, "evidence.payloads");
+        var parseCount =
+            await CountAsync(dataSource, "evidence.source_parse_runs");
+        var normalizationCount =
+            await CountAsync(dataSource, "evidence.normalization_runs");
+        var snapshotCount =
+            await CountAsync(dataSource, "evidence.map_snapshots");
+        var itemCount =
+            await CountAsync(dataSource, "evidence.map_item_occurrences");
+        var textCount =
+            await CountAsync(dataSource, "evidence.map_text_occurrences");
+
+        var target = WarApiMapQualityTarget.ForPolicyVersion(
+            WarApiVersions.MapQualityPolicyV2);
+
+        // Simulate a partial rebuild before process loss: persist only the
+        // earliest @2 candidate, then discard the coordinator instance.
+        var neutralSnapshot = await ReadSnapshotForRepresentationAsync(
+            dataSource,
+            neutral);
+        var partial = await CreateQualityCoordinator(dataSource)
+            .EvaluateAsync(
+                neutralSnapshot,
+                shard.Resource.Id,
+                neutral,
+                at.AddSeconds(2),
+                target,
+                TestContext.Current.CancellationToken);
+        Assert.Equal(WarApiMapQualityStatus.Accepted, partial.Status);
+
+        // A fresh coordinator must resume solely from durable @2 state.
+        var resumed = await CreateQualityRecoveryCoordinator(dataSource)
+            .RunOnceAsync(
+                target,
+                TestContext.Current.CancellationToken);
+        Assert.Equal(11, resumed.TerminalCompleted);
+        Assert.Equal(0, resumed.Deferred);
+        Assert.Equal(0, resumed.VersionBlocked);
+        Assert.Equal(0, resumed.OutstandingCount);
+
+        Assert.Equal(
+            v1Signature,
+            await ReadPolicyQualitySignatureAsync(
+                dataSource,
+                WarApiVersions.MapQualityPolicyV1));
+
+        Assert.Equal(
+            fetchCount,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            payloadCount,
+            await CountAsync(dataSource, "evidence.payloads"));
+        Assert.Equal(
+            parseCount,
+            await CountAsync(dataSource, "evidence.source_parse_runs"));
+        Assert.Equal(
+            normalizationCount,
+            await CountAsync(dataSource, "evidence.normalization_runs"));
+        Assert.Equal(
+            snapshotCount,
+            await CountAsync(dataSource, "evidence.map_snapshots"));
+        Assert.Equal(
+            itemCount,
+            await CountAsync(dataSource, "evidence.map_item_occurrences"));
+        Assert.Equal(
+            textCount,
+            await CountAsync(dataSource, "evidence.map_text_occurrences"));
+
+        await AssertQualityAsync(
+            dataSource,
+            neutral,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource,
+            healthyBaseline,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2,
+            "source-version.gap");
+        await AssertQualityAsync(
+            dataSource,
+            versionRegression,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2,
+            "source-version.regression");
+        await AssertQualityAsync(
+            dataSource,
+            timestampRegression,
+            MapQualityDecision.Suspect,
+            WarApiVersions.MapQualityPolicyV2,
+            "source-last-updated.regression");
+        await AssertQualityAsync(
+            dataSource,
+            massDisappearance,
+            MapQualityDecision.Suspect,
+            WarApiVersions.MapQualityPolicyV2,
+            "representation.mass-disappearance");
+        await AssertQualityAsync(
+            dataSource,
+            nearEmpty,
+            MapQualityDecision.Suspect,
+            WarApiVersions.MapQualityPolicyV2,
+            "representation.near-empty",
+            "representation.mass-disappearance");
+        await AssertQualityAsync(
+            dataSource,
+            restartCollapse,
+            MapQualityDecision.Quarantined,
+            WarApiVersions.MapQualityPolicyV2,
+            "source-version.regression",
+            "ownership.restart-collapse");
+        await AssertQualityAsync(
+            dataSource,
+            duplicate,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2,
+            "source-version.gap",
+            "representation.duplicate-occurrence");
+        await AssertQualityAsync(
+            dataSource,
+            unknownTaxonomy,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2,
+            "taxonomy.unknown-icon",
+            "taxonomy.unknown-team",
+            "taxonomy.unknown-flag-bits");
+        await AssertQualityAsync(
+            dataSource,
+            healthyRecovery,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource,
+            sameWar304,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource,
+            crossWar304,
+            MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+
+        var regressionObservation = await ReadObservationIdAsync(
+            dataSource,
+            versionRegression,
+            WarApiVersions.MapQualityPolicyV2);
+        Assert.NotNull(regressionObservation);
+
+        foreach (var blocked in new[]
+                 {
+                     timestampRegression,
+                     massDisappearance,
+                     nearEmpty,
+                     restartCollapse,
+                 })
+        {
+            Assert.Null(
+                await ReadObservationIdAsync(
+                    dataSource,
+                    blocked,
+                    WarApiVersions.MapQualityPolicyV2));
+            Assert.Equal(
+                regressionObservation,
+                await ReadBaselineObservationIdAsync(
+                    dataSource,
+                    blocked,
+                    WarApiVersions.MapQualityPolicyV2));
+        }
+
+        var duplicateObservation = await ReadObservationIdAsync(
+            dataSource,
+            duplicate,
+            WarApiVersions.MapQualityPolicyV2);
+        Assert.NotNull(duplicateObservation);
+        Assert.Equal(
+            regressionObservation,
+            await ReadBaselineObservationIdAsync(
+                dataSource,
+                duplicate,
+                WarApiVersions.MapQualityPolicyV2));
+
+        var unknownObservation = await ReadObservationIdAsync(
+            dataSource,
+            unknownTaxonomy,
+            WarApiVersions.MapQualityPolicyV2);
+        Assert.NotNull(unknownObservation);
+        Assert.Equal(
+            duplicateObservation,
+            await ReadBaselineObservationIdAsync(
+                dataSource,
+                unknownTaxonomy,
+                WarApiVersions.MapQualityPolicyV2));
+
+        var recoveryObservation = await ReadObservationIdAsync(
+            dataSource,
+            healthyRecovery,
+            WarApiVersions.MapQualityPolicyV2);
+        Assert.NotNull(recoveryObservation);
+        Assert.Equal(
+            unknownObservation,
+            await ReadBaselineObservationIdAsync(
+                dataSource,
+                healthyRecovery,
+                WarApiVersions.MapQualityPolicyV2));
+        Assert.Equal(
+            recoveryObservation,
+            await ReadBaselineObservationIdAsync(
+                dataSource,
+                sameWar304,
+                WarApiVersions.MapQualityPolicyV2));
+        Assert.Null(
+            await ReadBaselineObservationIdAsync(
+                dataSource,
+                crossWar304,
+                WarApiVersions.MapQualityPolicyV2));
+
+        var replay = await CreateQualityRecoveryCoordinator(dataSource)
+            .RunOnceAsync(
+                target,
+                TestContext.Current.CancellationToken);
+        Assert.Equal(0, replay.ProgressCount);
+        Assert.Equal(0, replay.Deferred);
+        Assert.Equal(0, replay.VersionBlocked);
+        Assert.Equal(0, replay.OutstandingCount);
+
+        var pending = await new PostgresMapQualityGapReader(dataSource)
+            .GetPendingAsync(
+                WarApiCatalog.SourceKey,
+                WarApiCoverageCapabilityPlans.QualityRecovery,
+                target.TaxonomyVersion,
+                target.PolicyVersion,
+                null,
+                null,
+                64,
+                TestContext.Current.CancellationToken);
+        Assert.Empty(pending);
+
+        Assert.Equal(
+            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicy);
     }
 
     private static WarApiCoverageRecoveryCoordinator
