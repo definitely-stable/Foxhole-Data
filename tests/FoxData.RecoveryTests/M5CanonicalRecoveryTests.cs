@@ -1837,6 +1837,255 @@ public sealed class M5CanonicalRecoveryTests(
             WarApiVersions.MapQualityPolicy);
     }
 
+    private sealed record QualityMapItem(
+        string TeamId,
+        int IconType,
+        double X,
+        double Y,
+        int Flags);
+
+    private static byte[] CreateDynamicPayload(
+        int version,
+        long lastUpdated,
+        IReadOnlyList<QualityMapItem> items)
+    {
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                regionId = 1,
+                scorchedVictoryTowns = 0,
+                mapItems = items.Select(
+                    item => new
+                    {
+                        teamId = item.TeamId,
+                        iconType = item.IconType,
+                        x = item.X,
+                        y = item.Y,
+                        flags = item.Flags,
+                    }),
+                mapTextItems = Array.Empty<object>(),
+                lastUpdated,
+                version,
+            });
+    }
+
+    private static QualityMapItem[] NeutralItems() =>
+        [
+            new("NONE", 23, 0.25, 0.35, 0),
+            new("NONE", 24, 0.35, 0.45, 0),
+            new("NONE", 45, 0.45, 0.55, 0),
+            new("NONE", 46, 0.55, 0.65, 0),
+        ];
+
+    private static QualityMapItem[] HealthyItems() =>
+        [
+            new("WARDENS", 39, 0.50, 0.56, 0),
+            new("COLONIALS", 39, 0.67, 0.38, 0),
+            new("WARDENS", 11, 0.39, 0.29, 0),
+            new("COLONIALS", 34, 0.68, 0.39, 0),
+            new("WARDENS", 33, 0.75, 0.52, 0),
+            new("COLONIALS", 33, 0.36, 0.25, 0),
+            new("WARDENS", 18, 0.53, 0.58, 0),
+            new("COLONIALS", 18, 0.40, 0.21, 0),
+            new("WARDENS", 18, 0.75, 0.44, 0),
+            new("COLONIALS", 18, 0.69, 0.33, 0),
+            new("WARDENS", 18, 0.74, 0.39, 0),
+            new("COLONIALS", 52, 0.55, 0.55, 0),
+            new("WARDENS", 53, 0.52, 0.54, 0),
+            new("COLONIALS", 56, 0.38, 0.30, 0),
+            new("WARDENS", 56, 0.78, 0.52, 0),
+            new("COLONIALS", 56, 0.70, 0.38, 0),
+            new("WARDENS", 56, 0.46, 0.52, 0),
+            new("COLONIALS", 56, 0.39, 0.73, 0),
+            new("WARDENS", 45, 0.21, 0.31, 0),
+            new("COLONIALS", 46, 0.22, 0.32, 0),
+            new("WARDENS", 47, 0.23, 0.33, 0),
+            new("COLONIALS", 51, 0.24, 0.34, 0),
+            new("NONE", 23, 0.25, 0.35, 0),
+            new("NONE", 24, 0.26, 0.36, 0),
+        ];
+
+    private static QualityMapItem[] UnknownTaxonomyItems()
+    {
+        var items = HealthyItems();
+        items[0] = items[0] with { TeamId = "FUTURE_FACTION" };
+        items[1] = items[1] with { IconType = 97 };
+        items[2] = items[2] with { Flags = 1 << 30 };
+        return items;
+    }
+
+    private static async Task<MapSnapshotResult>
+        ReadSnapshotForRepresentationAsync(
+            NpgsqlDataSource dataSource,
+            FetchId representationFetchId)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT normalization_run_id
+            FROM evidence.map_snapshots
+            WHERE representation_fetch_id = @representation_fetch_id;
+            """);
+        command.Parameters.AddWithValue(
+            "representation_fetch_id",
+            representationFetchId.Value);
+
+        var value = await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken);
+        var normalizationRunId = new NormalizationRunId(
+            Assert.IsType<Guid>(value));
+
+        return await new MapSnapshotKernel(
+                new PostgresMapSnapshotStore(dataSource))
+            .GetByNormalizationRunAsync(
+                normalizationRunId,
+                TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException(
+                "Expected durable map snapshot was not found.");
+    }
+
+    private static async Task<string> ReadPolicyQualitySignatureAsync(
+        NpgsqlDataSource dataSource,
+        string policyVersion)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT COALESCE(
+                string_agg(
+                    run.id::text || '|' ||
+                    run.validation_fetch_id::text || '|' ||
+                    run.decision || '|' ||
+                    COALESCE(
+                        run.baseline_map_observation_id::text,
+                        'NULL'),
+                    ',' ORDER BY validation.retrieved_at,
+                               validation.id),
+                '')
+            FROM quality.map_quality_runs AS run
+            JOIN evidence.fetches AS validation
+                ON validation.id = run.validation_fetch_id
+            WHERE run.quality_policy_version = @policy_version;
+            """);
+        command.Parameters.AddWithValue(
+            "policy_version",
+            policyVersion);
+
+        return (string)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!;
+    }
+
+    private static async Task AssertQualityAsync(
+        NpgsqlDataSource dataSource,
+        FetchId validationFetchId,
+        MapQualityDecision expectedDecision,
+        string policyVersion,
+        params string[] requiredRuleKeys)
+    {
+        await using (var command = dataSource.CreateCommand(
+                         """
+                         SELECT decision
+                         FROM quality.map_quality_runs
+                         WHERE validation_fetch_id =
+                                   @validation_fetch_id
+                           AND quality_policy_version =
+                                   @policy_version;
+                         """))
+        {
+            command.Parameters.AddWithValue(
+                "validation_fetch_id",
+                validationFetchId.Value);
+            command.Parameters.AddWithValue(
+                "policy_version",
+                policyVersion);
+
+            Assert.Equal(
+                expectedDecision.ToString().ToLowerInvariant(),
+                Assert.IsType<string>(
+                    await command.ExecuteScalarAsync(
+                        TestContext.Current.CancellationToken)));
+        }
+
+        await using var findings = dataSource.CreateCommand(
+            """
+            SELECT finding.rule_key
+            FROM quality.map_quality_findings AS finding
+            JOIN quality.map_quality_runs AS run
+                ON run.id = finding.quality_run_id
+            WHERE run.validation_fetch_id = @validation_fetch_id
+              AND run.quality_policy_version = @policy_version
+            ORDER BY finding.rule_key;
+            """);
+        findings.Parameters.AddWithValue(
+            "validation_fetch_id",
+            validationFetchId.Value);
+        findings.Parameters.AddWithValue(
+            "policy_version",
+            policyVersion);
+
+        var actualRuleKeys = new List<string>();
+        await using var reader = await findings.ExecuteReaderAsync(
+            TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(
+                   TestContext.Current.CancellationToken))
+        {
+            actualRuleKeys.Add(reader.GetString(0));
+        }
+
+        foreach (var requiredRuleKey in requiredRuleKeys)
+        {
+            Assert.Contains(requiredRuleKey, actualRuleKeys);
+        }
+    }
+
+    private static async Task<Guid?> ReadObservationIdAsync(
+        NpgsqlDataSource dataSource,
+        FetchId validationFetchId,
+        string policyVersion)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT observation.id
+            FROM runtime.map_observations AS observation
+            JOIN quality.map_quality_runs AS run
+                ON run.id = observation.quality_run_id
+            WHERE run.validation_fetch_id = @validation_fetch_id
+              AND run.quality_policy_version = @policy_version;
+            """);
+        command.Parameters.AddWithValue(
+            "validation_fetch_id",
+            validationFetchId.Value);
+        command.Parameters.AddWithValue(
+            "policy_version",
+            policyVersion);
+
+        var value = await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken);
+        return value is null or DBNull ? null : (Guid)value;
+    }
+
+    private static async Task<Guid?> ReadBaselineObservationIdAsync(
+        NpgsqlDataSource dataSource,
+        FetchId validationFetchId,
+        string policyVersion)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT baseline_map_observation_id
+            FROM quality.map_quality_runs
+            WHERE validation_fetch_id = @validation_fetch_id
+              AND quality_policy_version = @policy_version;
+            """);
+        command.Parameters.AddWithValue(
+            "validation_fetch_id",
+            validationFetchId.Value);
+        command.Parameters.AddWithValue(
+            "policy_version",
+            policyVersion);
+
+        var value = await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken);
+        return value is null or DBNull ? null : (Guid)value;
+    }
+
     private static WarApiCoverageRecoveryCoordinator
         CreateRecoveryCoordinator(NpgsqlDataSource dataSource)
     {
