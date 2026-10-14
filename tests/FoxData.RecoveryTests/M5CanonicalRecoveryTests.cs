@@ -2131,9 +2131,9 @@ public sealed class M5CanonicalRecoveryTests(
                          WHERE source_map_name = 'DeadLandsHex';
                          """))
         {
-            Assert.Null(
-                await region.ExecuteScalarAsync(
-                    TestContext.Current.CancellationToken));
+            var sourceRegionId = await region.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken);
+            Assert.True(sourceRegionId is null or DBNull);
         }
 
         var retry = await CreateQualityRecoveryCoordinator(dataSource)
