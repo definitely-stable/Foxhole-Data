@@ -16,10 +16,10 @@ public static class WarApiVersions
     public const string MapQualityPolicyV1 = "warapi-map-quality@1";
     public const string MapQualityPolicyV2 = "warapi-map-quality@2";
 
-    // Runtime remains pinned to @1 until M6-G can perform ordered
-    // versioned reprocessing. F2 publishes/calibrates @2 without
-    // silently backfilling historical snapshots through E3 recovery.
-    public const string MapQualityPolicy = MapQualityPolicyV1;
+    // M6-G8A/B/C proved evaluator parity, explicit version targeting and
+    // ordered policy@2 rebuild over durable evidence. G8-D activates the
+    // calibrated policy while older @1 results remain immutable/replayable.
+    public const string MapQualityPolicy = MapQualityPolicyV2;
     public const string LatestMapQualityPolicy = MapQualityPolicyV2;
     public const string CoverageReprocessor = "warapi-coverage-reprocessor@1";
 
