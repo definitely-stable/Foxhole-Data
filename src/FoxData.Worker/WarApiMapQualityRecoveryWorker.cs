@@ -39,7 +39,7 @@ public sealed class WarApiMapQualityRecoveryWorker(
                     continue;
                 }
 
-                if (result.OutstandingCount > 0)
+                if (!result.IsQuiescent)
                 {
                     logger.LogDebug(
                         "M6-G quality-gap recovery has no progress; {DeferredCount} deferred and {VersionBlockedCount} version-blocked gap(s) remain.",
