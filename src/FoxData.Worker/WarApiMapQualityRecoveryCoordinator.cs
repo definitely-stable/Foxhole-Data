@@ -11,6 +11,10 @@ public sealed record WarApiMapQualityRecoveryResult(
 {
     public int ProgressCount => TerminalCompleted;
     public int OutstandingCount => Deferred + VersionBlocked;
+
+    public bool IsQuiescent =>
+        ProgressCount == 0 &&
+        OutstandingCount == 0;
 }
 
 public sealed class WarApiMapQualityRecoveryCoordinator(
