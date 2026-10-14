@@ -34,11 +34,15 @@ This document translates the normative M6 contract into implementation order aga
 - M6-G8A is merged in PR #60: complete baseline snapshots are loadable by
   immutable MapSnapshotId and production/offline evaluation share one rule
   engine while runtime remains pinned to policy@1.
-- M6-G8B introduces an explicit registered quality target. The default Worker
-  path still resolves live policy@1, while local recovery may independently
-  target policy@2 without changing the runtime selector. Version-targeted
-  scanning, ordering, evaluation and writes use that same frozen target.
-  Full historical rebuild evidence and activation remain G8-C/G8-D.
+- M6-G8B is merged in PR #61. The default Worker path still resolves live
+  policy@1, while local recovery may independently target policy@2 without
+  changing the runtime selector. Version-targeted scanning, ordering,
+  evaluation and writes use that same frozen target.
+- M6-G8C builds the full ordered policy@2 recovery proof over durable
+  PostgreSQL evidence: representative accepted/suspect/quarantined outcomes,
+  same-war 304, cross-war 304, version-isolated baselines, partial rebuild
+  restart/resume, immutable @1 history, and zero new source-state writes.
+  Activation remains G8-D.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -813,9 +817,29 @@ execution path and historical rebuild are proven:
 
 - replay all durable 200, same-war 304 and cross-war 304 validation boundaries
   under policy@2 using the existing chronology barrier;
+- representative chronology MUST include:
+  - neutral/no-baseline accepted control;
+  - healthy accepted baseline;
+  - informational source-version regression;
+  - suspect source-last-updated regression;
+  - suspect mass disappearance;
+  - suspect near-empty representation;
+  - quarantined ownership restart-collapse;
+  - informational duplicate occurrence;
+  - informational unknown icon/team/flag values;
+  - accepted healthy recovery;
+  - same-war 304;
+  - cross-war 304 after WarRegion transition;
 - preserve every @1 run unchanged;
-- prove restart/quarantine, suspect and accepted baseline behavior;
-- process restart must resume from durable state and converge without HTTP.
+- prove suspect/quarantined results are terminal but never accepted baselines;
+- prove the first cross-war @2 observation starts with baseline NULL;
+- seed only the earliest @2 result, recreate the recovery coordinator, then
+  prove the fresh process resumes the remaining work from durable state;
+- rebuild MUST create no new Fetch, Payload, parse run, normalization run,
+  MapSnapshot or occurrence row;
+- final @2 gap scan must be empty and replay must report zero progress,
+  zero deferred, zero version-blocked and zero outstanding work;
+- runtime remains pinned to policy@1 throughout G8-C.
 
 ### G8-D. Controlled activation
 
