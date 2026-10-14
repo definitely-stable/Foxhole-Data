@@ -2068,12 +2068,12 @@ public sealed class M5CanonicalRecoveryTests(
                              public.m6_g9_fail_map_observation()
                          RETURNS trigger
                          LANGUAGE plpgsql
-                         AS $
+                         AS $m6g9$
                          BEGIN
                              RAISE EXCEPTION
                                  'm6-g9 injected map observation failure';
                          END;
-                         $;
+                         $m6g9$;
 
                          DROP TRIGGER IF EXISTS
                              m6_g9_fail_map_observation
