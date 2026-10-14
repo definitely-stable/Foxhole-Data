@@ -8,7 +8,7 @@ public sealed class WarApiMapQualityPolicyTests
     public void V1ProfileLoadsEmbeddedContractAndKeepsStableIdentity()
     {
         var profile = WarApiMapQualityPolicyRegistry.Get(
-            WarApiVersions.MapQualityPolicy);
+            WarApiVersions.MapQualityPolicyV1);
 
         Assert.Equal("warapi-map-quality@1", profile.Version);
         Assert.Equal(WarApiCatalog.SourceKey, profile.Source);
@@ -143,7 +143,7 @@ public sealed class WarApiMapQualityPolicyTests
     }
 
     [Fact]
-    public void V2ProfileLoadsCalibratedRulesWithoutChangingRuntimeSelection()
+    public void V2ProfileLoadsCalibratedRulesAndIsRuntimeSelection()
     {
         var profile = WarApiMapQualityPolicyRegistry.Get(
             WarApiVersions.MapQualityPolicyV2);
@@ -156,7 +156,7 @@ public sealed class WarApiMapQualityPolicyTests
             profile.ReviewedAt);
         Assert.Equal(15, profile.Rules.Count);
         Assert.Equal(
-            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
@@ -316,7 +316,7 @@ public sealed class WarApiMapQualityPolicyTests
 
     private static WarApiMapQualityPolicyProfile GetProfile() =>
         WarApiMapQualityPolicyRegistry.Get(
-            WarApiVersions.MapQualityPolicy);
+            WarApiVersions.MapQualityPolicyV1);
 
     private static WarApiMapQualityRuleProfile GetRule(
         WarApiMapQualityPolicyProfile profile,
