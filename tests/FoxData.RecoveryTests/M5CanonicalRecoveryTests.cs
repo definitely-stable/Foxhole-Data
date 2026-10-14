@@ -1100,6 +1100,7 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(1, beforeContinuity.Deferred);
         Assert.Equal(0, beforeContinuity.VersionBlocked);
         Assert.Equal(1, beforeContinuity.OutstandingCount);
+        Assert.False(beforeContinuity.IsQuiescent);
         Assert.Equal(
             4L,
             await CountAsync(dataSource, "quality.map_quality_runs"));
@@ -1281,6 +1282,7 @@ public sealed class M5CanonicalRecoveryTests(
             TestContext.Current.CancellationToken);
         Assert.Equal(0, replay.ProgressCount);
         Assert.Equal(0, replay.OutstandingCount);
+        Assert.True(replay.IsQuiescent);
 
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
@@ -1834,6 +1836,7 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, replay.Deferred);
         Assert.Equal(0, replay.VersionBlocked);
         Assert.Equal(0, replay.OutstandingCount);
+        Assert.True(replay.IsQuiescent);
 
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
