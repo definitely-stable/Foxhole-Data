@@ -880,7 +880,11 @@ public sealed class M5CanonicalRecoveryTests(
 
         var qualityRecovery =
             CreateQualityRecoveryCoordinator(dataSource);
+        var policyV1Target =
+            WarApiMapQualityTarget.ForPolicyVersion(
+                WarApiVersions.MapQualityPolicyV1);
         var first = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(2, first.TerminalCompleted);
@@ -955,6 +959,7 @@ public sealed class M5CanonicalRecoveryTests(
         }
 
         var second = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(0, second.ProgressCount);
         Assert.Equal(0, second.OutstandingCount);
@@ -977,6 +982,7 @@ public sealed class M5CanonicalRecoveryTests(
             TestContext.Current.CancellationToken);
 
         var sameWar = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(2, sameWar.TerminalCompleted);
         Assert.Equal(0, sameWar.Deferred);
@@ -1040,6 +1046,7 @@ public sealed class M5CanonicalRecoveryTests(
         }
 
         var sameWarReplay = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(0, sameWarReplay.ProgressCount);
         Assert.Equal(0, sameWarReplay.OutstandingCount);
@@ -1087,6 +1094,7 @@ public sealed class M5CanonicalRecoveryTests(
         // new war/map-list context. G7 must remain retryable rather than
         // binding the old snapshot to an unproven WarRegion.
         var beforeContinuity = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(0, beforeContinuity.TerminalCompleted);
         Assert.Equal(1, beforeContinuity.Deferred);
@@ -1109,6 +1117,7 @@ public sealed class M5CanonicalRecoveryTests(
                     TestContext.Current.CancellationToken));
 
         var crossWar = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(1, crossWar.TerminalCompleted);
         Assert.Equal(0, crossWar.Deferred);
@@ -1218,6 +1227,7 @@ public sealed class M5CanonicalRecoveryTests(
             TestContext.Current.CancellationToken);
 
         var warBSecond = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(1, warBSecond.TerminalCompleted);
         Assert.Equal(0, warBSecond.Deferred);
@@ -1267,12 +1277,13 @@ public sealed class M5CanonicalRecoveryTests(
             await CountMapNormalizationRunsAsync(dataSource));
 
         var replay = await qualityRecovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(0, replay.ProgressCount);
         Assert.Equal(0, replay.OutstandingCount);
 
         Assert.Equal(
-            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicyV2,
             WarApiMapQualityTarget.Live.PolicyVersion);
 
         var policyV2Target =
@@ -1345,7 +1356,7 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, liveReplay.ProgressCount);
         Assert.Equal(0, liveReplay.OutstandingCount);
         Assert.Equal(
-            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);
 
     }
@@ -1579,9 +1590,13 @@ public sealed class M5CanonicalRecoveryTests(
                     WarApiVersions.CoverageReprocessor,
                     TestContext.Current.CancellationToken));
 
-        var liveRecovery =
+        var policyV1Target =
+            WarApiMapQualityTarget.ForPolicyVersion(
+                WarApiVersions.MapQualityPolicyV1);
+        var v1Recovery =
             CreateQualityRecoveryCoordinator(dataSource);
-        var live = await liveRecovery.RunOnceAsync(
+        var live = await v1Recovery.RunOnceAsync(
+            policyV1Target,
             TestContext.Current.CancellationToken);
         Assert.Equal(12, live.TerminalCompleted);
         Assert.Equal(0, live.Deferred);
@@ -1821,7 +1836,7 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, replay.OutstandingCount);
 
         Assert.Equal(
-            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);
     }
 
