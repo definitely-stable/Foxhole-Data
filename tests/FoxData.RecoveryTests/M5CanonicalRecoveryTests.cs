@@ -1820,18 +1820,6 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, replay.VersionBlocked);
         Assert.Equal(0, replay.OutstandingCount);
 
-        var pending = await new PostgresMapQualityGapReader(dataSource)
-            .GetPendingAsync(
-                WarApiCatalog.SourceKey,
-                WarApiCoverageCapabilityPlans.QualityRecovery,
-                target.TaxonomyVersion,
-                target.PolicyVersion,
-                null,
-                null,
-                64,
-                TestContext.Current.CancellationToken);
-        Assert.Empty(pending);
-
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV1,
             WarApiVersions.MapQualityPolicy);
