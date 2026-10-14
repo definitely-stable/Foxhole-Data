@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G7 are complete through PR #57. M6-G8A runtime/offline evaluator parity is implemented in PR #60 while runtime remains pinned to policy@1; version-targeted policy@2 rebuild and activation remain later G8 slices.
+Status: in progress. M6-A through M6-G7 are complete through PR #57 and M6-G8A evaluator parity is merged in PR #60. M6-G8B explicit version-targeted reprocessing is in implementation while runtime remains pinned to policy@1; full policy@2 rebuild evidence and activation remain G8-C/G8-D.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1010,6 +1010,14 @@ snapshot loading is by immutable `MapSnapshotId` and reuses the existing
 snapshot/occurrence graph; it must not reparse source payloads or create new
 normalization state. This parity step remains on runtime policy@1 and is not an
 activation event.
+
+Version-targeted reprocessing uses an explicit `WarApiMapQualityTarget`
+resolved from a registered immutable quality policy profile. The target carries
+both policy and taxonomy identity through gap discovery, chronology planning,
+evaluation and the immutable quality write. The ordinary Worker path resolves
+the live target from `WarApiVersions.MapQualityPolicy`; local recovery may
+instead select policy@2 while live remains @1. Reprocessing one version MUST
+NOT rewrite, replace or suppress runs belonging to another version.
 
 ## 20. Concurrency and transaction rules
 

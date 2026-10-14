@@ -26,14 +26,30 @@ public sealed class WarApiMapQualityCoordinator(
     MapQualityKernel quality,
     TimeProvider timeProvider)
 {
+    public Task<WarApiMapQualityEvaluation> EvaluateAsync(
+        MapSnapshotResult normalized,
+        ShardId shardId,
+        FetchId validationFetchId,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken) =>
+        EvaluateAsync(
+            normalized,
+            shardId,
+            validationFetchId,
+            observedAt,
+            WarApiMapQualityTarget.Live,
+            cancellationToken);
+
     public async Task<WarApiMapQualityEvaluation> EvaluateAsync(
         MapSnapshotResult normalized,
         ShardId shardId,
         FetchId validationFetchId,
         DateTimeOffset observedAt,
+        WarApiMapQualityTarget target,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(normalized);
+        ArgumentNullException.ThrowIfNull(target);
 
         var context = await ResolveContextAsync(
             normalized,
@@ -49,8 +65,25 @@ public sealed class WarApiMapQualityCoordinator(
             normalized,
             context,
             validationFetchId,
+            target,
             cancellationToken);
     }
+
+    public Task<WarApiMapQualityEvaluation> Evaluate304Async(
+        MapSnapshotResult normalized,
+        ShardId shardId,
+        FetchId validationFetchId,
+        DateTimeOffset representationObservedAt,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken) =>
+        Evaluate304Async(
+            normalized,
+            shardId,
+            validationFetchId,
+            representationObservedAt,
+            observedAt,
+            WarApiMapQualityTarget.Live,
+            cancellationToken);
 
     public async Task<WarApiMapQualityEvaluation> Evaluate304Async(
         MapSnapshotResult normalized,
@@ -58,9 +91,11 @@ public sealed class WarApiMapQualityCoordinator(
         FetchId validationFetchId,
         DateTimeOffset representationObservedAt,
         DateTimeOffset observedAt,
+        WarApiMapQualityTarget target,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(normalized);
+        ArgumentNullException.ThrowIfNull(target);
 
         if (validationFetchId == normalized.Snapshot.RepresentationFetchId ||
             representationObservedAt > observedAt)
@@ -118,6 +153,7 @@ public sealed class WarApiMapQualityCoordinator(
             normalized,
             validationContext,
             validationFetchId,
+            target,
             cancellationToken);
     }
 
@@ -140,14 +176,14 @@ public sealed class WarApiMapQualityCoordinator(
         MapSnapshotResult normalized,
         WarApiMapContextResolution context,
         FetchId validationFetchId,
+        WarApiMapQualityTarget target,
         CancellationToken cancellationToken)
     {
         var region = context.WarRegion
             ?? throw new CanonicalStateIntegrityException(
                 "Resolved map quality context has no WarRegion.");
 
-        var profile = WarApiMapQualityPolicyRegistry.Get(
-            WarApiVersions.MapQualityPolicy);
+        var profile = target.ResolveProfile();
         var existing = await qualityStore.GetAsync(
             normalized.Snapshot.Id,
             region.Id,

@@ -1270,6 +1270,83 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, replay.ProgressCount);
         Assert.Equal(0, replay.OutstandingCount);
 
+        Assert.Equal(
+            WarApiVersions.MapQualityPolicyV1,
+            WarApiMapQualityTarget.Live.PolicyVersion);
+
+        var policyV2Target =
+            WarApiMapQualityTarget.ForPolicyVersion(
+                WarApiVersions.MapQualityPolicyV2);
+        Assert.Equal(
+            WarApiVersions.MapTaxonomy,
+            policyV2Target.TaxonomyVersion);
+
+        var policyV2 = await qualityRecovery.RunOnceAsync(
+            policyV2Target,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(6, policyV2.TerminalCompleted);
+        Assert.Equal(0, policyV2.Deferred);
+        Assert.Equal(0, policyV2.VersionBlocked);
+        Assert.Equal(0, policyV2.OutstandingCount);
+
+        await using (var command = dataSource.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT
+                    quality_policy_version,
+                    taxonomy_version,
+                    COUNT(*)
+                FROM quality.map_quality_runs
+                GROUP BY quality_policy_version, taxonomy_version
+                ORDER BY quality_policy_version;
+                """;
+
+            await using var reader = await command.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal(
+                WarApiVersions.MapQualityPolicyV1,
+                reader.GetString(0));
+            Assert.Equal(
+                WarApiVersions.MapTaxonomy,
+                reader.GetString(1));
+            Assert.Equal(6L, reader.GetInt64(2));
+
+            Assert.True(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+            Assert.Equal(
+                WarApiVersions.MapQualityPolicyV2,
+                reader.GetString(0));
+            Assert.Equal(
+                WarApiVersions.MapTaxonomy,
+                reader.GetString(1));
+            Assert.Equal(6L, reader.GetInt64(2));
+
+            Assert.False(await reader.ReadAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        Assert.Equal(
+            12L,
+            await CountAsync(dataSource, "runtime.map_observations"));
+
+        var policyV2Replay = await qualityRecovery.RunOnceAsync(
+            policyV2Target,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, policyV2Replay.ProgressCount);
+        Assert.Equal(0, policyV2Replay.OutstandingCount);
+
+        var liveReplay = await qualityRecovery.RunOnceAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0, liveReplay.ProgressCount);
+        Assert.Equal(0, liveReplay.OutstandingCount);
+        Assert.Equal(
+            WarApiVersions.MapQualityPolicyV1,
+            WarApiVersions.MapQualityPolicy);
+
     }
 
     private static WarApiCoverageRecoveryCoordinator

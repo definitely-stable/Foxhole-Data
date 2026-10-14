@@ -31,10 +31,14 @@ This document translates the normative M6 contract into implementation order aga
 - M6-G7 generalizes the same path to proven cross-war 304 continuity: the
   validation-side WarRegion owns the new quality identity, the old MapSnapshot
   is reused, and the new WarRegion starts a fresh baseline chain.
-- M6-G8A is implemented in PR #60: complete baseline snapshots are loadable by
+- M6-G8A is merged in PR #60: complete baseline snapshots are loadable by
   immutable MapSnapshotId and production/offline evaluation share one rule
   engine while runtime remains pinned to policy@1.
-  Version-targeted rebuild/policy@2 activation remains later G8 work.
+- M6-G8B introduces an explicit registered quality target. The default Worker
+  path still resolves live policy@1, while local recovery may independently
+  target policy@2 without changing the runtime selector. Version-targeted
+  scanning, ordering, evaluation and writes use that same frozen target.
+  Full historical rebuild evidence and activation remain G8-C/G8-D.
 - The same locked transaction refuses late same-version quality backfill if
   any later terminal result already exists for the WarRegion/capability.
   Such history must be explicitly rebuilt under a new version in M6-G.
@@ -795,9 +799,15 @@ execution path and historical rebuild are proven:
 
 - separate the live runtime policy selection from the policy version selected
   for local rebuild;
+- construct a target only from a registered immutable policy profile so its
+  taxonomy version cannot drift from that policy contract;
 - quality-gap scanning, ordering, evaluation and writes must carry the explicit
   target taxonomy/policy identity;
-- allow `live=@1` while `rebuild=@2`.
+- recovery telemetry includes the target policy version;
+- allow `live=@1` while `rebuild=@2`;
+- prove on the same durable history that @1 and @2 runs coexist independently,
+  each target is idempotent, and invoking @2 does not change
+  `WarApiVersions.MapQualityPolicy`.
 
 ### G8-C. Ordered policy@2 rebuild
 
