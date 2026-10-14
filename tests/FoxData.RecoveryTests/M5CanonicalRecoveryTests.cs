@@ -2167,6 +2167,16 @@ public sealed class M5CanonicalRecoveryTests(
     private static WarApiMapQualityRecoveryCoordinator
         CreateQualityRecoveryCoordinator(NpgsqlDataSource dataSource)
     {
+        return new WarApiMapQualityRecoveryCoordinator(
+            new PostgresMapQualityGapReader(dataSource),
+            new MapSnapshotKernel(
+                new PostgresMapSnapshotStore(dataSource)),
+            CreateQualityCoordinator(dataSource));
+    }
+
+    private static WarApiMapQualityCoordinator CreateQualityCoordinator(
+        NpgsqlDataSource dataSource)
+    {
         var options = CreateOptions();
         var normalization = new NormalizationKernel(
             new PostgresNormalizationRunStore(dataSource));
@@ -2205,21 +2215,15 @@ public sealed class M5CanonicalRecoveryTests(
                 options);
         var qualityStore =
             new PostgresMapQualityStore(dataSource);
-        var qualityCoordinator =
-            new WarApiMapQualityCoordinator(
-                mapContext,
-                new MapSnapshotKernel(
-                    new PostgresMapSnapshotStore(dataSource)),
-                new PostgresMapQualityOrderingReader(dataSource),
-                qualityStore,
-                new MapQualityKernel(qualityStore),
-                TimeProvider.System);
 
-        return new WarApiMapQualityRecoveryCoordinator(
-            new PostgresMapQualityGapReader(dataSource),
+        return new WarApiMapQualityCoordinator(
+            mapContext,
             new MapSnapshotKernel(
                 new PostgresMapSnapshotStore(dataSource)),
-            qualityCoordinator);
+            new PostgresMapQualityOrderingReader(dataSource),
+            qualityStore,
+            new MapQualityKernel(qualityStore),
+            TimeProvider.System);
     }
 
     private static async Task<FetchId> CaptureRawAsync(
