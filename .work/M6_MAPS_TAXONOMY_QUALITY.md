@@ -1,6 +1,6 @@
 # M6 — Maps, Taxonomy and Quality
 
-Status: in progress. M6-A through M6-G7 are complete through PR #57 and M6-G8A evaluator parity is merged in PR #60. M6-G8B explicit version-targeted reprocessing is in implementation while runtime remains pinned to policy@1; full policy@2 rebuild evidence and activation remain G8-C/G8-D.
+Status: in progress. M6-A through M6-G7 are complete through PR #57, M6-G8A is merged in PR #60, and M6-G8B explicit version-targeted reprocessing is merged in PR #61. M6-G8C ordered policy@2 rebuild evidence is in implementation while runtime remains pinned to policy@1; activation remains G8-D.
 Prerequisite: M5 Canonical War / Region / Report completed.
 Successor: M7 Objective Identity.
 
@@ -1018,6 +1018,18 @@ evaluation and the immutable quality write. The ordinary Worker path resolves
 the live target from `WarApiVersions.MapQualityPolicy`; local recovery may
 instead select policy@2 while live remains @1. Reprocessing one version MUST
 NOT rewrite, replace or suppress runs belonging to another version.
+
+The G8-C rebuild proof operates only on already durable source evidence. It
+first completes the live @1 history, freezes an @1 semantic signature and all
+source-state counts, then performs policy@2 reconstruction. A deliberately
+partial @2 prefix is committed before recreating the recovery coordinator; the
+new coordinator must resume the remaining chronology from durable state alone.
+The representative sequence contains accepted, suspect and quarantined
+decisions plus same-war and cross-war 304 boundaries. Suspect/quarantined runs
+remain terminal but must not become accepted baselines. After convergence the
+@1 signature and Fetch/Payload/parse/normalization/snapshot/occurrence counts
+must be byte-for-byte/count-for-count unchanged, the @2 gap scan must be empty,
+and a repeated @2 pass must be quiescent.
 
 ## 20. Concurrency and transaction rules
 
