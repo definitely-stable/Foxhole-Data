@@ -999,6 +999,41 @@ Reverse requirements:
 - findings belong to exact run/occurrence;
 - 200/304 validation lineage is exact.
 
+### H3/H4-B — independent source-first completeness (next executable slice)
+
+The completion test now audits authoritative terminal War API map Attempts
+and body-bearing 200 / exact-lineage 304 Fetches independently of the
+snapshot/quality-gap readers. The repeatable-read SQL audit has nine
+counted failure categories:
+
+- `missing_coverage`: terminal map Attempt without durable Coverage;
+- `invalid_validation`: captured-current 200/304 with broken representation
+  identity, payload, endpoint, provenance, or chronological relation;
+- `missing_parse`, `missing_normalization`, `missing_snapshot`:
+  incomplete required 200/304 representation processing for the selected
+  parser and normalizer versions;
+- `missing_quality`: normalized candidate validation without terminal
+  QualityRun for the selected taxonomy and quality-policy version;
+- `coverage_binding`: incorrect observation state or 200/304 lineage;
+- `duplicate_quality`: duplicate versioned validation bindings;
+- `later_terminal_over_gap`: a later terminal quality result in the same
+  WarRegion/capability/version stream despite an unfinished earlier
+  authoritative validation, bounded at WarRegion.firstSeenAt.
+
+Negative executable tests capture a new 304 and a new 200 after the preceding
+recovery graph is complete; before local repair the audit detects missing
+coverage/quality for the 304 and missing coverage/parse for the 200. Existing
+canonical and quality recovery complete both with no additional HTTP request.
+The previous snapshot-first integrity audit remains required.
+
+Scope qualification: non-body/rejected representations do not require
+QualityRuns, but terminal Attempts still require explicit coverage. This
+audit uses the frozen War API @1 parser/normalizer/taxonomy identities and
+the chosen immutable policy version. It is not a substitute for complete
+M5 WarRegion context verification, H1's full source-failure graph, H5-H8
+destructive rebuild, or H9/H10 milestone evidence. No production behavior
+or schema was changed.
+
 ## H4. Quality/projection audit
 
 Require:
