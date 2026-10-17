@@ -955,6 +955,30 @@ Zero progress with deferred work is failure.
 
 ## H3. Bidirectional provenance audit
 
+Implementation checkpoint (M6-H second slice): the test-only read-only
+`M6CompletionProvenanceAudit` independently queries persisted PostgreSQL
+state using a repeatable-read snapshot. Its seven explicit violation categories
+cover map Snapshot/Parse/Normalization/Fetch lineage, occurrence cardinality
+and complete ordinals, quality validation 200/304 + WarRegion lineage,
+accepted versus rejected MapObservation binding, recomputed latest earlier
+version-isolated accepted baseline, finding effect severity and accepted
+sourceRegionId enrichment.
+
+The existing ordered two-war G8-C proof now requires all seven counts to be
+zero after the H2 convergence gate. Negative fault tests deliberately corrupt
+an item-count and a versioned baseline reference, both of which remain
+database-representable, and require the independent audit to detect them.
+Both fields are restored before the final clean check.
+
+This is an **initial H3/H4 integrity slice**, not a full acceptance gate.
+Outstanding: independent absence-of-unresolved-earlier-candidate proof,
+more complete cross-shard 304/coverage and projection checks, negative cases
+for each violation class, complete H1 representative coverage graph,
+H5-H8 destructive rebuild/semantic equality and H9/H10 evidence record.
+The SQL audit must not be replaced by a recovery result counter.
+
+## H3. Bidirectional provenance audit
+
 Forward chain:
 
 ~~~

@@ -1850,6 +1850,94 @@ public sealed class M5CanonicalRecoveryTests(
             payloadCount,
             await CountAsync(dataSource, "evidence.payloads"));
 
+        // H3/H4 independently audits the stored graph without asking the
+        // recovery writers to validate data they originally persisted.
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource,
+            TestContext.Current.CancellationToken);
+
+        // A corrupted item count satisfies the database CHECK and FKs.
+        // Recovery still sees no gaps, but the independent audit must fail.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE evidence.map_snapshots
+                         SET item_count = item_count + 1
+                         WHERE representation_fetch_id = @fetch_id;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue("fetch_id", duplicate.Value);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var corruptOccurrences = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1L, corruptOccurrences["snapshot_occurrences"]);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => M6CompletionProvenanceAudit.AssertCleanAsync(
+                dataSource,
+                TestContext.Current.CancellationToken));
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE evidence.map_snapshots
+                         SET item_count = item_count - 1
+                         WHERE representation_fetch_id = @fetch_id;
+                         """))
+        {
+            restore.Parameters.AddWithValue("fetch_id", duplicate.Value);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource,
+            TestContext.Current.CancellationToken);
+
+        // Null is an allowed persisted baseline, but incorrect after a
+        // previous accepted quality observation under the same @2 policy.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE quality.map_quality_runs
+                         SET baseline_map_observation_id = NULL
+                         WHERE validation_fetch_id = @fetch_id
+                           AND quality_policy_version = @policy_version;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue("fetch_id", duplicate.Value);
+            corrupt.Parameters.AddWithValue(
+                "policy_version", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var corruptBaseline = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1L, corruptBaseline["baseline_binding"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE quality.map_quality_runs
+                         SET baseline_map_observation_id = @baseline_id
+                         WHERE validation_fetch_id = @fetch_id
+                           AND quality_policy_version = @policy_version;
+                         """))
+        {
+            restore.Parameters.AddWithValue(
+                "baseline_id", regressionObservation.Value);
+            restore.Parameters.AddWithValue("fetch_id", duplicate.Value);
+            restore.Parameters.AddWithValue(
+                "policy_version", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource,
+            TestContext.Current.CancellationToken);
+
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);
