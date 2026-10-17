@@ -1835,6 +1835,21 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, replay.VersionBlocked);
         Assert.Equal(0, replay.OutstandingCount);
 
+        // M6-H/H2: the full G8-C two-war/200/304 quality graph must also be
+        // idle through BOTH local recovery stages, not only quality scanning.
+        var completionPasses = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource)
+                .RunOnceAsync(target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1, completionPasses);
+        Assert.Equal(
+            fetchCount,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            payloadCount,
+            await CountAsync(dataSource, "evidence.payloads"));
+
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);

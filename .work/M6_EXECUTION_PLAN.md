@@ -928,6 +928,21 @@ Include:
 
 ## H2. Convergence condition
 
+Implementation checkpoint (M6-H first slice): a test-only
+`M6CompletionConvergence` proof driver runs the existing canonical/coverage
+and version-targeted quality recovery coordinators in that order, with a
+bounded number of passes. It fails closed on zero progress plus any canonical
+deferred, quality deferred, or version-blocked work; repeated progress past
+the bound is also failure. The existing G8-C representative two-war / 200 /
+same-war 304 / cross-war 304 scenario now exercises this joint idle gate,
+and separate negative tests cover each stalled-work category.
+
+This is **not** M6 completion: stage-local result counters cannot detect
+all global provenance, missing lineage or projected-state corruption.
+H1 coverage gaps, H3/H4 independent SQL audits, H5-H8 destructive rebuild
+and semantic comparison, H9 metrics and H10 signed-off completion record
+remain mandatory. No production Worker behavior is changed.
+
 Completion requires:
 
 ~~~
