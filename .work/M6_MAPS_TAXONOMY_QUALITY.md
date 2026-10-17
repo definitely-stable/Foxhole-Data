@@ -1497,6 +1497,13 @@ Acceptance:
 
 ### M6-H — Completion gate
 
+The H3/H4-B source-first proof checks that required map Fetches have explicit
+coverage, versioned parse/normalization/snapshot and terminal QualityRun
+bindings; it also detects later terminal quality across earlier unresolved
+authoritative candidates. The test operates on a PostgreSQL repeatable-read
+snapshot and does not infer completeness from the quality-gap reader itself.
+The full M6-H completion gate is still open.
+
 Execution checkpoint: H2 now has a bounded, fail-closed combined recovery
 convergence proof; H3/H4 now have an independent, repeatable-read
 PostgreSQL audit in RecoveryTests for M6 graph and quality invariants.
