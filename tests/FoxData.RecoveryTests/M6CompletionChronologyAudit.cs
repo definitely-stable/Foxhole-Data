@@ -102,7 +102,7 @@ internal static class M6CompletionChronologyAudit
             LEFT JOIN evidence.coverage_observations AS coverage
                 ON coverage.attempt_id = v.attempt_id
         ),
-        invalid_validation AS
+        invalid_lineage AS
         (
             SELECT validation_id
             FROM validation_graph
@@ -118,13 +118,22 @@ internal static class M6CompletionChronologyAudit
                     (observed_at, validation_id) <=
                         (representation_at, representation_id)))
         ),
+        invalid_validation AS
+        (
+            SELECT bad.validation_id
+            FROM invalid_lineage AS bad
+            JOIN validation_graph AS v
+                ON v.validation_id = bad.validation_id
+            WHERE v.coverage_id IS NULL
+               OR v.coverage_state IN ('observed', 'source_not_modified')
+        ),
         eligible AS
         (
             SELECT *
             FROM validation_graph AS v
             WHERE NOT EXISTS
             (
-                SELECT 1 FROM invalid_validation AS bad
+                SELECT 1 FROM invalid_lineage AS bad
                 WHERE bad.validation_id = v.validation_id
             )
         ),
