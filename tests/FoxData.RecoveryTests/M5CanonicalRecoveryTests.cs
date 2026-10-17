@@ -1955,6 +1955,10 @@ public sealed class M5CanonicalRecoveryTests(
             warBAt.AddSeconds(3),
             healthyRecovery,
             "m6-h-source-first-304");
+        var durable304FetchCount =
+            await CountAsync(dataSource, "evidence.fetches");
+        var durable304PayloadCount =
+            await CountAsync(dataSource, "evidence.payloads");
         var pending304 = await M6CompletionChronologyAudit.ReadAsync(
             dataSource,
             WarApiVersions.MapQualityPolicyV2,
@@ -1979,6 +1983,12 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(1, quality304.TerminalCompleted);
         Assert.NotNull(await ReadObservationIdAsync(
             dataSource, unrecovered304, WarApiVersions.MapQualityPolicyV2));
+        Assert.Equal(
+            durable304FetchCount,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            durable304PayloadCount,
+            await CountAsync(dataSource, "evidence.payloads"));
 
         await M6CompletionChronologyAudit.AssertCleanAsync(
             dataSource,
@@ -1997,6 +2007,10 @@ public sealed class M5CanonicalRecoveryTests(
                 lastUpdated: 1_700_000_090_000,
                 HealthyItems()),
             "m6-h-source-first-200");
+        var durable200FetchCount =
+            await CountAsync(dataSource, "evidence.fetches");
+        var durable200PayloadCount =
+            await CountAsync(dataSource, "evidence.payloads");
         var pending200 = await M6CompletionChronologyAudit.ReadAsync(
             dataSource,
             WarApiVersions.MapQualityPolicyV2,
@@ -2021,6 +2035,12 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(1, qualified200.TerminalCompleted);
         Assert.NotNull(await ReadObservationIdAsync(
             dataSource, unrecovered200, WarApiVersions.MapQualityPolicyV2));
+        Assert.Equal(
+            durable200FetchCount,
+            await CountAsync(dataSource, "evidence.fetches"));
+        Assert.Equal(
+            durable200PayloadCount,
+            await CountAsync(dataSource, "evidence.payloads"));
 
         await M6CompletionChronologyAudit.AssertCleanAsync(
             dataSource,
