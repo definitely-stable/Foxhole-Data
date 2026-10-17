@@ -1497,6 +1497,13 @@ Acceptance:
 
 ### M6-H — Completion gate
 
+Execution checkpoint: H2 now has a bounded, fail-closed combined recovery
+convergence proof; H3/H4 now have an independent, repeatable-read
+PostgreSQL audit in RecoveryTests for M6 graph and quality invariants.
+These are partial executable proofs, **not** M6 completion or permission to
+start M7. Full event-free source reconstruction, complete provenance/
+coverage audit and H5-H10 remain obligatory.
+
 Goal: close M6 only when map normalization/quality is reconstructable and provenance-complete.
 
 Representative graph must include:
