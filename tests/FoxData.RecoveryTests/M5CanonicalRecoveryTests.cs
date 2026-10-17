@@ -1926,7 +1926,7 @@ public sealed class M5CanonicalRecoveryTests(
                          """))
         {
             restore.Parameters.AddWithValue(
-                "baseline_id", regressionObservation.Value.Value);
+                "baseline_id", regressionObservation.Value);
             restore.Parameters.AddWithValue("fetch_id", duplicate.Value);
             restore.Parameters.AddWithValue(
                 "policy_version", WarApiVersions.MapQualityPolicyV2);
