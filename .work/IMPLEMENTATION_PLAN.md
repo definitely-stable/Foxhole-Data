@@ -141,7 +141,7 @@ Implementation slices:
 
 ## M6 — maps, taxonomy and quality
 
-Status: in progress. M6-A through M6-F2 complete through PR #50; runtime activation of calibrated policy@2 remains deferred to M6-G.
+Status: in progress. M6-A through M6-G9 are merged through PR #67; calibrated quality policy@2 is active. M6-H completion proof is in progress and M7 is not yet authorized.
 
 Detailed normative plan: [M6_MAPS_TAXONOMY_QUALITY.md](M6_MAPS_TAXONOMY_QUALITY.md).
 Execution sequence for the remaining slices: [M6_EXECUTION_PLAN.md](M6_EXECUTION_PLAN.md).
@@ -159,7 +159,7 @@ Implementation slices:
 - M6-D versioned taxonomy — complete;
 - M6-E quality kernel and accepted-observation transaction — complete through E3, merged in PR #48;
 - M6-F1 golden fixture catalog + deterministic offline feature extraction — merged in PR #49; M6-F2 immutable calibrated anomaly policy@2 + fail-closed offline replay — complete in PR #50, with runtime activation deferred to M6-G so structural-only @1 remains historically reproducible;
-- M6-G1 source-neutral coverage capability-plan refactor — complete in PR #51; M6-G2/G3 static/dynamic coverage + local parse repair — complete in PR #52; M6-G4 source-local map normalization-gap recovery — complete in PR #54; M6-G5+ quality recovery, 304 continuity and versioned reprocessing — pending;
+- M6-G1–G4 coverage, parse repair and map normalization recovery — complete through PR #54; M6-G5–G9 quality-gap recovery, same/cross-war 304, version-targeted rebuild, policy@2 activation and transaction/chronology interruption proofs — complete through PR #67;
 - M6-H deterministic completion gate and M6 completion record — pending.
 
 Mandatory boundaries:
