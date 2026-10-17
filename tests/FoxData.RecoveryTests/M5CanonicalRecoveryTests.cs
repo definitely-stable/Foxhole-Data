@@ -1938,6 +1938,98 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource,
             TestContext.Current.CancellationToken);
 
+        // H3/H4-B: source-first audit agrees with snapshot-first integrity
+        // after complete @2 recovery of both war contexts and 200/304.
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+
+        // A new, authoritative cross-war 304 exists before recovery scans it.
+        // Snapshot-first reads remain valid; source-first completeness must
+        // report both the unrecorded coverage and the unbound quality result.
+        var unrecovered304 = await CaptureNotModifiedAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            warBAt.AddSeconds(3),
+            healthyRecovery,
+            "m6-h-source-first-304");
+        var pending304 = await M6CompletionChronologyAudit.ReadAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1L, pending304["missing_coverage"]);
+        Assert.Equal(1L, pending304["missing_quality"]);
+        Assert.Equal(0L, pending304["invalid_validation"]);
+
+        var coverage304 = await CreateRecoveryCoordinator(dataSource)
+            .RunOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, coverage304.CoverageRecorded);
+
+        var pendingQuality = await M6CompletionChronologyAudit.ReadAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0L, pendingQuality["missing_coverage"]);
+        Assert.Equal(1L, pendingQuality["missing_quality"]);
+
+        var quality304 = await CreateQualityRecoveryCoordinator(dataSource)
+            .RunOnceAsync(target, TestContext.Current.CancellationToken);
+        Assert.Equal(1, quality304.TerminalCompleted);
+        Assert.NotNull(await ReadObservationIdAsync(
+            dataSource, unrecovered304, WarApiVersions.MapQualityPolicyV2));
+
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+
+        // Capture a new 200 but interrupt before the current parser/normalizer.
+        // A snapshot-rooted scanner cannot find this gap.
+        var unrecovered200 = await CaptureRawAsync(
+            ingestion,
+            evidence,
+            dynamicEndpoint.Resource.Id,
+            warBAt.AddSeconds(4),
+            CreateDynamicPayload(
+                version: 12,
+                lastUpdated: 1_700_000_090_000,
+                HealthyItems()),
+            "m6-h-source-first-200");
+        var pending200 = await M6CompletionChronologyAudit.ReadAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1L, pending200["missing_coverage"]);
+        Assert.Equal(1L, pending200["missing_parse"]);
+
+        var canonical200 = await CreateRecoveryCoordinator(dataSource)
+            .RunOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, canonical200.ParseRunsRepaired);
+        Assert.Equal(1, canonical200.CanonicalCompleted);
+
+        var normalizedNotQualified = await M6CompletionChronologyAudit.ReadAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(0L, normalizedNotQualified["missing_parse"]);
+        Assert.Equal(1L, normalizedNotQualified["missing_quality"]);
+
+        var qualified200 = await CreateQualityRecoveryCoordinator(dataSource)
+            .RunOnceAsync(target, TestContext.Current.CancellationToken);
+        Assert.Equal(1, qualified200.TerminalCompleted);
+        Assert.NotNull(await ReadObservationIdAsync(
+            dataSource, unrecovered200, WarApiVersions.MapQualityPolicyV2));
+
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource,
+            WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource,
+            TestContext.Current.CancellationToken);
+
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);
