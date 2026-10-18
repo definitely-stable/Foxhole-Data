@@ -2151,6 +2151,10 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, TestContext.Current.CancellationToken);
         Assert.NotEqual("[]", semanticBefore["snapshots"]);
         Assert.NotEqual("[]", semanticBefore["items"]);
+        Assert.NotEqual("[]", semanticBefore["text_items"]);
+        Assert.Contains("\"static\"", semanticBefore["snapshots"]);
+        Assert.Contains("Deadlands", semanticBefore["text_items"]);
+        Assert.Contains("Front line", semanticBefore["text_items"]);
         Assert.NotEqual("[]", semanticBefore["quality_runs"]);
         Assert.NotEqual("[]", semanticBefore["quality_findings"]);
         Assert.NotEqual("[]", semanticBefore["observations"]);
