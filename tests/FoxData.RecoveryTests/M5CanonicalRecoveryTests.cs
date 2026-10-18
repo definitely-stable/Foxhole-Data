@@ -2869,8 +2869,9 @@ public sealed class M5CanonicalRecoveryTests(
         EvidenceKernel evidence,
         FoxData.Core.Sources.EndpointId endpointId,
         DateTimeOffset retrievedAt,
-        byte[] body,
-        string jobKey = "m5-h-recovery")
+        byte[]? body,
+        string jobKey = "m5-h-recovery",
+        int statusCode = 200)
     {
         var scheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
         var queued = await ingestion.EnqueueAsync(
@@ -2924,15 +2925,15 @@ public sealed class M5CanonicalRecoveryTests(
                 retrievedAt.AddMilliseconds(-1),
                 retrievedAt,
                 "war-api",
-                200,
-                "application/json",
+                statusCode,
+                body is null ? null : "application/json",
                 null,
-                body.LongLength,
+                body?.LongLength,
                 "\"m5-h\"",
                 "max-age=60",
                 retrievedAt.AddMinutes(1),
                 2),
-            body,
+            body is null ? null : new ReadOnlyMemory<byte>(body),
             cancellationToken:
                 TestContext.Current.CancellationToken);
 
