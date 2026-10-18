@@ -1049,6 +1049,39 @@ Require:
 - input metrics JSON is deterministic/parseable;
 - no fabricated ObjectiveId in M6 state.
 
+## H5–H8. Test-only destructive semantic rebuild checkpoint
+
+Implementation slice: `M6SemanticRebuildProof` in RecoveryTests reads six
+independently projected PostgreSQL semantic relations under a repeatable-read
+transaction: snapshots, ordered raw map item occurrences, ordered raw map
+text occurrences, versioned QualityRuns with baseline *validation Fetch*
+references, complete quality findings/metrics and accepted observation
+boundaries. The oracle does not reuse the writer's equality or serialize
+regenerated local UUIDs, local record timestamps, or run durations.
+
+Within the **isolated disposable PostgreSQL recovery fixture only**, the
+existing two-war G8-C graph is captured (both immutable policies @1/@2,
+suspect, quarantine, 200 and cross-war 304, duplicate and unknown taxonomy),
+then the M6-derived rows are deleted explicitly in FK-safe order:
+findings → accepted observations → quality runs → item/text occurrences →
+snapshots → map-specific normalization runs. No `TRUNCATE`, no `CASCADE`
+and no production deletion capability are introduced. War/WarRegion,
+Fetch/Payload, SourceParseRun, coverage observations and source continuity
+remain preserved as authoritative M2/M3/M5 context. This is a scoped H6
+proof: M5 coverage-continuity state is *not* wiped or reconstructed.
+
+The previously existing recovery coordinators recreate @1 and then @2
+from local durable source evidence only. Require joint bounded quiescence,
+both chronology audits, graph integrity, six-field semantic equality and
+an independent fingerprint of durable authority before/after. The test
+requires the initial semantic graph be nonempty and the deleted state
+empty before rebuilding. Any semantic difference fails closed.
+
+This checkpoint **does not** complete the broader M6-H acceptance:
+H1 full failure/coverage representative graph, full H3/H4 negative matrix
+and independent semantic oracles for all versions, H9 performance evidence,
+H10 completion signoff remain necessary.
+
 ## H5. Semantic snapshot
 
 Compare:
