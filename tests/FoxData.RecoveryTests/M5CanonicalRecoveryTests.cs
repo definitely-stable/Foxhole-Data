@@ -1392,6 +1392,11 @@ public sealed class M5CanonicalRecoveryTests(
             WarApiCapabilities.ActiveMapList.Key,
             "maps",
             TestContext.Current.CancellationToken);
+        var staticEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
         var dynamicEndpoint = await registry.RegisterEndpointAsync(
             shard.Resource.Id,
             WarApiCapabilities.DynamicMapState.Key,
@@ -2061,6 +2066,80 @@ public sealed class M5CanonicalRecoveryTests(
         Assert.Equal(0, finalHistoricalRecovery.OutstandingCount);
         await M6CompletionChronologyAudit.AssertCleanAsync(
             dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        // H1 representative static-stream and text-occurrence extension.
+        // Both static representations and the 304 belong to War B; the
+        // older dynamic history and its versioned baselines remain intact.
+        var staticInitial = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(5), CreateStaticTextPayload(1, false),
+            "m6-h1-static-initial");
+        var staticChanged = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(6), CreateStaticTextPayload(2, true),
+            "m6-h1-static-changed");
+        var static304 = await CaptureNotModifiedAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(7), staticChanged,
+            "m6-h1-static-304");
+        var unavailable = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(8), null,
+            "m6-h1-source-unavailable", statusCode: 503);
+        var rejected = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(9), Encoding.UTF8.GetBytes("{invalid json"),
+            "m6-h1-rejected");
+
+        var sourceFetchCount = await CountAsync(dataSource, "evidence.fetches");
+        var sourcePayloadCount =
+            await CountAsync(dataSource, "evidence.payloads");
+        var h1V1 = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                policyV1Target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.InRange(h1V1, 2, 32);
+        var h1V2 = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.InRange(h1V2, 2, 32);
+        Assert.Equal(sourceFetchCount, await CountAsync(
+            dataSource, "evidence.fetches"));
+        Assert.Equal(sourcePayloadCount, await CountAsync(
+            dataSource, "evidence.payloads"));
+
+        Assert.Equal(1L, await CountCoverageStateAsync(
+            dataSource, "source_unavailable"));
+        Assert.Equal(1L, await CountCoverageStateAsync(
+            dataSource, "rejected"));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, unavailable, WarApiVersions.MapQualityPolicyV2));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, rejected, WarApiVersions.MapQualityPolicyV2));
+        await AssertQualityAsync(
+            dataSource, staticInitial, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource, staticChanged, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource, static304, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        Assert.NotNull(await ReadObservationIdAsync(
+            dataSource, static304, WarApiVersions.MapQualityPolicyV2));
+        Assert.True(await CountAsync(
+            dataSource, "evidence.map_text_occurrences") >= 4);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV2,
             TestContext.Current.CancellationToken);
         await M6CompletionProvenanceAudit.AssertCleanAsync(
             dataSource, TestContext.Current.CancellationToken);
