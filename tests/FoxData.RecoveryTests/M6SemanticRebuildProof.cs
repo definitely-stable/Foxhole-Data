@@ -180,6 +180,12 @@ internal static class M6SemanticRebuildProof
         command.CommandText =
             """
             DELETE FROM quality.map_quality_findings;
+            -- QualityRun baselines point backwards to accepted observations;
+            -- the RESTRICT FK requires clearing those M6-only references
+            -- before deleting observations. All changes are transactional.
+            UPDATE quality.map_quality_runs
+            SET baseline_map_observation_id = NULL
+            WHERE baseline_map_observation_id IS NOT NULL;
             DELETE FROM runtime.map_observations;
             DELETE FROM quality.map_quality_runs;
             DELETE FROM evidence.map_item_occurrences;
