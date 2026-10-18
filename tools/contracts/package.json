@@ -12,7 +12,7 @@
     "lint:internal-source": "node validate-internal-source.mjs"
   },
   "devDependencies": {
-    "@asyncapi/cli": "6.2.0",
+    "@asyncapi/cli": "6.2.1",
     "@redocly/cli": "2.60.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1"
