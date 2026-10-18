@@ -926,6 +926,34 @@ Include:
 - rejected;
 - unknown/uncertain coverage.
 
+### H1-C — static/text/terminal coverage expansion
+
+After the H3/H4-B source-first audit and scoped H5–H8 rebuild proof,
+the two-war PostgreSQL reconstruction scenario is extended before the
+semantic baseline snapshot with:
+
+- an initial *static* representation (ordered raw text with a duplicated
+  identical source occurrence);
+- a changed static 200 representation (changed raw map and text items);
+- a same-war static 304 bound to the changed representation;
+- a captured-current HTTP 503 classified as `source_unavailable`;
+- a malformed 200 payload classified as `rejected`, never silently
+  accepted as a QualityRun or `runtime.map_observation`.
+
+Both historical @1 and active @2 quality policies converge independently;
+the expected static 200/304 accepted results are checked by validation
+Fetch, and the source-level 503/rejected outcomes do not fabricate accepted
+observations. The existing source-first completeness and persisted graph
+integrity audits are required after extension. The six-relation semantic
+oracle MUST contain real static snapshots and raw text occurrences before
+its destructive offline rebuild, and the entire expanded oracle and
+authoritative M2/M3/M5 fingerprint must remain identical afterwards.
+
+This is **partial H1**, not M6-H completion. Collector-unavailable,
+uncertain and superseded attempts, orphan 304, multi-region/multi-shard
+failure paths, and the complete negative matrix remain separate work.
+H9 performance and H10 signed record are also outstanding.
+
 ## H2. Convergence condition
 
 Implementation checkpoint (M6-H first slice): a test-only

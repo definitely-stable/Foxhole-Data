@@ -1392,6 +1392,11 @@ public sealed class M5CanonicalRecoveryTests(
             WarApiCapabilities.ActiveMapList.Key,
             "maps",
             TestContext.Current.CancellationToken);
+        var staticEndpoint = await registry.RegisterEndpointAsync(
+            shard.Resource.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
         var dynamicEndpoint = await registry.RegisterEndpointAsync(
             shard.Resource.Id,
             WarApiCapabilities.DynamicMapState.Key,
@@ -2065,6 +2070,114 @@ public sealed class M5CanonicalRecoveryTests(
         await M6CompletionProvenanceAudit.AssertCleanAsync(
             dataSource, TestContext.Current.CancellationToken);
 
+        // H1 representative static-stream and text-occurrence extension.
+        // Both static representations and the 304 belong to War B; the
+        // older dynamic history and its versioned baselines remain intact.
+        var staticInitial = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(5), CreateStaticTextPayload(1, false),
+            "m6-h1-static-initial");
+        var staticChanged = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(6), CreateStaticTextPayload(2, true),
+            "m6-h1-static-changed");
+        var static304 = await CaptureNotModifiedAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(7), staticChanged,
+            "m6-h1-static-304");
+        var unavailable = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(8), null,
+            "m6-h1-source-unavailable", statusCode: 503);
+        var rejected = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(9), Encoding.UTF8.GetBytes("{invalid json"),
+            "m6-h1-rejected");
+
+        var sourceFetchCount = await CountAsync(dataSource, "evidence.fetches");
+        var sourcePayloadCount =
+            await CountAsync(dataSource, "evidence.payloads");
+        var h1V1 = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                policyV1Target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.InRange(h1V1, 2, 32);
+        var h1V2 = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.InRange(h1V2, 2, 32);
+        Assert.Equal(sourceFetchCount, await CountAsync(
+            dataSource, "evidence.fetches"));
+        Assert.Equal(sourcePayloadCount, await CountAsync(
+            dataSource, "evidence.payloads"));
+
+        Assert.Equal(1L, await CountCoverageStateAsync(
+            dataSource, "source_unavailable"));
+        Assert.Equal(1L, await CountCoverageStateAsync(
+            dataSource, "rejected"));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, unavailable, WarApiVersions.MapQualityPolicyV2));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, rejected, WarApiVersions.MapQualityPolicyV2));
+        // A 503 or a rejected 200 is a terminal coverage boundary,
+        // NOT a quality candidate of any immutable policy version.
+        await using (var absentQuality = dataSource.CreateCommand(
+                         """
+                         SELECT COUNT(*)
+                         FROM quality.map_quality_runs
+                         WHERE validation_fetch_id IN (@unavailable, @rejected);
+                         """))
+        {
+            absentQuality.Parameters.AddWithValue(
+                "unavailable", unavailable.Value);
+            absentQuality.Parameters.AddWithValue(
+                "rejected", rejected.Value);
+            Assert.Equal(0L, (long)(await absentQuality.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!);
+        }
+
+        // Raw source text occurrences must never be de-duplicated even when
+        // text, marker type and coordinates are byte-for-byte identical.
+        await using (var duplicates = dataSource.CreateCommand(
+                         """
+                         SELECT COUNT(*)
+                         FROM evidence.map_text_occurrences AS item
+                         JOIN evidence.map_snapshots AS snapshot
+                           ON snapshot.id = item.map_snapshot_id
+                         WHERE snapshot.representation_fetch_id = @fetch
+                           AND item.text = 'Deadlands';
+                         """))
+        {
+            duplicates.Parameters.AddWithValue("fetch", staticInitial.Value);
+            Assert.Equal(2L, (long)(await duplicates.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!);
+        }
+
+        await AssertQualityAsync(
+            dataSource, staticInitial, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource, staticChanged, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertQualityAsync(
+            dataSource, static304, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        Assert.NotNull(await ReadObservationIdAsync(
+            dataSource, static304, WarApiVersions.MapQualityPolicyV2));
+        Assert.True(await CountAsync(
+            dataSource, "evidence.map_text_occurrences") >= 4);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
         // M6-H5-H8: compare persisted semantic content, not regenerated IDs.
         // This fixture is isolated: deletion below must never be used on live
         // storage. Keep all captured source, coverage, parse and M5 context.
@@ -2072,6 +2185,10 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, TestContext.Current.CancellationToken);
         Assert.NotEqual("[]", semanticBefore["snapshots"]);
         Assert.NotEqual("[]", semanticBefore["items"]);
+        Assert.NotEqual("[]", semanticBefore["text_items"]);
+        Assert.Contains("\"static\"", semanticBefore["snapshots"]);
+        Assert.Contains("Deadlands", semanticBefore["text_items"]);
+        Assert.Contains("Front line", semanticBefore["text_items"]);
         Assert.NotEqual("[]", semanticBefore["quality_runs"]);
         Assert.NotEqual("[]", semanticBefore["quality_findings"]);
         Assert.NotEqual("[]", semanticBefore["observations"]);
@@ -2507,6 +2624,51 @@ public sealed class M5CanonicalRecoveryTests(
             });
     }
 
+    // Raw static map payloads deliberately preserve a repeated text item;
+    // H1/H5 must compare multiplicity and ordinal, not deduplicate labels.
+    private static byte[] CreateStaticTextPayload(
+        int version, bool changed)
+    {
+        var items = changed
+            ? new[]
+            {
+                new { teamId = "WARDENS", iconType = 17,
+                      x = 0.25, y = 0.75, flags = 0 },
+                new { teamId = "COLONIALS", iconType = 17,
+                      x = 0.68, y = 0.35, flags = 0 },
+            }
+            : new[]
+            {
+                new { teamId = "WARDENS", iconType = 17,
+                      x = 0.25, y = 0.75, flags = 0 },
+            };
+        var textItems = changed
+            ? new[]
+            {
+                new { text = "Deadlands", x = 0.5, y = 0.5,
+                      mapMarkerType = "Major" },
+                new { text = "Front line", x = 0.6, y = 0.4,
+                      mapMarkerType = "Major" },
+            }
+            : new[]
+            {
+                new { text = "Deadlands", x = 0.5, y = 0.5,
+                      mapMarkerType = "Major" },
+                new { text = "Deadlands", x = 0.5, y = 0.5,
+                      mapMarkerType = "Major" },
+            };
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                regionId = 1,
+                scorchedVictoryTowns = 0,
+                mapItems = items,
+                mapTextItems = textItems,
+                lastUpdated = 1_700_000_100_000L + version * 10_000L,
+                version,
+            });
+    }
+
     private static QualityMapItem[] NeutralItems() =>
         [
             new("NONE", 23, 0.25, 0.35, 0),
@@ -2869,8 +3031,9 @@ public sealed class M5CanonicalRecoveryTests(
         EvidenceKernel evidence,
         FoxData.Core.Sources.EndpointId endpointId,
         DateTimeOffset retrievedAt,
-        byte[] body,
-        string jobKey = "m5-h-recovery")
+        byte[]? body,
+        string jobKey = "m5-h-recovery",
+        int statusCode = 200)
     {
         var scheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
         var queued = await ingestion.EnqueueAsync(
@@ -2924,15 +3087,15 @@ public sealed class M5CanonicalRecoveryTests(
                 retrievedAt.AddMilliseconds(-1),
                 retrievedAt,
                 "war-api",
-                200,
-                "application/json",
+                statusCode,
+                body is null ? null : "application/json",
                 null,
-                body.LongLength,
+                body?.LongLength,
                 "\"m5-h\"",
                 "max-age=60",
                 retrievedAt.AddMinutes(1),
                 2),
-            body,
+            body is null ? null : new ReadOnlyMemory<byte>(body),
             cancellationToken:
                 TestContext.Current.CancellationToken);
 
