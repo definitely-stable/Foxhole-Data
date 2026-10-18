@@ -2507,6 +2507,51 @@ public sealed class M5CanonicalRecoveryTests(
             });
     }
 
+    // Raw static map payloads deliberately preserve a repeated text item;
+    // H1/H5 must compare multiplicity and ordinal, not deduplicate labels.
+    private static byte[] CreateStaticTextPayload(
+        int version, bool changed)
+    {
+        var items = changed
+            ? new[]
+            {
+                new { teamId = "WARDENS", iconType = 17,
+                      x = 0.25, y = 0.75, flags = 0 },
+                new { teamId = "COLONIALS", iconType = 17,
+                      x = 0.68, y = 0.35, flags = 0 },
+            }
+            : new[]
+            {
+                new { teamId = "WARDENS", iconType = 17,
+                      x = 0.25, y = 0.75, flags = 0 },
+            };
+        var textItems = changed
+            ? new[]
+            {
+                new { text = "Deadlands", x = 0.5, y = 0.5,
+                      mapMarkerType = "Major" },
+                new { text = "Front line", x = 0.6, y = 0.4,
+                      mapMarkerType = "Major" },
+            }
+            : new[]
+            {
+                new { text = "Deadlands", x = 0.5, y = 0.5,
+                      mapMarkerType = "Major" },
+                new { text = "Deadlands", x = 0.5, y = 0.5,
+                      mapMarkerType = "Major" },
+            };
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                regionId = 1,
+                scorchedVictoryTowns = 0,
+                mapItems = items,
+                mapTextItems = textItems,
+                lastUpdated = 1_700_000_100_000L + version * 10_000L,
+                version,
+            });
+    }
+
     private static QualityMapItem[] NeutralItems() =>
         [
             new("NONE", 23, 0.25, 0.35, 0),
