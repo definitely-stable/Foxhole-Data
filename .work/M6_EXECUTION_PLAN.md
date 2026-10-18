@@ -1063,7 +1063,8 @@ Within the **isolated disposable PostgreSQL recovery fixture only**, the
 existing two-war G8-C graph is captured (both immutable policies @1/@2,
 suspect, quarantine, 200 and cross-war 304, duplicate and unknown taxonomy),
 then the M6-derived rows are deleted explicitly in FK-safe order:
-findings → accepted observations → quality runs → item/text occurrences →
+findings → clear M6 quality baseline references → accepted observations →
+quality runs → item/text occurrences →
 snapshots → map-specific normalization runs. No `TRUNCATE`, no `CASCADE`
 and no production deletion capability are introduced. War/WarRegion,
 Fetch/Payload, SourceParseRun, coverage observations and source continuity
