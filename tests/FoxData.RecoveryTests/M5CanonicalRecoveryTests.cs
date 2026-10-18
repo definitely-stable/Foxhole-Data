@@ -2050,6 +2050,85 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource,
             TestContext.Current.CancellationToken);
 
+        // The G8-C fixture added two new Fetches after its historical @1
+        // signature check. Bring @1 up to date *before* freezing the
+        // semantic oracle, otherwise a correct rebuild would add new @1
+        // quality rows and generate a false semantic inequality.
+        var finalHistoricalRecovery =
+            await CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                policyV1Target, TestContext.Current.CancellationToken);
+        Assert.Equal(2, finalHistoricalRecovery.TerminalCompleted);
+        Assert.Equal(0, finalHistoricalRecovery.OutstandingCount);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        // M6-H5-H8: compare persisted semantic content, not regenerated IDs.
+        // This fixture is isolated: deletion below must never be used on live
+        // storage. Keep all captured source, coverage, parse and M5 context.
+        var semanticBefore = await M6SemanticRebuildProof.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        Assert.NotEqual("[]", semanticBefore["snapshots"]);
+        Assert.NotEqual("[]", semanticBefore["items"]);
+        Assert.NotEqual("[]", semanticBefore["quality_runs"]);
+        Assert.NotEqual("[]", semanticBefore["quality_findings"]);
+        Assert.NotEqual("[]", semanticBefore["observations"]);
+        var authorityBefore = await M6SemanticRebuildProof.ReadAuthorityAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        await M6SemanticRebuildProof.DeleteDerivedAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        var deleted = await M6SemanticRebuildProof.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        foreach (var relation in deleted)
+        {
+            Assert.Equal("[]", relation.Value);
+        }
+        var missing = await M6CompletionChronologyAudit.ReadAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        Assert.True(missing["missing_normalization"] > 0);
+        Assert.Equal(
+            authorityBefore,
+            await M6SemanticRebuildProof.ReadAuthorityAsync(
+                dataSource, TestContext.Current.CancellationToken));
+
+        // Replay historical @1 first, then activated @2, using only
+        // existing Fetch/Payload/Parse/WarRegion state and recovery code.
+        var rebuiltV1 = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                policyV1Target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.InRange(rebuiltV1, 2, 32);
+
+        var rebuiltV2 = await M6CompletionConvergence.RunAsync(
+            ct => CreateRecoveryCoordinator(dataSource).RunOnceAsync(ct),
+            ct => CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                target, ct),
+            TestContext.Current.CancellationToken);
+        Assert.InRange(rebuiltV2, 2, 32);
+
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV2,
+            TestContext.Current.CancellationToken);
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        var semanticAfter = await M6SemanticRebuildProof.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        M6SemanticRebuildProof.AssertEquivalent(
+            semanticBefore, semanticAfter);
+        Assert.Equal(
+            authorityBefore,
+            await M6SemanticRebuildProof.ReadAuthorityAsync(
+                dataSource, TestContext.Current.CancellationToken));
+
         Assert.Equal(
             WarApiVersions.MapQualityPolicyV2,
             WarApiVersions.MapQualityPolicy);
