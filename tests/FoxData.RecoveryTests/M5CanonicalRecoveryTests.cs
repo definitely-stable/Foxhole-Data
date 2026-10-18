@@ -2122,6 +2122,40 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, unavailable, WarApiVersions.MapQualityPolicyV2));
         Assert.Null(await ReadObservationIdAsync(
             dataSource, rejected, WarApiVersions.MapQualityPolicyV2));
+        // A 503 or a rejected 200 is a terminal coverage boundary,
+        // NOT a quality candidate of any immutable policy version.
+        await using (var absentQuality = dataSource.CreateCommand(
+                         """
+                         SELECT COUNT(*)
+                         FROM quality.map_quality_runs
+                         WHERE validation_fetch_id IN (@unavailable, @rejected);
+                         """))
+        {
+            absentQuality.Parameters.AddWithValue(
+                "unavailable", unavailable.Value);
+            absentQuality.Parameters.AddWithValue(
+                "rejected", rejected.Value);
+            Assert.Equal(0L, (long)(await absentQuality.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!);
+        }
+
+        // Raw source text occurrences must never be de-duplicated even when
+        // text, marker type and coordinates are byte-for-byte identical.
+        await using (var duplicates = dataSource.CreateCommand(
+                         """
+                         SELECT COUNT(*)
+                         FROM evidence.map_text_occurrences AS item
+                         JOIN evidence.map_snapshots AS snapshot
+                           ON snapshot.id = item.map_snapshot_id
+                         WHERE snapshot.representation_fetch_id = @fetch
+                           AND item.text = 'Deadlands';
+                         """))
+        {
+            duplicates.Parameters.AddWithValue("fetch", staticInitial.Value);
+            Assert.Equal(2L, (long)(await duplicates.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!);
+        }
+
         await AssertQualityAsync(
             dataSource, staticInitial, MapQualityDecision.Accepted,
             WarApiVersions.MapQualityPolicyV2);
