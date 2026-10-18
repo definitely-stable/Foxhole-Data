@@ -2050,6 +2050,21 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource,
             TestContext.Current.CancellationToken);
 
+        // The G8-C fixture added two new Fetches after its historical @1
+        // signature check. Bring @1 up to date *before* freezing the
+        // semantic oracle, otherwise a correct rebuild would add new @1
+        // quality rows and generate a false semantic inequality.
+        var finalHistoricalRecovery =
+            await CreateQualityRecoveryCoordinator(dataSource).RunOnceAsync(
+                policyV1Target, TestContext.Current.CancellationToken);
+        Assert.Equal(2, finalHistoricalRecovery.TerminalCompleted);
+        Assert.Equal(0, finalHistoricalRecovery.OutstandingCount);
+        await M6CompletionChronologyAudit.AssertCleanAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
         // M6-H5-H8: compare persisted semantic content, not regenerated IDs.
         // This fixture is isolated: deletion below must never be used on live
         // storage. Keep all captured source, coverage, parse and M5 context.
