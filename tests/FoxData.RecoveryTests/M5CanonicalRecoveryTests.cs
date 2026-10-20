@@ -1943,6 +1943,44 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource,
             TestContext.Current.CancellationToken);
 
+        // M6-H snapshot provenance cannot be reduced to the database FK:
+        // the normalizer identity itself must be the frozen map version.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE evidence.normalization_runs AS run
+                         SET normalizer_version =
+                             'warapi-dynamic-map-normalizer@tampered'
+                         FROM evidence.map_snapshots AS snapshot
+                         WHERE snapshot.normalization_run_id = run.id
+                           AND snapshot.representation_fetch_id = @fetch;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue("fetch", duplicate.Value);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var wrongNormalizer = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        Assert.Equal(1L, wrongNormalizer["snapshot_lineage"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE evidence.normalization_runs AS run
+                         SET normalizer_version =
+                             'warapi-dynamic-map-normalizer@1'
+                         FROM evidence.map_snapshots AS snapshot
+                         WHERE snapshot.normalization_run_id = run.id
+                           AND snapshot.representation_fetch_id = @fetch;
+                         """))
+        {
+            restore.Parameters.AddWithValue("fetch", duplicate.Value);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
         // H3/H4-C: faults below are allowed by relational FKs/CHECKs,
         // but violate the persisted M6 semantic contract. The auditor
         // must independently reject each one, then accept the restoration.
