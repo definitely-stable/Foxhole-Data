@@ -1943,6 +1943,244 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource,
             TestContext.Current.CancellationToken);
 
+        // M6-H snapshot provenance cannot be reduced to the database FK:
+        // the normalizer identity itself must be the frozen map version.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE evidence.normalization_runs AS run
+                         SET normalizer_version =
+                             'warapi-dynamic-map-normalizer@tampered'
+                         FROM evidence.map_snapshots AS snapshot
+                         WHERE snapshot.normalization_run_id = run.id
+                           AND snapshot.representation_fetch_id = @fetch;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue("fetch", duplicate.Value);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var wrongNormalizer = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        Assert.Equal(1L, wrongNormalizer["snapshot_lineage"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE evidence.normalization_runs AS run
+                         SET normalizer_version =
+                             'warapi-dynamic-map-normalizer@1'
+                         FROM evidence.map_snapshots AS snapshot
+                         WHERE snapshot.normalization_run_id = run.id
+                           AND snapshot.representation_fetch_id = @fetch;
+                         """))
+        {
+            restore.Parameters.AddWithValue("fetch", duplicate.Value);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        // H3/H4-C: faults below are allowed by relational FKs/CHECKs,
+        // but violate the persisted M6 semantic contract. The auditor
+        // must independently reject each one, then accept the restoration.
+        // A suspect run has no accepted MapObservation, so its validation
+        // can be tampered with without tripping the composite observation FK.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE quality.map_quality_runs
+                         SET validation_fetch_id = @wrong_fetch
+                         WHERE validation_fetch_id = @fetch
+                           AND quality_policy_version = @policy;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue(
+                "wrong_fetch", healthyBaseline.Value);
+            corrupt.Parameters.AddWithValue(
+                "fetch", timestampRegression.Value);
+            corrupt.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var wrongValidation = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        Assert.Equal(1L, wrongValidation["quality_lineage"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE quality.map_quality_runs
+                         SET validation_fetch_id = @fetch
+                         WHERE validation_fetch_id = @wrong_fetch
+                           AND quality_policy_version = @policy
+                           AND decision = 'suspect';
+                         """))
+        {
+            restore.Parameters.AddWithValue(
+                "fetch", timestampRegression.Value);
+            restore.Parameters.AddWithValue(
+                "wrong_fetch", healthyBaseline.Value);
+            restore.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        // Timing is not enforced by a FK: an accepted observation can
+        // retain perfectly valid IDs while claiming an incorrect boundary.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE runtime.map_observations
+                         SET observed_at = observed_at + interval '1 second'
+                         WHERE id = @observation;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue(
+                "observation", duplicateObservation.Value);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var wrongObservationTime =
+            await M6CompletionProvenanceAudit.ReadAsync(
+                dataSource, TestContext.Current.CancellationToken);
+        Assert.Equal(1L, wrongObservationTime["observation_binding"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE runtime.map_observations
+                         SET observed_at = observed_at - interval '1 second'
+                         WHERE id = @observation;
+                         """))
+        {
+            restore.Parameters.AddWithValue(
+                "observation", duplicateObservation.Value);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        // An accepted run must not carry a blocking finding even if the
+        // finding row itself satisfies every schema constraint.
+        string originalFindingEffect;
+        await using (var original = dataSource.CreateCommand(
+                         """
+                         SELECT finding.effect
+                         FROM quality.map_quality_findings AS finding
+                         JOIN quality.map_quality_runs AS run
+                           ON run.id = finding.quality_run_id
+                         WHERE run.validation_fetch_id = @fetch
+                           AND run.quality_policy_version = @policy
+                           AND finding.rule_key =
+                               'representation.duplicate-occurrence';
+                         """))
+        {
+            original.Parameters.AddWithValue("fetch", duplicate.Value);
+            original.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            originalFindingEffect = Assert.IsType<string>(
+                await original.ExecuteScalarAsync(
+                    TestContext.Current.CancellationToken));
+        }
+        Assert.NotEqual("quarantined", originalFindingEffect);
+
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE quality.map_quality_findings AS finding
+                         SET effect = 'quarantined'
+                         FROM quality.map_quality_runs AS run
+                         WHERE run.id = finding.quality_run_id
+                           AND run.validation_fetch_id = @fetch
+                           AND run.quality_policy_version = @policy
+                           AND finding.rule_key =
+                               'representation.duplicate-occurrence';
+                         """))
+        {
+            corrupt.Parameters.AddWithValue("fetch", duplicate.Value);
+            corrupt.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var wrongFinding = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        Assert.Equal(1L, wrongFinding["finding_effects"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE quality.map_quality_findings AS finding
+                         SET effect = @original_effect
+                         FROM quality.map_quality_runs AS run
+                         WHERE run.id = finding.quality_run_id
+                           AND run.validation_fetch_id = @fetch
+                           AND run.quality_policy_version = @policy
+                           AND finding.rule_key =
+                               'representation.duplicate-occurrence';
+                         """))
+        {
+            restore.Parameters.AddWithValue(
+                "original_effect", originalFindingEffect);
+            restore.Parameters.AddWithValue("fetch", duplicate.Value);
+            restore.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
+        // A different positive sourceRegionId is schema-representable,
+        // but it contradicts the sourceRegionId of accepted snapshots.
+        await using (var corrupt = dataSource.CreateCommand(
+                         """
+                         UPDATE runtime.war_regions
+                         SET source_region_id = source_region_id + 10000
+                         WHERE id = (
+                             SELECT war_region_id
+                             FROM quality.map_quality_runs
+                             WHERE validation_fetch_id = @fetch
+                               AND quality_policy_version = @policy
+                         )
+                           AND source_region_id IS NOT NULL;
+                         """))
+        {
+            corrupt.Parameters.AddWithValue("fetch", duplicate.Value);
+            corrupt.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await corrupt.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+
+        var wrongRegion = await M6CompletionProvenanceAudit.ReadAsync(
+            dataSource, TestContext.Current.CancellationToken);
+        Assert.Equal(1L, wrongRegion["region_enrichment"]);
+
+        await using (var restore = dataSource.CreateCommand(
+                         """
+                         UPDATE runtime.war_regions
+                         SET source_region_id = source_region_id - 10000
+                         WHERE id = (
+                             SELECT war_region_id
+                             FROM quality.map_quality_runs
+                             WHERE validation_fetch_id = @fetch
+                               AND quality_policy_version = @policy
+                         );
+                         """))
+        {
+            restore.Parameters.AddWithValue("fetch", duplicate.Value);
+            restore.Parameters.AddWithValue(
+                "policy", WarApiVersions.MapQualityPolicyV2);
+            Assert.Equal(1, await restore.ExecuteNonQueryAsync(
+                TestContext.Current.CancellationToken));
+        }
+        await M6CompletionProvenanceAudit.AssertCleanAsync(
+            dataSource, TestContext.Current.CancellationToken);
+
         // H3/H4-B: source-first audit agrees with snapshot-first integrity
         // after complete @2 recovery of both war contexts and 200/304.
         await M6CompletionChronologyAudit.AssertCleanAsync(

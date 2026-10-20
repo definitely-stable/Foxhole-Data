@@ -1062,6 +1062,32 @@ M5 WarRegion context verification, H1's full source-failure graph, H5-H8
 destructive rebuild, or H9/H10 milestone evidence. No production behavior
 or schema was changed.
 
+### H3/H4-C — semantic corruption negative matrix (2026-10-21)
+
+The independent read-only `M6CompletionProvenanceAudit` already checks seven
+PostgreSQL integrity categories. The two-war, two-policy H5–H8 fixture now
+intentionally mutates and restores five additional **schema-representable**
+semantic inconsistencies, one at a time:
+
+1. A MapSnapshot's linked normalization run reporting a forged map
+   normalizer version must yield `snapshot_lineage = 1`.
+2. A suspect QualityRun pointing to a wrong body-bearing validation Fetch
+   (the rejected candidate remains free of accepted-observation FK bindings)
+   must yield `quality_lineage = 1`.
+3. An accepted MapObservation with its `observed_at` shifted by one second
+   must yield `observation_binding = 1`.
+4. An accepted QualityRun with a finding upgraded to `quarantined` must yield
+   `finding_effects = 1`.
+5. An accepted WarRegion with a deliberately mismatched non-null
+   `source_region_id` must yield `region_enrichment = 1`.
+
+Every injected fault is followed by a restoration and a zero-violation
+read-only audit. Earlier H3/H4 checks already exercise
+`snapshot_occurrences` and `baseline_binding`; this slice increases
+executable negative coverage to **seven of seven** integrity categories.
+The H3/H4 full source-first failure matrix has not been completed. No production schema,
+quality decisions, evidence, or runtime Worker path are changed.
+
 ## H4. Quality/projection audit
 
 Require:
