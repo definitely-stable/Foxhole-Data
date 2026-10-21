@@ -2453,6 +2453,50 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, static304, WarApiVersions.MapQualityPolicyV2));
         Assert.True(await CountAsync(
             dataSource, "evidence.map_text_occurrences") >= 4);
+        var chronologyBeforeRebuild = await M6CompletionChronologyAudit.ReadAsync(
+            dataSource, WarApiVersions.MapQualityPolicyV1,
+            TestContext.Current.CancellationToken);
+        if (chronologyBeforeRebuild["missing_parse"] != 0)
+        {
+            await using var trace = dataSource.CreateCommand(
+                """
+                SELECT fetch.id, fetch.status_code,
+                       fetch.payload_id IS NOT NULL,
+                       fetch.prior_fetch_id IS NOT NULL,
+                       fetch.body_error_code,
+                       coverage.state,
+                       endpoint.capability_key
+                FROM evidence.fetches AS fetch
+                JOIN ingest.attempts AS attempt
+                  ON attempt.id = fetch.attempt_id
+                JOIN sources.endpoints AS endpoint
+                  ON endpoint.id = fetch.endpoint_id
+                LEFT JOIN evidence.source_parse_runs AS parse
+                  ON parse.representation_fetch_id =
+                     CASE WHEN fetch.status_code = 200 THEN fetch.id
+                          ELSE fetch.prior_fetch_id END
+                 AND parse.capability_key = endpoint.capability_key
+                 AND parse.parser_version = 'warapi-parser@1'
+                LEFT JOIN evidence.coverage_observations AS coverage
+                  ON coverage.attempt_id = attempt.id
+                WHERE attempt.outcome_code = 'captured_current'
+                  AND endpoint.capability_key IN (
+                      'static-map-state','dynamic-map-state')
+                  AND fetch.status_code IN (200, 304)
+                  AND parse.id IS NULL
+                ORDER BY fetch.retrieved_at;
+                """);
+            var details = new List<string>();
+            await using var traceReader = await trace.ExecuteReaderAsync(
+                TestContext.Current.CancellationToken);
+            while (await traceReader.ReadAsync(
+                       TestContext.Current.CancellationToken))
+            {
+                details.Add($"{traceReader.GetGuid(0)} http={traceReader.GetInt32(1)} body={traceReader.GetBoolean(2)} prior={traceReader.GetBoolean(3)} error={(traceReader.IsDBNull(4) ? "none" : traceReader.GetString(4))} coverage={(traceReader.IsDBNull(5) ? "none" : traceReader.GetString(5))} cap={traceReader.GetString(6)}");
+            }
+            throw new InvalidOperationException(
+                $"H1-D missing_parse={chronologyBeforeRebuild["missing_parse"]}; evidence: {string.Join("; ", details)}");
+        }
         await M6CompletionChronologyAudit.AssertCleanAsync(
             dataSource, WarApiVersions.MapQualityPolicyV1,
             TestContext.Current.CancellationToken);
