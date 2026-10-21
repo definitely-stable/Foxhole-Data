@@ -3550,6 +3550,153 @@ public sealed class M5CanonicalRecoveryTests(
     }
 
 
+    private sealed record MapExchange(
+        IngestionAttemptId AttemptId,
+        CollectionJobId JobId,
+        LeaseGeneration Generation,
+        FenceToken FenceToken);
+
+    private static async Task<MapExchange> BeginMapExchangeAsync(
+        IngestionKernel ingestion,
+        FoxData.Core.Sources.EndpointId endpointId,
+        string jobKey)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scheduled = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var queued = await ingestion.EnqueueAsync(
+            endpointId, jobKey, scheduled, scheduled,
+            cancellationToken: ct);
+        Assert.Equal(JobEnqueueStatus.Created, queued.Status);
+        var claim = await ingestion.ClaimNextAsync(
+            WorkerInstanceId.New(), TimeSpan.FromMinutes(5), ct);
+        Assert.True(claim.Claimed);
+        Assert.Equal(queued.Job!.Id, claim.Job!.Id);
+        return await AuthorizeMapClaimAsync(ingestion, claim);
+    }
+
+    private static async Task<MapExchange> AuthorizeMapClaimAsync(
+        IngestionKernel ingestion,
+        JobClaimResult claim)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var workerId = claim.Job!.LeaseOwnerId
+            ?? throw new InvalidOperationException(
+                "Claimed map job has no worker.");
+        var attemptId = IngestionAttemptId.New();
+        var begun = await ingestion.BeginAttemptAsync(
+            attemptId, claim.Job.Id, workerId,
+            claim.Job.LeaseGeneration, ct);
+        Assert.Equal(BeginAttemptStatus.Started, begun.Status);
+        var fence = await ingestion.AcquireEndpointFenceAsync(
+            attemptId, workerId, claim.Job.LeaseGeneration, ct);
+        Assert.Equal(FenceAcquireStatus.AcquiredNow, fence.Status);
+        var authorized = await ingestion.AuthorizeExchangeAsync(
+            attemptId, workerId, claim.Job.LeaseGeneration, ct);
+        Assert.Equal(ExchangeAuthorizationStatus.AuthorizedNow,
+            authorized.Status);
+        return new MapExchange(
+            attemptId, claim.Job.Id, claim.Job.LeaseGeneration,
+            fence.Attempt!.FenceToken!.Value);
+    }
+
+    private static async Task<CaptureResult> CaptureMapAttemptAsync(
+        EvidenceKernel evidence,
+        MapExchange attempt,
+        FoxData.Core.Sources.EndpointId endpointId,
+        DateTimeOffset observedAt,
+        byte[]? body,
+        FetchId? priorFetchId = null)
+    {
+        return await evidence.CaptureSourceResponseAsync(
+            attempt.AttemptId, endpointId, attempt.Generation,
+            attempt.FenceToken,
+            new SourceResponseObservation(
+                observedAt.AddMilliseconds(-2),
+                observedAt.AddMilliseconds(-1), observedAt,
+                "war-api", body is null ? 304 : 200,
+                body is null ? null : "application/json",
+                null, body?.LongLength, "\"m6-h1e\"",
+                "max-age=60", observedAt.AddMinutes(1), 2),
+            body is null ? null : new ReadOnlyMemory<byte>(body),
+            priorFetchId: priorFetchId,
+            cancellationToken: TestContext.Current.CancellationToken);
+    }
+
+    private static async Task ExpireMapLeaseAsync(
+        NpgsqlDataSource dataSource,
+        CollectionJobId jobId)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            UPDATE ingest.collection_jobs
+            SET lease_expires_at =
+                transaction_timestamp() - interval '1 second'
+            WHERE id = @job_id;
+            """);
+        command.Parameters.AddWithValue("job_id", jobId.Value);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync(
+            TestContext.Current.CancellationToken));
+    }
+
+    private static async Task<IngestionAttemptId>
+        RejectForeignMapPriorAsync(
+            NpgsqlDataSource dataSource,
+            IngestionKernel ingestion,
+            EvidenceKernel evidence,
+            FoxData.Core.Sources.EndpointId endpointId,
+            FetchId foreignPrior,
+            DateTimeOffset retrievedAt,
+            string jobKey)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var attempt = await BeginMapExchangeAsync(
+            ingestion, endpointId, jobKey);
+        var rejected = await CaptureMapAttemptAsync(
+            evidence, attempt, endpointId, retrievedAt,
+            body: null, priorFetchId: foreignPrior);
+        Assert.Equal(CaptureStatus.InvalidPriorFetch, rejected.Status);
+        Assert.Null(rejected.Fetch);
+
+        await ExpireMapLeaseAsync(dataSource, attempt.JobId);
+        var recovery = new IngestionRecovery(
+            new PostgresIngestionRecoveryStore(dataSource),
+            new IngestionRecoveryLimits(batchSize: 8));
+        var recovered = await recovery.RecoverExpiredAsync(ct);
+        var result = Assert.Single(recovered.Items);
+        Assert.Equal(attempt.AttemptId, result.AttemptId);
+        Assert.Equal(RecoveryDisposition.MarkedUncertain,
+            result.Disposition);
+
+        // Keep this still-pending job from occupying the next test claim.
+        await using (var defer = dataSource.CreateCommand(
+                         """
+                         UPDATE ingest.collection_jobs
+                         SET available_at =
+                             transaction_timestamp() + interval '1 day'
+                         WHERE id = @job_id AND state = 'pending';
+                         """))
+        {
+            defer.Parameters.AddWithValue("job_id", attempt.JobId.Value);
+            Assert.Equal(1, await defer.ExecuteNonQueryAsync(ct));
+        }
+        return attempt.AttemptId;
+    }
+
+    private static async Task AssertNoFetchForAttemptAsync(
+        NpgsqlDataSource dataSource,
+        IngestionAttemptId attemptId)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT count(*)
+            FROM evidence.fetches
+            WHERE attempt_id = @attempt_id;
+            """);
+        command.Parameters.AddWithValue("attempt_id", attemptId.Value);
+        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!);
+    }
+
     // H1-D test-only helper: use the real ingestion kernel and recovery
     // transition to produce durable terminal Attempts without a Fetch.
     private static async Task<IngestionAttemptId>
