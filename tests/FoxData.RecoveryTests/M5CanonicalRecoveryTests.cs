@@ -2460,21 +2460,21 @@ public sealed class M5CanonicalRecoveryTests(
         {
             await using var trace = dataSource.CreateCommand(
                 """
-                SELECT fetch.id, fetch.status_code,
-                       fetch.payload_id IS NOT NULL,
-                       fetch.prior_fetch_id IS NOT NULL,
-                       fetch.body_error_code,
+                SELECT f.id, f.status_code,
+                       f.payload_id IS NOT NULL,
+                       f.prior_fetch_id IS NOT NULL,
+                       f.body_error_code,
                        coverage.state,
                        endpoint.capability_key
-                FROM evidence.fetches AS fetch
+                FROM evidence.fetches AS f
                 JOIN ingest.attempts AS attempt
-                  ON attempt.id = fetch.attempt_id
+                  ON attempt.id = f.attempt_id
                 JOIN sources.endpoints AS endpoint
-                  ON endpoint.id = fetch.endpoint_id
+                  ON endpoint.id = f.endpoint_id
                 LEFT JOIN evidence.source_parse_runs AS parse
                   ON parse.representation_fetch_id =
-                     CASE WHEN fetch.status_code = 200 THEN fetch.id
-                          ELSE fetch.prior_fetch_id END
+                     CASE WHEN f.status_code = 200 THEN f.id
+                          ELSE f.prior_fetch_id END
                  AND parse.capability_key = endpoint.capability_key
                  AND parse.parser_version = 'warapi-parser@1'
                 LEFT JOIN evidence.coverage_observations AS coverage
@@ -2482,9 +2482,9 @@ public sealed class M5CanonicalRecoveryTests(
                 WHERE attempt.outcome_code = 'captured_current'
                   AND endpoint.capability_key IN (
                       'static-map-state','dynamic-map-state')
-                  AND fetch.status_code IN (200, 304)
+                  AND f.status_code IN (200, 304)
                   AND parse.id IS NULL
-                ORDER BY fetch.retrieved_at;
+                ORDER BY f.retrieved_at;
                 """);
             var details = new List<string>();
             await using var traceReader = await trace.ExecuteReaderAsync(
