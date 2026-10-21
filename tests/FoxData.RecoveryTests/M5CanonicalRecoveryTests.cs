@@ -2396,6 +2396,23 @@ public sealed class M5CanonicalRecoveryTests(
         var lateFetch = Assert.IsType<FetchDescriptor>(
             lateCapture.Fetch).Id;
 
+        // Durable endpoint authority must remain on the newer fence,
+        // including after the old response has been written to evidence.
+        await using (var authority = dataSource.CreateCommand(
+                         """
+                         SELECT last_current_capture_attempt_id
+                         FROM ingest.endpoint_state
+                         WHERE endpoint_id = @endpoint_id;
+                         """))
+        {
+            authority.Parameters.AddWithValue(
+                "endpoint_id", staticEndpoint.Resource.Id.Value);
+            Assert.Equal(
+                newExchange.AttemptId.Value,
+                Assert.IsType<Guid>(await authority.ExecuteScalarAsync(
+                    TestContext.Current.CancellationToken)));
+        }
+
         // Both same-shard cross-endpoint and cross-shard 304 prior bindings
         // must be rejected by the real evidence store before any Fetch insert.
         var foreignShard = await registry.RegisterShardAsync(
@@ -2472,6 +2489,19 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, wrongEndpointAttempt);
         await AssertNoFetchForAttemptAsync(
             dataSource, wrongShardAttempt);
+
+        await using (var noLateParse = dataSource.CreateCommand(
+                         """
+                         SELECT count(*)
+                         FROM evidence.source_parse_runs
+                         WHERE representation_fetch_id = @late_fetch;
+                         """))
+        {
+            noLateParse.Parameters.AddWithValue(
+                "late_fetch", lateFetch.Value);
+            Assert.Equal(0L, (long)(await noLateParse.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!);
+        }
 
         Assert.Null(await ReadObservationIdAsync(
             dataSource, bodyFailure, WarApiVersions.MapQualityPolicyV2));
