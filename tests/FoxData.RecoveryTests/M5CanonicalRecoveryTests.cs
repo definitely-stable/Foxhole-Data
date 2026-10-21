@@ -2337,14 +2337,14 @@ public sealed class M5CanonicalRecoveryTests(
         var bodyFailure = await CaptureRawAsync(
             ingestion, evidence, staticEndpoint.Resource.Id,
             warBAt.AddSeconds(10), body: null,
-            "m6-h1-body-failure", bodyErrorCode: "body_read_failed");
+            jobKey: "m6-h1-body-failure", bodyErrorCode: "body_read_failed");
 
         // A 304 without a body-bearing prior is not proof of unchanged state.
         // Deliberately omit priorFetchId using the normal Evidence Kernel.
         var orphan304 = await CaptureNotModifiedAsync(
             ingestion, evidence, staticEndpoint.Resource.Id,
             warBAt.AddSeconds(11), priorFetchId: null,
-            "m6-h1-orphan-304");
+            jobKey: "m6-h1-orphan-304");
 
         // Exercise real expired-lease recovery, not a forged database state:
         // interruption before exchange -> collector_unavailable, while an
