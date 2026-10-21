@@ -2356,6 +2356,66 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, ingestion, staticEndpoint.Resource.Id,
             "m6-h1-uncertain-exchange", authorizeExchange: true);
 
+        // H1-E: the old, authorized exchange expires. A new lease and
+        // fencing token capture the authoritative response FIRST; the
+        // obsolete exchange is then persisted as captured_late evidence.
+        var oldExchange = await BeginMapExchangeAsync(
+            ingestion, staticEndpoint.Resource.Id, "m6-h1e-late-map");
+        await ExpireMapLeaseAsync(dataSource, oldExchange.JobId);
+        var ingestionRecovery = new IngestionRecovery(
+            new PostgresIngestionRecoveryStore(dataSource),
+            new IngestionRecoveryLimits(batchSize: 8));
+        var expired = await ingestionRecovery.RecoverExpiredAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(RecoveryDisposition.MarkedUncertain,
+            Assert.Single(expired.Items).Disposition);
+
+        var newerClaim = await ingestion.ClaimNextAsync(
+            WorkerInstanceId.New(), TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+        Assert.True(newerClaim.Claimed);
+        Assert.Equal(oldExchange.JobId, newerClaim.Job!.Id);
+        var newExchange = await AuthorizeMapClaimAsync(
+            ingestion, newerClaim);
+        Assert.True(
+            newExchange.FenceToken.Value > oldExchange.FenceToken.Value);
+
+        var newerCapture = await CaptureMapAttemptAsync(
+            evidence, newExchange, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(13), CreateStaticTextPayload(3, true));
+        Assert.Equal(CaptureStatus.CapturedCurrent, newerCapture.Status);
+        var newerFetch = Assert.IsType<FetchDescriptor>(
+            newerCapture.Fetch).Id;
+
+        // Completion order is intentionally opposite to source chronology:
+        // the old response must not take authority, despite arriving last.
+        var lateCapture = await CaptureMapAttemptAsync(
+            evidence, oldExchange, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(12), CreateStaticTextPayload(4, true));
+        Assert.Equal(CaptureStatus.CapturedLate, lateCapture.Status);
+        var lateFetch = Assert.IsType<FetchDescriptor>(
+            lateCapture.Fetch).Id;
+
+        // Both same-shard cross-endpoint and cross-shard 304 prior bindings
+        // must be rejected by the real evidence store before any Fetch insert.
+        var foreignShard = await registry.RegisterShardAsync(
+            source.Resource.Id, "live-2", "Live-2", "live",
+            TestContext.Current.CancellationToken);
+        var foreignStaticEndpoint = await registry.RegisterEndpointAsync(
+            foreignShard.Resource.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+        var wrongEndpointAttempt = await RejectForeignMapPriorAsync(
+            dataSource, ingestion, evidence, dynamicEndpoint.Resource.Id,
+            staticChanged, warBAt.AddSeconds(14),
+            "m6-h1e-wrong-endpoint-304");
+        var wrongShardAttempt = await RejectForeignMapPriorAsync(
+            dataSource, ingestion, evidence,
+            foreignStaticEndpoint.Resource.Id,
+            staticChanged, warBAt.AddSeconds(15),
+            "m6-h1e-wrong-shard-304");
+
         var sourceFetchCount = await CountAsync(dataSource, "evidence.fetches");
         var sourcePayloadCount =
             await CountAsync(dataSource, "evidence.payloads");
@@ -2392,6 +2452,26 @@ public sealed class M5CanonicalRecoveryTests(
         await AssertCoverageForAttemptAsync(
             dataSource, uncertainAttempt, "unknown",
             "uncertain_exchange");
+        await AssertCoverageForFetchAsync(
+            dataSource, lateFetch, "unknown", "captured_late");
+        await AssertCoverageForAttemptAsync(
+            dataSource, wrongEndpointAttempt, "unknown",
+            "uncertain_exchange");
+        await AssertCoverageForAttemptAsync(
+            dataSource, wrongShardAttempt, "unknown",
+            "uncertain_exchange");
+
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, lateFetch, WarApiVersions.MapQualityPolicyV1));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, lateFetch, WarApiVersions.MapQualityPolicyV2));
+        await AssertQualityAsync(
+            dataSource, newerFetch, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertNoFetchForAttemptAsync(
+            dataSource, wrongEndpointAttempt);
+        await AssertNoFetchForAttemptAsync(
+            dataSource, wrongShardAttempt);
 
         Assert.Null(await ReadObservationIdAsync(
             dataSource, bodyFailure, WarApiVersions.MapQualityPolicyV2));
@@ -2408,7 +2488,8 @@ public sealed class M5CanonicalRecoveryTests(
                          SELECT COUNT(*)
                          FROM quality.map_quality_runs
                          WHERE validation_fetch_id IN
-                             (@unavailable, @rejected, @body_failure, @orphan);
+                             (@unavailable, @rejected, @body_failure, @orphan,
+                              @late_fetch);
                          """))
         {
             absentQuality.Parameters.AddWithValue(
@@ -2419,6 +2500,8 @@ public sealed class M5CanonicalRecoveryTests(
                 "body_failure", bodyFailure.Value);
             absentQuality.Parameters.AddWithValue(
                 "orphan", orphan304.Value);
+            absentQuality.Parameters.AddWithValue(
+                "late_fetch", lateFetch.Value);
             Assert.Equal(0L, (long)(await absentQuality.ExecuteScalarAsync(
                 TestContext.Current.CancellationToken))!);
         }
