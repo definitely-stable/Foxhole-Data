@@ -2332,6 +2332,30 @@ public sealed class M5CanonicalRecoveryTests(
             warBAt.AddSeconds(9), Encoding.UTF8.GetBytes("{invalid json"),
             "m6-h1-rejected");
 
+        // H1-D: even if partial bytes were durably captured, an HTTP 200
+        // body read failure is not an authoritative map representation.
+        var bodyFailure = await CaptureRawAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(10), body: Encoding.UTF8.GetBytes("{partial"),
+            jobKey: "m6-h1-body-failure", bodyErrorCode: "body_read_failed");
+
+        // A 304 without a body-bearing prior is not proof of unchanged state.
+        // Deliberately omit priorFetchId using the normal Evidence Kernel.
+        var orphan304 = await CaptureNotModifiedAsync(
+            ingestion, evidence, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(11), priorFetchId: null,
+            jobKey: "m6-h1-orphan-304");
+
+        // Exercise real expired-lease recovery, not a forged database state:
+        // interruption before exchange -> collector_unavailable, while an
+        // authorized but unobserved exchange -> unknown/uncertain.
+        var abandonedAttempt = await RecoverInterruptedMapAttemptAsync(
+            dataSource, ingestion, staticEndpoint.Resource.Id,
+            "m6-h1-abandoned-exchange", authorizeExchange: false);
+        var uncertainAttempt = await RecoverInterruptedMapAttemptAsync(
+            dataSource, ingestion, staticEndpoint.Resource.Id,
+            "m6-h1-uncertain-exchange", authorizeExchange: true);
+
         var sourceFetchCount = await CountAsync(dataSource, "evidence.fetches");
         var sourcePayloadCount =
             await CountAsync(dataSource, "evidence.payloads");
@@ -2356,6 +2380,23 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, "source_unavailable"));
         Assert.Equal(1L, await CountCoverageStateAsync(
             dataSource, "rejected"));
+
+        await AssertCoverageForFetchAsync(
+            dataSource, bodyFailure, "collector_unavailable",
+            "body_read_failed");
+        await AssertCoverageForFetchAsync(
+            dataSource, orphan304, "unknown", "orphan_304");
+        await AssertCoverageForAttemptAsync(
+            dataSource, abandonedAttempt, "collector_unavailable",
+            "abandoned_before_exchange");
+        await AssertCoverageForAttemptAsync(
+            dataSource, uncertainAttempt, "unknown",
+            "uncertain_exchange");
+
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, bodyFailure, WarApiVersions.MapQualityPolicyV2));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, orphan304, WarApiVersions.MapQualityPolicyV2));
         Assert.Null(await ReadObservationIdAsync(
             dataSource, unavailable, WarApiVersions.MapQualityPolicyV2));
         Assert.Null(await ReadObservationIdAsync(
@@ -2366,13 +2407,18 @@ public sealed class M5CanonicalRecoveryTests(
                          """
                          SELECT COUNT(*)
                          FROM quality.map_quality_runs
-                         WHERE validation_fetch_id IN (@unavailable, @rejected);
+                         WHERE validation_fetch_id IN
+                             (@unavailable, @rejected, @body_failure, @orphan);
                          """))
         {
             absentQuality.Parameters.AddWithValue(
                 "unavailable", unavailable.Value);
             absentQuality.Parameters.AddWithValue(
                 "rejected", rejected.Value);
+            absentQuality.Parameters.AddWithValue(
+                "body_failure", bodyFailure.Value);
+            absentQuality.Parameters.AddWithValue(
+                "orphan", orphan304.Value);
             Assert.Equal(0L, (long)(await absentQuality.ExecuteScalarAsync(
                 TestContext.Current.CancellationToken))!);
         }
@@ -3271,7 +3317,8 @@ public sealed class M5CanonicalRecoveryTests(
         DateTimeOffset retrievedAt,
         byte[]? body,
         string jobKey = "m5-h-recovery",
-        int statusCode = 200)
+        int statusCode = 200,
+        string? bodyErrorCode = null)
     {
         var scheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
         var queued = await ingestion.EnqueueAsync(
@@ -3332,7 +3379,8 @@ public sealed class M5CanonicalRecoveryTests(
                 "\"m5-h\"",
                 "max-age=60",
                 retrievedAt.AddMinutes(1),
-                2),
+                2,
+                BodyErrorCode: bodyErrorCode),
             body is null ? null : new ReadOnlyMemory<byte>(body),
             cancellationToken:
                 TestContext.Current.CancellationToken);
@@ -3346,7 +3394,7 @@ public sealed class M5CanonicalRecoveryTests(
         EvidenceKernel evidence,
         FoxData.Core.Sources.EndpointId endpointId,
         DateTimeOffset retrievedAt,
-        FetchId priorFetchId,
+        FetchId? priorFetchId,
         string jobKey)
     {
         var scheduledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
@@ -3416,6 +3464,140 @@ public sealed class M5CanonicalRecoveryTests(
 
         Assert.Equal(CaptureStatus.CapturedCurrent, capture.Status);
         return Assert.IsType<FetchDescriptor>(capture.Fetch).Id;
+    }
+
+
+    // H1-D test-only helper: use the real ingestion kernel and recovery
+    // transition to produce durable terminal Attempts without a Fetch.
+    private static async Task<IngestionAttemptId>
+        RecoverInterruptedMapAttemptAsync(
+            NpgsqlDataSource dataSource,
+            IngestionKernel ingestion,
+            FoxData.Core.Sources.EndpointId endpointId,
+            string jobKey,
+            bool authorizeExchange)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var queued = await ingestion.EnqueueAsync(
+            endpointId, jobKey, now, now,
+            cancellationToken: cancellationToken);
+        Assert.Equal(JobEnqueueStatus.Created, queued.Status);
+
+        var workerId = WorkerInstanceId.New();
+        var claim = await ingestion.ClaimNextAsync(
+            workerId, TimeSpan.FromMinutes(5), cancellationToken);
+        Assert.True(claim.Claimed);
+
+        var attemptId = IngestionAttemptId.New();
+        var begun = await ingestion.BeginAttemptAsync(
+            attemptId, claim.Job!.Id, workerId,
+            claim.Job.LeaseGeneration, cancellationToken);
+        Assert.Equal(BeginAttemptStatus.Started, begun.Status);
+
+        var fenced = await ingestion.AcquireEndpointFenceAsync(
+            attemptId, workerId, claim.Job.LeaseGeneration,
+            cancellationToken);
+        Assert.Equal(FenceAcquireStatus.AcquiredNow, fenced.Status);
+
+        if (authorizeExchange)
+        {
+            var authorization = await ingestion.AuthorizeExchangeAsync(
+                attemptId, workerId, claim.Job.LeaseGeneration,
+                cancellationToken);
+            Assert.Equal(
+                ExchangeAuthorizationStatus.AuthorizedNow,
+                authorization.Status);
+        }
+
+        await using (var expire = dataSource.CreateCommand(
+                         """
+                         UPDATE ingest.collection_jobs
+                         SET lease_expires_at =
+                             transaction_timestamp() - interval '1 second'
+                         WHERE id = @job_id;
+                         """))
+        {
+            expire.Parameters.AddWithValue("job_id", claim.Job.Id.Value);
+            Assert.Equal(1, await expire.ExecuteNonQueryAsync(
+                cancellationToken));
+        }
+
+        var recovery = new IngestionRecovery(
+            new PostgresIngestionRecoveryStore(dataSource),
+            new IngestionRecoveryLimits(batchSize: 8));
+        var recovered = await recovery.RecoverExpiredAsync(cancellationToken);
+        var item = Assert.Single(recovered.Items);
+        Assert.Equal(attemptId, item.AttemptId);
+        Assert.Equal(
+            authorizeExchange
+                ? RecoveryDisposition.MarkedUncertain
+                : RecoveryDisposition.RequeuedBeforeExchange,
+            item.Disposition);
+
+        // Both M2 recovery dispositions legitimately requeue the job.
+        // Keep it out of the next synthetic ClaimNext sweep so each fault
+        // fixture creates a distinct attempt without issuing another HTTP
+        // exchange or disguising the pending job as completed.
+        await using (var defer = dataSource.CreateCommand(
+                         """
+                         UPDATE ingest.collection_jobs
+                         SET available_at =
+                             transaction_timestamp() + interval '1 day'
+                         WHERE id = @job_id AND state = 'pending';
+                         """))
+        {
+            defer.Parameters.AddWithValue("job_id", claim.Job.Id.Value);
+            Assert.Equal(1, await defer.ExecuteNonQueryAsync(
+                cancellationToken));
+        }
+
+        return attemptId;
+    }
+
+    private static async Task AssertCoverageForFetchAsync(
+        NpgsqlDataSource dataSource,
+        FetchId fetchId,
+        string expectedState,
+        string expectedDetail)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT count(*)
+            FROM evidence.coverage_observations AS coverage
+            WHERE coverage.validation_fetch_id = @fetch_id
+              AND coverage.state = @state
+              AND coverage.detail_code = @detail;
+            """);
+        command.Parameters.AddWithValue("fetch_id", fetchId.Value);
+        command.Parameters.AddWithValue("state", expectedState);
+        command.Parameters.AddWithValue("detail", expectedDetail);
+        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!);
+    }
+
+    private static async Task AssertCoverageForAttemptAsync(
+        NpgsqlDataSource dataSource,
+        IngestionAttemptId attemptId,
+        string expectedState,
+        string expectedDetail)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT count(*)
+            FROM evidence.coverage_observations AS coverage
+            WHERE coverage.attempt_id = @attempt_id
+              AND coverage.validation_fetch_id IS NULL
+              AND coverage.representation_fetch_id IS NULL
+              AND coverage.source_parse_run_id IS NULL
+              AND coverage.state = @state
+              AND coverage.detail_code = @detail;
+            """);
+        command.Parameters.AddWithValue("attempt_id", attemptId.Value);
+        command.Parameters.AddWithValue("state", expectedState);
+        command.Parameters.AddWithValue("detail", expectedDetail);
+        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!);
     }
 
     private static async Task<long> CountDistinctCoverageLineageAsync(

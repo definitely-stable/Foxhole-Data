@@ -954,6 +954,40 @@ uncertain and superseded attempts, orphan 304, multi-region/multi-shard
 failure paths, and the complete negative matrix remain separate work.
 H9 performance and H10 signed record are also outstanding.
 
+### H1-D — interrupted exchange, partial capture and orphan 304
+
+The existing two-war M6-H5–H8 PostgreSQL fixture is extended with **four
+non-authoritative map capture boundaries** before semantic snapshotting:
+
+- An HTTP 200 with partial persisted body bytes and
+  `body_error_code=body_read_failed` is recorded as `collector_unavailable`,
+  not `observed`, regardless of its non-null PayloadId.
+- A captured-current HTTP 304 with no prior body-bearing Fetch is recorded
+  as `unknown / orphan_304`, never as `source_not_modified`.
+- Real ingestion lease expiration after fencing but before exchange
+  authorization produces a failed `abandoned_before_exchange` attempt;
+  M5 coverage classifies it `collector_unavailable` without inventing a Fetch.
+- Real lease expiration after exchange authorization but before raw capture
+  produces an `uncertain_exchange` attempt; coverage remains `unknown`
+  without inventing a Fetch or claiming that the source did not change.
+
+Use the ordinary M2 Ingestion Kernel/Recovery and M5 coverage coordinator,
+not raw inserts or a test-only alternative classifier. The independent M6-H
+source-first audit excludes body-error Fetches from parse-eligible source
+representations even when they retain partial bytes; if such a Fetch is
+incorrectly marked `observed`/`source_not_modified`, its `invalid_validation`
+category must still report the violation. Require exact per-attempt
+coverage state/detail, no QualityRun for non-authoritative 200/304 failures,
+no MapObservation for either immutable policy, no new Fetch/Payload during
+recovery, clean source-first/provenance audits, and semantic/authority equality
+through H5–H8 destructive rebuild.
+
+This proves representative failure classification, not full source uncertainty
+coverage. **Still outstanding:** captured-late/superseded response boundaries,
+unknown cancellation windows, cross-endpoint/cross-shard invalid 304, broader
+H3/H4 fault injections, H9 performance evidence and H10 completion record.
+No production paths or database schema are changed.
+
 ## H2. Convergence condition
 
 Implementation checkpoint (M6-H first slice): a test-only
