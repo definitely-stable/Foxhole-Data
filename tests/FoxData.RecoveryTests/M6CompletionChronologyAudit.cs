@@ -42,6 +42,7 @@ internal static class M6CompletionChronologyAudit
                 v.status_code,
                 v.payload_id,
                 v.prior_fetch_id,
+                v.body_error_code,
                 CASE WHEN v.status_code = 200
                     THEN v.id
                     ELSE v.prior_fetch_id END AS representation_id,
@@ -106,7 +107,8 @@ internal static class M6CompletionChronologyAudit
         (
             SELECT validation_id
             FROM validation_graph
-            WHERE (status_code = 200 AND payload_id IS NULL)
+            WHERE body_error_code IS NOT NULL
+               OR (status_code = 200 AND payload_id IS NULL)
                OR (status_code = 304 AND payload_id IS NOT NULL)
                OR representation_id IS NULL
                OR representation_status IS DISTINCT FROM 200
