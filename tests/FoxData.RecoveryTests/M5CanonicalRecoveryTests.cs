@@ -3534,6 +3534,24 @@ public sealed class M5CanonicalRecoveryTests(
                 ? RecoveryDisposition.MarkedUncertain
                 : RecoveryDisposition.RequeuedBeforeExchange,
             item.Disposition);
+
+        // Both M2 recovery dispositions legitimately requeue the job.
+        // Keep it out of the next synthetic ClaimNext sweep so each fault
+        // fixture creates a distinct attempt without issuing another HTTP
+        // exchange or disguising the pending job as completed.
+        await using (var defer = dataSource.CreateCommand(
+                         """
+                         UPDATE ingest.collection_jobs
+                         SET available_at =
+                             transaction_timestamp() + interval '1 day'
+                         WHERE id = @job_id AND state = 'pending';
+                         """))
+        {
+            defer.Parameters.AddWithValue("job_id", claim.Job.Id.Value);
+            Assert.Equal(1, await defer.ExecuteNonQueryAsync(
+                cancellationToken));
+        }
+
         return attemptId;
     }
 
