@@ -959,8 +959,9 @@ H9 performance and H10 signed record are also outstanding.
 The existing two-war M6-H5–H8 PostgreSQL fixture is extended with **four
 non-authoritative map capture boundaries** before semantic snapshotting:
 
-- An HTTP 200 whose body capture failed (`body_error_code=body_read_failed`)
-  is recorded as `collector_unavailable`, not `observed`.
+- An HTTP 200 with partial persisted body bytes and
+  `body_error_code=body_read_failed` is recorded as `collector_unavailable`,
+  not `observed`, regardless of its non-null PayloadId.
 - A captured-current HTTP 304 with no prior body-bearing Fetch is recorded
   as `unknown / orphan_304`, never as `source_not_modified`.
 - Real ingestion lease expiration after fencing but before exchange
@@ -971,7 +972,11 @@ non-authoritative map capture boundaries** before semantic snapshotting:
   without inventing a Fetch or claiming that the source did not change.
 
 Use the ordinary M2 Ingestion Kernel/Recovery and M5 coverage coordinator,
-not raw inserts or a test-only alternative classifier. Require exact per-attempt
+not raw inserts or a test-only alternative classifier. The independent M6-H
+source-first audit excludes body-error Fetches from parse-eligible source
+representations even when they retain partial bytes; if such a Fetch is
+incorrectly marked `observed`/`source_not_modified`, its `invalid_validation`
+category must still report the violation. Require exact per-attempt
 coverage state/detail, no QualityRun for non-authoritative 200/304 failures,
 no MapObservation for either immutable policy, no new Fetch/Payload during
 recovery, clean source-first/provenance audits, and semantic/authority equality
