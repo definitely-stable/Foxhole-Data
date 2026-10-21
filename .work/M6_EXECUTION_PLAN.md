@@ -1014,6 +1014,19 @@ counts through M5/M6 offline replay, both version-specific chronology audits,
 independent provenance audit, and H5–H8 destructive semantic/authority equality.
 Use test-only helpers and production stores.
 
+The H1-D partial-body fixture, when followed by a later valid static 200,
+exposed an actual production ordering defect: M6's preliminary and locked
+chronology planner treated a captured-current 200 with a non-null PayloadId
+and `body_error_code` as an earlier parse-eligible source candidate. Since
+the M5 classifier correctly records that Fetch as `collector_unavailable`
+without a SourceParseRun, later valid quality work was permanently deferred.
+The common `MapQualityOrderingQueries` now excludes body-error Fetches from
+both the current candidate and the earlier-authority barrier, independently
+of whether some bytes were retained. This matches M5 coverage and the
+source-first M6-H audit. The test **must** progress past the partial-body
+Fetch and accept a later good representation while still failing closed on
+genuinely unfinished authoritative 200/304 source candidates.
+
 Not included: wider superseded-without-response matrices, intentionally
 corrupted persisted cross-endpoint 304 (versus refusal during capture),
 multi-region identity verification, H9/H10 signoff. M7 remains blocked.
