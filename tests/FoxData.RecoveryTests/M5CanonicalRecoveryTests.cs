@@ -3651,9 +3651,19 @@ public sealed class M5CanonicalRecoveryTests(
         var ct = TestContext.Current.CancellationToken;
         var attempt = await BeginMapExchangeAsync(
             ingestion, endpointId, jobKey);
-        var rejected = await CaptureMapAttemptAsync(
-            evidence, attempt, endpointId, retrievedAt,
-            body: null, priorFetchId: foreignPrior);
+        // Supply an explicitly nullable no-body value. A 304 prior may
+        // not be supplied with a (possibly default) ReadOnlyMemory body.
+        var rejected = await evidence.CaptureSourceResponseAsync(
+            attempt.AttemptId, endpointId, attempt.Generation,
+            attempt.FenceToken,
+            new SourceResponseObservation(
+                retrievedAt.AddMilliseconds(-2),
+                retrievedAt.AddMilliseconds(-1), retrievedAt,
+                "war-api", 304, null, null, null, "\"m6-h1e-cross-304\"",
+                "max-age=60", retrievedAt.AddMinutes(1), 2),
+            body: null,
+            priorFetchId: foreignPrior,
+            cancellationToken: ct);
         Assert.Equal(CaptureStatus.InvalidPriorFetch, rejected.Status);
         Assert.Null(rejected.Fetch);
 
