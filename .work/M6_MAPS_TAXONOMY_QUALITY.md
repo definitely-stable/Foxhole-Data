@@ -762,7 +762,7 @@ source observation boundary ASC
 then deterministic durable tie-breaker
 ~~~
 
-`captured_late` or superseded evidence does not block the canonical quality stream.
+`captured_late` or superseded evidence does not block the canonical quality stream. A `captured_current` Fetch with `body_error_code` is also **not** a parse-eligible authoritative representation, even if partial bytes were durably preserved and `payload_id` is non-null. Such evidence must be classified as `collector_unavailable`, never count as an earlier missing parse in the chronology barrier, and never become a quality candidate. A later complete captured-current representation must remain eligible after this failed boundary. The preliminary ordering reader and locked quality transaction MUST apply the same exclusion.
 
 A `suspect` or `quarantined` result is terminal for ordering purposes but never becomes an accepted baseline.
 
