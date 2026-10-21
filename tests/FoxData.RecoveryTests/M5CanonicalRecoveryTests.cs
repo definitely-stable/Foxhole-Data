@@ -2356,6 +2356,83 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, ingestion, staticEndpoint.Resource.Id,
             "m6-h1-uncertain-exchange", authorizeExchange: true);
 
+        // H1-E: the old, authorized exchange expires. A new lease and
+        // fencing token capture the authoritative response FIRST; the
+        // obsolete exchange is then persisted as captured_late evidence.
+        var oldExchange = await BeginMapExchangeAsync(
+            ingestion, staticEndpoint.Resource.Id, "m6-h1e-late-map");
+        await ExpireMapLeaseAsync(dataSource, oldExchange.JobId);
+        var ingestionRecovery = new IngestionRecovery(
+            new PostgresIngestionRecoveryStore(dataSource),
+            new IngestionRecoveryLimits(batchSize: 8));
+        var expired = await ingestionRecovery.RecoverExpiredAsync(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(RecoveryDisposition.MarkedUncertain,
+            Assert.Single(expired.Items).Disposition);
+
+        var newerClaim = await ingestion.ClaimNextAsync(
+            WorkerInstanceId.New(), TimeSpan.FromMinutes(5),
+            TestContext.Current.CancellationToken);
+        Assert.True(newerClaim.Claimed);
+        Assert.Equal(oldExchange.JobId, newerClaim.Job!.Id);
+        var newExchange = await AuthorizeMapClaimAsync(
+            ingestion, newerClaim);
+        Assert.True(
+            newExchange.FenceToken.Value > oldExchange.FenceToken.Value);
+
+        var newerCapture = await CaptureMapAttemptAsync(
+            evidence, newExchange, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(13), CreateStaticTextPayload(3, true));
+        Assert.Equal(CaptureStatus.CapturedCurrent, newerCapture.Status);
+        var newerFetch = Assert.IsType<FetchDescriptor>(
+            newerCapture.Fetch).Id;
+
+        // Completion order is intentionally opposite to source chronology:
+        // the old response must not take authority, despite arriving last.
+        var lateCapture = await CaptureMapAttemptAsync(
+            evidence, oldExchange, staticEndpoint.Resource.Id,
+            warBAt.AddSeconds(12), CreateStaticTextPayload(4, true));
+        Assert.Equal(CaptureStatus.CapturedLate, lateCapture.Status);
+        var lateFetch = Assert.IsType<FetchDescriptor>(
+            lateCapture.Fetch).Id;
+
+        // Durable endpoint authority must remain on the newer fence,
+        // including after the old response has been written to evidence.
+        await using (var authority = dataSource.CreateCommand(
+                         """
+                         SELECT last_current_capture_attempt_id
+                         FROM ingest.endpoint_state
+                         WHERE endpoint_id = @endpoint_id;
+                         """))
+        {
+            authority.Parameters.AddWithValue(
+                "endpoint_id", staticEndpoint.Resource.Id.Value);
+            Assert.Equal(
+                newExchange.AttemptId.Value,
+                Assert.IsType<Guid>(await authority.ExecuteScalarAsync(
+                    TestContext.Current.CancellationToken)));
+        }
+
+        // Both same-shard cross-endpoint and cross-shard 304 prior bindings
+        // must be rejected by the real evidence store before any Fetch insert.
+        var foreignShard = await registry.RegisterShardAsync(
+            source.Resource.Id, "live-2", "Live-2", "live",
+            TestContext.Current.CancellationToken);
+        var foreignStaticEndpoint = await registry.RegisterEndpointAsync(
+            foreignShard.Resource.Id,
+            WarApiCapabilities.StaticMapState.Key,
+            "map-static/DeadLandsHex",
+            TestContext.Current.CancellationToken);
+        var wrongEndpointAttempt = await RejectForeignMapPriorAsync(
+            dataSource, ingestion, evidence, dynamicEndpoint.Resource.Id,
+            staticChanged, warBAt.AddSeconds(14),
+            "m6-h1e-wrong-endpoint-304");
+        var wrongShardAttempt = await RejectForeignMapPriorAsync(
+            dataSource, ingestion, evidence,
+            foreignStaticEndpoint.Resource.Id,
+            staticChanged, warBAt.AddSeconds(15),
+            "m6-h1e-wrong-shard-304");
+
         var sourceFetchCount = await CountAsync(dataSource, "evidence.fetches");
         var sourcePayloadCount =
             await CountAsync(dataSource, "evidence.payloads");
@@ -2392,6 +2469,39 @@ public sealed class M5CanonicalRecoveryTests(
         await AssertCoverageForAttemptAsync(
             dataSource, uncertainAttempt, "unknown",
             "uncertain_exchange");
+        await AssertCoverageForFetchAsync(
+            dataSource, lateFetch, "unknown", "captured_late");
+        await AssertCoverageForAttemptAsync(
+            dataSource, wrongEndpointAttempt, "unknown",
+            "uncertain_exchange");
+        await AssertCoverageForAttemptAsync(
+            dataSource, wrongShardAttempt, "unknown",
+            "uncertain_exchange");
+
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, lateFetch, WarApiVersions.MapQualityPolicyV1));
+        Assert.Null(await ReadObservationIdAsync(
+            dataSource, lateFetch, WarApiVersions.MapQualityPolicyV2));
+        await AssertQualityAsync(
+            dataSource, newerFetch, MapQualityDecision.Accepted,
+            WarApiVersions.MapQualityPolicyV2);
+        await AssertNoFetchForAttemptAsync(
+            dataSource, wrongEndpointAttempt);
+        await AssertNoFetchForAttemptAsync(
+            dataSource, wrongShardAttempt);
+
+        await using (var noLateParse = dataSource.CreateCommand(
+                         """
+                         SELECT count(*)
+                         FROM evidence.source_parse_runs
+                         WHERE representation_fetch_id = @late_fetch;
+                         """))
+        {
+            noLateParse.Parameters.AddWithValue(
+                "late_fetch", lateFetch.Value);
+            Assert.Equal(0L, (long)(await noLateParse.ExecuteScalarAsync(
+                TestContext.Current.CancellationToken))!);
+        }
 
         Assert.Null(await ReadObservationIdAsync(
             dataSource, bodyFailure, WarApiVersions.MapQualityPolicyV2));
@@ -2408,7 +2518,8 @@ public sealed class M5CanonicalRecoveryTests(
                          SELECT COUNT(*)
                          FROM quality.map_quality_runs
                          WHERE validation_fetch_id IN
-                             (@unavailable, @rejected, @body_failure, @orphan);
+                             (@unavailable, @rejected, @body_failure, @orphan,
+                              @late_fetch);
                          """))
         {
             absentQuality.Parameters.AddWithValue(
@@ -2419,6 +2530,8 @@ public sealed class M5CanonicalRecoveryTests(
                 "body_failure", bodyFailure.Value);
             absentQuality.Parameters.AddWithValue(
                 "orphan", orphan304.Value);
+            absentQuality.Parameters.AddWithValue(
+                "late_fetch", lateFetch.Value);
             Assert.Equal(0L, (long)(await absentQuality.ExecuteScalarAsync(
                 TestContext.Current.CancellationToken))!);
         }
@@ -3466,6 +3579,163 @@ public sealed class M5CanonicalRecoveryTests(
         return Assert.IsType<FetchDescriptor>(capture.Fetch).Id;
     }
 
+
+    private sealed record MapExchange(
+        IngestionAttemptId AttemptId,
+        CollectionJobId JobId,
+        LeaseGeneration Generation,
+        FenceToken FenceToken);
+
+    private static async Task<MapExchange> BeginMapExchangeAsync(
+        IngestionKernel ingestion,
+        FoxData.Core.Sources.EndpointId endpointId,
+        string jobKey)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scheduled = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var queued = await ingestion.EnqueueAsync(
+            endpointId, jobKey, scheduled, scheduled,
+            cancellationToken: ct);
+        Assert.Equal(JobEnqueueStatus.Created, queued.Status);
+        var claim = await ingestion.ClaimNextAsync(
+            WorkerInstanceId.New(), TimeSpan.FromMinutes(5), ct);
+        Assert.True(claim.Claimed);
+        Assert.Equal(queued.Job!.Id, claim.Job!.Id);
+        return await AuthorizeMapClaimAsync(ingestion, claim);
+    }
+
+    private static async Task<MapExchange> AuthorizeMapClaimAsync(
+        IngestionKernel ingestion,
+        JobClaimResult claim)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var workerId = claim.Job!.LeaseOwnerId
+            ?? throw new InvalidOperationException(
+                "Claimed map job has no worker.");
+        var attemptId = IngestionAttemptId.New();
+        var begun = await ingestion.BeginAttemptAsync(
+            attemptId, claim.Job.Id, workerId,
+            claim.Job.LeaseGeneration, ct);
+        Assert.Equal(BeginAttemptStatus.Started, begun.Status);
+        var fence = await ingestion.AcquireEndpointFenceAsync(
+            attemptId, workerId, claim.Job.LeaseGeneration, ct);
+        Assert.Equal(FenceAcquireStatus.AcquiredNow, fence.Status);
+        var authorized = await ingestion.AuthorizeExchangeAsync(
+            attemptId, workerId, claim.Job.LeaseGeneration, ct);
+        Assert.Equal(ExchangeAuthorizationStatus.AuthorizedNow,
+            authorized.Status);
+        return new MapExchange(
+            attemptId, claim.Job.Id, claim.Job.LeaseGeneration,
+            fence.Attempt!.FenceToken!.Value);
+    }
+
+    private static async Task<CaptureResult> CaptureMapAttemptAsync(
+        EvidenceKernel evidence,
+        MapExchange attempt,
+        FoxData.Core.Sources.EndpointId endpointId,
+        DateTimeOffset observedAt,
+        byte[]? body,
+        FetchId? priorFetchId = null)
+    {
+        return await evidence.CaptureSourceResponseAsync(
+            attempt.AttemptId, endpointId, attempt.Generation,
+            attempt.FenceToken,
+            new SourceResponseObservation(
+                observedAt.AddMilliseconds(-2),
+                observedAt.AddMilliseconds(-1), observedAt,
+                "war-api", body is null ? 304 : 200,
+                body is null ? null : "application/json",
+                null, body?.LongLength, "\"m6-h1e\"",
+                "max-age=60", observedAt.AddMinutes(1), 2),
+            body is null ? null : new ReadOnlyMemory<byte>(body),
+            priorFetchId: priorFetchId,
+            cancellationToken: TestContext.Current.CancellationToken);
+    }
+
+    private static async Task ExpireMapLeaseAsync(
+        NpgsqlDataSource dataSource,
+        CollectionJobId jobId)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            UPDATE ingest.collection_jobs
+            SET lease_expires_at =
+                transaction_timestamp() - interval '1 second'
+            WHERE id = @job_id;
+            """);
+        command.Parameters.AddWithValue("job_id", jobId.Value);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync(
+            TestContext.Current.CancellationToken));
+    }
+
+    private static async Task<IngestionAttemptId>
+        RejectForeignMapPriorAsync(
+            NpgsqlDataSource dataSource,
+            IngestionKernel ingestion,
+            EvidenceKernel evidence,
+            FoxData.Core.Sources.EndpointId endpointId,
+            FetchId foreignPrior,
+            DateTimeOffset retrievedAt,
+            string jobKey)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var attempt = await BeginMapExchangeAsync(
+            ingestion, endpointId, jobKey);
+        // Supply an explicitly nullable no-body value. A 304 prior may
+        // not be supplied with a (possibly default) ReadOnlyMemory body.
+        var rejected = await evidence.CaptureSourceResponseAsync(
+            attempt.AttemptId, endpointId, attempt.Generation,
+            attempt.FenceToken,
+            new SourceResponseObservation(
+                retrievedAt.AddMilliseconds(-2),
+                retrievedAt.AddMilliseconds(-1), retrievedAt,
+                "war-api", 304, null, null, null, "\"m6-h1e-cross-304\"",
+                "max-age=60", retrievedAt.AddMinutes(1), 2),
+            body: null,
+            priorFetchId: foreignPrior,
+            cancellationToken: ct);
+        Assert.Equal(CaptureStatus.InvalidPriorFetch, rejected.Status);
+        Assert.Null(rejected.Fetch);
+
+        await ExpireMapLeaseAsync(dataSource, attempt.JobId);
+        var recovery = new IngestionRecovery(
+            new PostgresIngestionRecoveryStore(dataSource),
+            new IngestionRecoveryLimits(batchSize: 8));
+        var recovered = await recovery.RecoverExpiredAsync(ct);
+        var result = Assert.Single(recovered.Items);
+        Assert.Equal(attempt.AttemptId, result.AttemptId);
+        Assert.Equal(RecoveryDisposition.MarkedUncertain,
+            result.Disposition);
+
+        // Keep this still-pending job from occupying the next test claim.
+        await using (var defer = dataSource.CreateCommand(
+                         """
+                         UPDATE ingest.collection_jobs
+                         SET available_at =
+                             transaction_timestamp() + interval '1 day'
+                         WHERE id = @job_id AND state = 'pending';
+                         """))
+        {
+            defer.Parameters.AddWithValue("job_id", attempt.JobId.Value);
+            Assert.Equal(1, await defer.ExecuteNonQueryAsync(ct));
+        }
+        return attempt.AttemptId;
+    }
+
+    private static async Task AssertNoFetchForAttemptAsync(
+        NpgsqlDataSource dataSource,
+        IngestionAttemptId attemptId)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT count(*)
+            FROM evidence.fetches
+            WHERE attempt_id = @attempt_id;
+            """);
+        command.Parameters.AddWithValue("attempt_id", attemptId.Value);
+        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync(
+            TestContext.Current.CancellationToken))!);
+    }
 
     // H1-D test-only helper: use the real ingestion kernel and recovery
     // transition to produce durable terminal Attempts without a Fetch.

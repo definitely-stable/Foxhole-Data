@@ -83,6 +83,8 @@ internal static class MapQualityOrderingQueries
               AND source_endpoint.id = validation.endpoint_id
               AND representation_attempt.outcome_code = 'captured_current'
               AND validation_attempt.outcome_code = 'captured_current'
+              AND representation.body_error_code IS NULL
+              AND validation.body_error_code IS NULL
               AND (
                     validation.id = representation.id
                     OR
@@ -185,6 +187,8 @@ internal static class MapQualityOrderingQueries
                AND quality.taxonomy_version = @taxonomy_version
                AND quality.quality_policy_version = @policy_version
             WHERE previous.endpoint_id = @endpoint_id
+              AND previous.body_error_code IS NULL
+              AND previous_representation.body_error_code IS NULL
               AND attempt.outcome_code = 'captured_current'
               AND representation_attempt.outcome_code =
                   'captured_current'
