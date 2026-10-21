@@ -2332,11 +2332,11 @@ public sealed class M5CanonicalRecoveryTests(
             warBAt.AddSeconds(9), Encoding.UTF8.GetBytes("{invalid json"),
             "m6-h1-rejected");
 
-        // H1-D: a current HTTP 200 whose body read failed is durable source
-        // evidence, but it must never claim an observed map representation.
+        // H1-D: even if partial bytes were durably captured, an HTTP 200
+        // body read failure is not an authoritative map representation.
         var bodyFailure = await CaptureRawAsync(
             ingestion, evidence, staticEndpoint.Resource.Id,
-            warBAt.AddSeconds(10), body: null,
+            warBAt.AddSeconds(10), body: Encoding.UTF8.GetBytes("{partial"),
             jobKey: "m6-h1-body-failure", bodyErrorCode: "body_read_failed");
 
         // A 304 without a body-bearing prior is not proof of unchanged state.
@@ -2453,50 +2453,6 @@ public sealed class M5CanonicalRecoveryTests(
             dataSource, static304, WarApiVersions.MapQualityPolicyV2));
         Assert.True(await CountAsync(
             dataSource, "evidence.map_text_occurrences") >= 4);
-        var chronologyBeforeRebuild = await M6CompletionChronologyAudit.ReadAsync(
-            dataSource, WarApiVersions.MapQualityPolicyV1,
-            TestContext.Current.CancellationToken);
-        if (chronologyBeforeRebuild["missing_parse"] != 0)
-        {
-            await using var trace = dataSource.CreateCommand(
-                """
-                SELECT f.id, f.status_code,
-                       f.payload_id IS NOT NULL,
-                       f.prior_fetch_id IS NOT NULL,
-                       f.body_error_code,
-                       coverage.state,
-                       endpoint.capability_key
-                FROM evidence.fetches AS f
-                JOIN ingest.attempts AS attempt
-                  ON attempt.id = f.attempt_id
-                JOIN sources.endpoints AS endpoint
-                  ON endpoint.id = f.endpoint_id
-                LEFT JOIN evidence.source_parse_runs AS parse
-                  ON parse.representation_fetch_id =
-                     CASE WHEN f.status_code = 200 THEN f.id
-                          ELSE f.prior_fetch_id END
-                 AND parse.capability_key = endpoint.capability_key
-                 AND parse.parser_version = 'warapi-parser@1'
-                LEFT JOIN evidence.coverage_observations AS coverage
-                  ON coverage.attempt_id = attempt.id
-                WHERE attempt.outcome_code = 'captured_current'
-                  AND endpoint.capability_key IN (
-                      'static-map-state','dynamic-map-state')
-                  AND f.status_code IN (200, 304)
-                  AND parse.id IS NULL
-                ORDER BY f.retrieved_at;
-                """);
-            var details = new List<string>();
-            await using var traceReader = await trace.ExecuteReaderAsync(
-                TestContext.Current.CancellationToken);
-            while (await traceReader.ReadAsync(
-                       TestContext.Current.CancellationToken))
-            {
-                details.Add($"{traceReader.GetGuid(0)} http={traceReader.GetInt32(1)} body={traceReader.GetBoolean(2)} prior={traceReader.GetBoolean(3)} error={(traceReader.IsDBNull(4) ? "none" : traceReader.GetString(4))} coverage={(traceReader.IsDBNull(5) ? "none" : traceReader.GetString(5))} cap={traceReader.GetString(6)}");
-            }
-            throw new InvalidOperationException(
-                $"H1-D missing_parse={chronologyBeforeRebuild["missing_parse"]}; evidence: {string.Join("; ", details)}");
-        }
         await M6CompletionChronologyAudit.AssertCleanAsync(
             dataSource, WarApiVersions.MapQualityPolicyV1,
             TestContext.Current.CancellationToken);
